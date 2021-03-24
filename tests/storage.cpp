@@ -37,9 +37,18 @@ TEST_CASE( "multi_array basic operations", "[multi_array]" ) {
 
     # ifdef __CUDACC__
     SECTION("TEST GPU"){
-    multi_array<double,2> a_gpu({2,3},stloc::device);
-    cout << a_gpu.data() << endl;
-    cout << a_gpu({0,0}) << endl;
-  }
+        multi_array<double,2> a_cpu({2,3});
+        // define on cpu
+        //
+        multi_array<double,2> a_gpu({2,3},stloc::device);
+        a_gpu = a_cpu;
+
+
+        // computation on gpu
+        
+        a_cpu = a_gpu;
+        cout << a_gpu.data() << endl;
+        cout << a_cpu(0,0) << endl;
+    }
   #endif
 }

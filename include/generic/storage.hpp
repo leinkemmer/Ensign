@@ -183,16 +183,13 @@ struct multi_array {
     }
 
     bool operator==(const multi_array& lhs){
-      bool eq = true;
-      if (lhs.shape() != shape()){
-        eq = false;
-      }else{
-        Index i = 0;
-        while ((eq == true) && (i<lhs.num_elements())){
-          eq = (std::abs((*(lhs.begin()+i) - *(begin()+i))) < 10*std::numeric_limits<T>::epsilon());
-          i++;
+        if (lhs.shape() != shape()){
+            return false;
+        } else {
+            for(Index i=0;i<lhs.num_elements();i++)
+                if(std::abs((lhs.v[i] - v[i])) > T(10)*std::numeric_limits<T>::epsilon())
+                    return false;
+            return true;
         }
-      }
-      return eq;
     }
 };

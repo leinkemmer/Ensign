@@ -160,7 +160,7 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
     }
 
     matmul_transab(A,B,AtBt);
-    REQUIRE((bool)(RAtBt == AtBt));
+    REQUIRE(bool(RAtBt == AtBt));
 
   }
 

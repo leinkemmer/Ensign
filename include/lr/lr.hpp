@@ -98,7 +98,8 @@ MatrixXd gram_schmidt(const MatrixXd& _V, MatrixXd& R,
 }*/
 
 template<class T>
-void init(lr2& lr, Index rank, vector<T*> X, vector<T*> V, std::function<T(T*,T*)> inner_product) {
+void init(lr2& lr, vector<T*> X, vector<T*> V, std::function<T(T*,T*)> inner_product) {
+    Index rank = X.size();
     
     //lr.X.setIdentity();
     //lr.V.setIdentity();

@@ -22,7 +22,7 @@ if (BLAS_FOUND)
 endif ()
 
 if(${CUDA_ENABLED})
-    cuda_add_executable(coefficients coefficients.cu ../src/lr/coefficients.cu ../src/generic/utility.cu)
+    cuda_add_executable(coefficients coefficients.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu)
 else()
     add_executable(coefficients coefficients.cpp ../src/lr/coefficients.cpp ../src/generic/matrix.cpp ../src/generic/utility.cpp)
 endif()

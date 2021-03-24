@@ -1,4 +1,5 @@
 #include <generic/matrix.hpp>
+#include <cblas.h>
 
 template<>
 void set_zero(multi_array<double,2>& a) {
@@ -26,21 +27,23 @@ void set_zero(multi_array<float,2>& a) {
     }
 }
 
-template<>
-void set_identity(multi_array<double,2>& a){
+template<class T>
+void set_identity(multi_array<T,2>& a){
   set_zero(a);
   for(int i = 0; i<a.shape()[0]; i++){
-    a(i,i) = 1.0;
+    a(i,i) = T(1.0);
   }
 }
-
+template void set_identity(multi_array<double,2>&);
+template void set_identity(multi_array<float,2>&);
+/*
 template<>
 void set_identity(multi_array<float,2>& a){
   set_zero(a);
   for(int i = 0; i<a.shape()[0]; i++){
     a(i,i) = 1.0;
   }
-}
+}*/
 
 template<>
 void matmul(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c){
