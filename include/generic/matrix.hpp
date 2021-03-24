@@ -2,6 +2,7 @@
 
 #include <generic/common.hpp>
 #include <generic/storage.hpp>
+#include <cblas.h>
 
 
 template<class T>
@@ -19,6 +20,11 @@ void matmul_transa(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_a
 template<class T>
 void matmul_transb(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c);
 
+template<class T>
+void matmul_transab(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c);
+
+template<class T>
+void matmul_gpu(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c);
+
 //template<class T>
 //void transpose(const multi_array<T,2>& a, multi_array<T,2>& b);
-

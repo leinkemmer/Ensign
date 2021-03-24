@@ -31,7 +31,7 @@ struct multi_array {
             cudaMemcpy(v, ma.data(), sizeof(T)*ma.num_elements(),
                     cudaMemcpyDeviceToDevice);
             #else
-            cout << "ERROR: compiled without GPU support" << __FILE__ << ":" 
+            cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
                  << __LINE__ << endl;
             exit(1);
             #endif
@@ -70,7 +70,7 @@ struct multi_array {
             #ifdef __CUDACC__
             v = (T*)gpu_malloc(sizeof(T)*num_elements);
             #else
-            cout << "ERROR: compiled without GPU support" << __FILE__ << ":" 
+            cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
                  << __LINE__ << endl;
             exit(1);
             #endif
@@ -111,7 +111,7 @@ struct multi_array {
     }
 
     T& operator()(array<Index,d> idx) {
-        return v[linear_idx(idx)];
+      return v[linear_idx(idx)];
     }
 
     // TODO: if called as (z,0) this gives a -Wnarrowing warning. These warnings
@@ -181,5 +181,18 @@ struct multi_array {
         std::transform(begin(), end(), out.begin(), [&scalar](const T& c){return c*scalar;} );
         return out;
     }
-};
 
+    bool operator==(const multi_array& lhs){
+      bool eq = true;
+      if (lhs.shape() != shape()){
+        eq = false;
+      }else{
+        Index i = 0;
+        while ((eq == true) && (i<lhs.num_elements())){
+          eq = (std::abs((*(lhs.begin()+i) - *(begin()+i))) < 10*std::numeric_limits<T>::epsilon());
+          i++;
+        }
+      }
+      return eq;
+    }
+};

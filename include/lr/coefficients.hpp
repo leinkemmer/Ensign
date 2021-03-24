@@ -7,7 +7,10 @@ template<class T, size_t d1, size_t d2>
 void coeff(multi_array<T,d1>& a, multi_array<T,d2>& b, T w, multi_array<T,d1+d2-2>& out);
 
 template<class T, size_t d1, size_t d2>
-void coeff(multi_array<T,d1>& a, multi_array<T,d2>& b, T* w, multi_array<T,d1+d2-2>& out);
+void coeff_mat(multi_array<T,d1>& a, multi_array<T,d2>& b, T w, multi_array<T,d1+d2-2>& out);
+
+template<class T, size_t d1, size_t d2>
+void coeff_gen(multi_array<T,d1>& a, multi_array<T,d2>& b, T* w, multi_array<T,d1+d2-2>& out);
 
 /*
 template<class T, size_t d1>

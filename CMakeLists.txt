@@ -8,7 +8,6 @@ if(NOT CMAKE_BUILD_TYPE)
 endif(NOT CMAKE_BUILD_TYPE)
 set(CMAKE_CXX_STANDARD 14)
 
-
 option("CUDA_ENABLED" OFF)
 if(${CUDA_ENABLED})
     find_package(CUDA QUIET)
@@ -20,4 +19,3 @@ include_directories(include)
 add_subdirectory(extern/Catch2)
 
 add_subdirectory(tests)
-

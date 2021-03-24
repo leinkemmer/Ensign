@@ -14,11 +14,22 @@ endif()
 target_link_libraries(matrix Catch2::Catch2)
 add_test(NAME matrix COMMAND matrix)
 
+include(FindBLAS)
+
+if (BLAS_FOUND)
+    target_compile_options(matrix PRIVATE ${BLAS_LINKER_FLAGS})
+    target_link_libraries(matrix ${BLAS_LIBRARIES})
+endif ()
+
 if(${CUDA_ENABLED})
     cuda_add_executable(coefficients coefficients.cu ../src/lr/coefficients.cu ../src/generic/utility.cu)
 else()
-    add_executable(coefficients coefficients.cpp ../src/lr/coefficients.cpp ../src/generic/utility.cpp)
+    add_executable(coefficients coefficients.cpp ../src/lr/coefficients.cpp ../src/generic/matrix.cpp ../src/generic/utility.cpp)
 endif()
 target_link_libraries(coefficients Catch2::Catch2)
 add_test(NAME coefficients COMMAND coefficients)
 
+if (BLAS_FOUND)
+    target_compile_options(coefficients PRIVATE ${BLAS_LINKER_FLAGS})
+    target_link_libraries(coefficients ${BLAS_LIBRARIES})
+endif ()
