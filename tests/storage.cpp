@@ -37,18 +37,31 @@ TEST_CASE( "multi_array basic operations", "[multi_array]" ) {
 
     # ifdef __CUDACC__
     SECTION("TEST GPU"){
-        multi_array<double,2> a_cpu({2,3});
-        // define on cpu
-        //
-        multi_array<double,2> a_gpu({2,3},stloc::device);
-        a_gpu = a_cpu;
+        multi_array<double,2> a_cpu1({1,2});
+        multi_array<double,2> a_cpu2({1,2});
+
+        a_cpu1(0,0) = 2.2;
+        a_cpu1(0,1) = 1.5;
+        cout << "Should allocate on GPU" << endl;
+        multi_array<double,2> a_gpu({1,2},stloc::device);
+        cout << "Finish Should allocate on GPU" << endl;
+        cout << "Transfer CPU->GPU" << endl;
+        a_gpu.transfer(a_cpu1);
+        cout << "Finish Transfer CPU->GPU" << endl;
+
+        cout << "Transfer GPU->CPU wasting memory" << endl;
+        a_cpu1 = a_gpu;
+        cout << "Finish Transfer GPU->CPU wasting memory" << endl;
+
+        cout << "Transfer GPU/CPU without wasting memory" << endl;
+        a_cpu2.transfer(a_gpu);
+        cout << "Finish Transfer GPU/CPU without wasting memory" << endl;
 
 
-        // computation on gpu
-        
-        a_cpu = a_gpu;
-        cout << a_gpu.data() << endl;
-        cout << a_cpu(0,0) << endl;
+        REQUIRE( a_cpu1(0,0) == Approx(2.2) );
+        REQUIRE( a_cpu1(0,1) == Approx(1.5) );
+        REQUIRE( bool(a_cpu1 == a_cpu2));
+      
     }
   #endif
 }

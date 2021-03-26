@@ -8,6 +8,7 @@ add_test(NAME storage COMMAND storage)
 
 if(${CUDA_ENABLED})
     cuda_add_executable(matrix matrix.cu ../src/generic/matrix.cu ../src/generic/utility.cu)
+    cuda_add_cublas_to_target(matrix)
 else()
     add_executable(matrix matrix.cpp ../src/generic/matrix.cpp ../src/generic/utility.cpp)
 endif()
@@ -21,8 +22,10 @@ if (BLAS_FOUND)
     target_link_libraries(matrix ${BLAS_LIBRARIES})
 endif ()
 
+
 if(${CUDA_ENABLED})
     cuda_add_executable(coefficients coefficients.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu)
+    cuda_add_cublas_to_target(coefficients)
 else()
     add_executable(coefficients coefficients.cpp ../src/lr/coefficients.cpp ../src/generic/matrix.cpp ../src/generic/utility.cpp)
 endif()

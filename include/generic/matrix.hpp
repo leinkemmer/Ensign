@@ -11,6 +11,9 @@ template<class T>
 void set_identity(multi_array<T,2>& a);
 
 template<class T>
+void ptw_mult_col(multi_array<T,2>& a, T* w, multi_array<T,2>& out);
+
+template<class T>
 void matmul(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c);
 
 template<class T>

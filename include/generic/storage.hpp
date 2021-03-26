@@ -43,15 +43,17 @@ struct multi_array {
         if(ma.sl == stloc::host && sl == stloc::host) { // both on CPU
             ma.swap(*this);
         } else {
+
             #ifdef __CUDACC__
-            if(sl == stloc::host)         // dst on CPU
+            if(sl == stloc::host){ // dst on CPU
                 cudaMemcpy(v, ma.data(), sizeof(T)*ma.num_elements(),
                         cudaMemcpyDeviceToHost);
-            else if(ma.sl == stloc::host) // src on CPU
+            }else if(ma.sl == stloc::host){ // src on CPU
                 cudaMemcpy(v, ma.data(), sizeof(T)*ma.num_elements(),
                         cudaMemcpyHostToDevice);
-            else             // both src and dst on GPU
+            }else{             // both src and dst on GPU
                 ma.swap(*this);
+            }
             #else
             cout << "ERROR: compiled without GPU support" << endl;
             exit(1);
@@ -60,6 +62,32 @@ struct multi_array {
 
         return *this;
     }
+
+    // transfer from CPU/GPU
+    multi_array& transfer(multi_array& ma) {
+        if(ma.sl == stloc::host && sl == stloc::host) { // both on CPU
+            ma.swap(*this);
+        } else {
+
+            #ifdef __CUDACC__
+            if(sl == stloc::host){ // dst on CPU
+                cudaMemcpy(v, ma.data(), sizeof(T)*ma.num_elements(),
+                        cudaMemcpyDeviceToHost);
+            }else if(ma.sl == stloc::host){ // src on CPU
+                cudaMemcpy(v, ma.data(), sizeof(T)*ma.num_elements(),
+                        cudaMemcpyHostToDevice);
+            }else{             // both src and dst on GPU
+                ma.swap(*this);
+            }
+            #else
+            cout << "ERROR: compiled without GPU support" << endl;
+            exit(1);
+            #endif
+        }
+
+        return *this;
+    }
+
 
     void resize(array<Index,d> _e) {
         e = _e;
