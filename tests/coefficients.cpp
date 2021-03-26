@@ -8,6 +8,7 @@
 
 
 TEST_CASE( "coefficients", "[coefficients]" ) {
+  SECTION("In CPU"){
     multi_array<double,2> a({2,3}), b({2,3}), out({3,3}), out2({3,3});
 
     for(int i = 0; i<2; i++){
@@ -55,24 +56,35 @@ TEST_CASE( "coefficients", "[coefficients]" ) {
     REQUIRE(bool(RR == outout));
 
     multi_array<double,2> aaa({3,2}), bbb({3,2}), out3({2,2});
+    multi_array<float,2> aaaf({3,2}), bbbf({3,2}), out3f({2,2});
 
     for(int i = 0; i<3; i++){
       for(int j = 0; j<2; j++){
         aaa(i,j) = i + 3*j;
         bbb(i,j) = 1+i + 3*j;
+        aaaf(i,j) = i + 3*j;
+        bbbf(i,j) = 1+i + 3*j;
       }
     }
 
     array<double,3> ww = {-1.0,2.0,5.0};
+    array<float,3> wwf = {-1.0,2.0,5.0};
 
     coeff(aaa, bbb, ww.begin(), out3);
+    coeff(aaaf, bbbf, wwf.begin(), out3f);
 
     multi_array<double,2> R3({2,2});
-
     R3(0,0) = 34.0; R3(0,1) = 70.0;
     R3(1,0) = 88.0; R3(1,1) = 178.0;
 
+    multi_array<float,2> R3f({2,2});
+    R3f(0,0) = 34.0; R3f(0,1) = 70.0;
+    R3f(1,0) = 88.0; R3f(1,1) = 178.0;
+
+
     REQUIRE(bool(R3 == out3));
+    REQUIRE(bool(R3f == out3f));
+  }
 
 }
 ;
