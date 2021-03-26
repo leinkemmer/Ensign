@@ -45,23 +45,17 @@ TEST_CASE( "multi_array basic operations", "[multi_array]" ) {
         cout << "Should allocate on GPU" << endl;
         multi_array<double,2> a_gpu({1,2},stloc::device);
         cout << "Finish Should allocate on GPU" << endl;
-        cout << "Transfer CPU->GPU" << endl;
-        a_gpu.transfer(a_cpu1);
-        cout << "Finish Transfer CPU->GPU" << endl;
+        a_gpu = a_cpu1;
+        a_cpu2 = a_cpu1;
 
         cout << "Transfer GPU->CPU wasting memory" << endl;
         a_cpu1 = a_gpu;
         cout << "Finish Transfer GPU->CPU wasting memory" << endl;
 
-        cout << "Transfer GPU/CPU without wasting memory" << endl;
-        a_cpu2.transfer(a_gpu);
-        cout << "Finish Transfer GPU/CPU without wasting memory" << endl;
-
-
         REQUIRE( a_cpu1(0,0) == Approx(2.2) );
         REQUIRE( a_cpu1(0,1) == Approx(1.5) );
         REQUIRE( bool(a_cpu1 == a_cpu2));
-      
     }
+
   #endif
 }
