@@ -102,12 +102,6 @@ struct multi_array {
         }
     }
 
-    void swap(multi_array& x) {
-        std::swap(v, x.v);
-        std::swap(e, x.e);
-        std::swap(sl, x.sl);
-    }
-
     Index linear_idx(array<Index,d> idx) {
         Index k=0;
         Index stride = 1;
@@ -173,6 +167,11 @@ struct multi_array {
         return *this;
     }
 
+    multi_array& operator/=(const T scalar) {
+        std::transform(begin(), end(), begin(), [&scalar](T& a){return scalar/a;} );
+        return *this;
+    }
+
     multi_array operator+(const multi_array& lhs) {
         multi_array<T,d> out(e);
         std::transform(begin(), end(), lhs.begin(), out.begin(), [](T& a, T& b){return a+b;} );
@@ -195,9 +194,10 @@ struct multi_array {
         if (lhs.shape() != shape()){
             return false;
         } else {
-            for(Index i=0;i<lhs.num_elements();i++)
-                if(std::abs((lhs.v[i] - v[i])) > T(10)*std::numeric_limits<T>::epsilon())
+            for(Index i=0;i<lhs.num_elements();i++){
+                if(std::abs((lhs.v[i] - v[i])) > T(1000)*std::numeric_limits<T>::epsilon())
                     return false;
+                  }
             return true;
         }
     }

@@ -12,8 +12,6 @@ void set_zero(multi_array<T,2>& a) {
     multi_array<T,2> _a(a.shape());
     fill(_a.begin(), _a.end(), T(0.0));
     a = _a;
-    //free(_a.data()); // can I free memory in some way? Or is it erased as soon as I am out of scope?
-    // Is there a smarter way to fill directly on GPU?
     #else
     cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
     << __LINE__ << endl;
@@ -49,7 +47,7 @@ void set_identity(multi_array<T,2>& a){
 template void set_identity(multi_array<double,2>&);
 template void set_identity(multi_array<float,2>&);
 
-template<class T>
+template<class T> // we should write a kernel for this one, will be performed on the GPU
 void ptw_mult_col(multi_array<T,2>& a, T* w, multi_array<T,2>& out){
   Index N = a.shape()[0];
   for(int r = 0; r < a.shape()[1]; r++){
