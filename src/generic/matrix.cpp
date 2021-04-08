@@ -21,6 +21,7 @@ void set_zero(multi_array<T,2>& a) {
 }
 template void set_zero(multi_array<double,2>&);
 template void set_zero(multi_array<float,2>&);
+template void set_zero(multi_array<complex<double>,2>&);
 
 template<class T>
 void set_identity(multi_array<T,2>& a){
@@ -89,6 +90,24 @@ void matmul(const multi_array<double,2>& a, const multi_array<double,2>& b, mult
         cout << "ERROR: inputs and output must be all on CPU or on GPU" << __FILE__ << ":"
         << __LINE__ << endl;
         exit(1);
+      }
+}
+
+template<>
+void matmul(const multi_array<complex<double>,2>& a, const multi_array<complex<double>,2>& b, multi_array<complex<double>,2>& c){
+  if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
+    complex<double> one(1.0,0.0);
+    complex<double> zero(0.0,0.0);
+
+    cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+      a.shape()[0], b.shape()[1], a.shape()[1],
+      &one, a.begin(), a.shape()[0],
+      b.begin(), a.shape()[1], &zero,
+      c.begin(), a.shape()[0]);
+    } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
+      // TO DO
+      } else {
+        // TO DO
       }
 
 }
@@ -251,6 +270,23 @@ void matmul_transb(const multi_array<float,2>& a, const multi_array<float,2>& b,
         cout << "ERROR: inputs and output must be all on CPU or on GPU" << __FILE__ << ":"
         << __LINE__ << endl;
         exit(1);
+      }
+}
+template<>
+void matmul_transb(const multi_array<complex<double>,2>& a, const multi_array<complex<double>,2>& b, multi_array<complex<double>,2>& c){
+  if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
+    complex<double> one(1.0,0.0);
+    complex<double> zero(0.0,0.0);
+
+    cblas_zgemm(CblasColMajor, CblasNoTrans, CblasTrans,
+      a.shape()[0], b.shape()[0], a.shape()[1],
+      &one, a.begin(), a.shape()[0],
+      b.begin(), b.shape()[0], &zero,
+      c.begin(), a.shape()[0]);
+    } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
+      // TO DO
+      } else {
+        // TO DO
       }
 }
 

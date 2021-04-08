@@ -17,5 +17,5 @@ endif()
 include_directories(include)
 
 add_subdirectory(extern/Catch2)
-
 add_subdirectory(tests)
+add_subdirectory(examples)

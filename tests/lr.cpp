@@ -63,7 +63,7 @@ TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
 
     lr2<double> lr0(3,{4,4});
 
-    initialize(lr0, X, V, ip);
+    initialize(lr0, X, V, 3, ip, ip);
 
     multi_array<double,2> id({3,3});
     set_identity(id);

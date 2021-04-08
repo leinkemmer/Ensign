@@ -35,7 +35,7 @@ struct lr2 {
 };
 
 template<class T>
-void initialize(lr2<T>& lr, vector<T*> X, vector<T*> V, std::function<T(T*,T*)> inner_product);
+void initialize(lr2<T>& lr, vector<T*> X, vector<T*> V, int n_b, std::function<T(T*,T*)> inner_product_X, std::function<T(T*,T*)> inner_product_V);
 
 template<class T>
 std::function<T(T*,T*)> inner_product_from_weight(T* w, Index N);
@@ -55,10 +55,6 @@ void ptw_div(T* v, Index n, T scal);
 template<class T>
 void gram_schmidt(multi_array<T,2>& Q, multi_array<T,2>& R,
         std::function<T(T*,T*)> inner_product);
-
-template<class T>
-void initialize(lr2<T>& lr, vector<T*> X, vector<T*> V, std::function<T(T*,T*)> inner_product);
-
 
 /*
 template<class T>

@@ -482,4 +482,47 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
     REQUIRE(bool(_RAtBtf == _AtBtf));
   }
   #endif
+
+  SECTION("Complex multiplication"){
+    multi_array<complex<double>,2> A({2,3});
+    multi_array<complex<double>,2> B({3,4});
+    multi_array<complex<double>,2> AB({2,4});
+    multi_array<complex<double>,2> RAB({2,4});
+
+    complex<double> one(0.0,1.0);
+
+    for(int i = 0; i<2; i++){
+      for(int j = 0; j<3; j++){
+        A(i,j) = complex<double>(i + 2*j) + one;
+        cout << A(i,j) << endl;
+      }
+    }
+
+    for(int i = 0; i<3; i++){
+      for(int j = 0; j<4; j++){
+        B(i,j) = complex<double>(i + 3*j) + one;
+        cout << B(i,j) << endl;
+      }
+    }
+
+    set_zero(RAB);
+    for(int i = 0; i<2; i++){
+      for(int j = 0; j<4; j++){
+        for(int k = 0; k< 3; k++){
+          RAB(i,j) += A(i,k)*B(k,j);
+        }
+      }
+    }
+
+    matmul(A,B,AB);
+
+    for(int i = 0; i<2; i++){
+      for(int j = 0; j<4; j++){
+        cout << AB(i,j) << endl;
+      }
+    }
+
+//    REQUIRE(bool(RAB == AB)); TO DO
+
+  }
 }

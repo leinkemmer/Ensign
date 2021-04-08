@@ -8,6 +8,7 @@
 #include <vector>
 #include <algorithm>
 #include <assert.h>
+#include <complex>
 
 #ifdef __CUDACC__
 #include <cuda_runtime.h>
@@ -22,5 +23,6 @@ using std::array;
 using std::vector;
 using std::fill;
 using std::abs;
+using std::complex;
 
 typedef ptrdiff_t Index;

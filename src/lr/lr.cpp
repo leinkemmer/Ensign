@@ -121,7 +121,7 @@ template void ptw_div(double* v, Index n, double scal);
 template void ptw_div(float* v, Index n, float scal);
 */
 template<class T>
-void initialize(lr2<T>& lr, vector<T*> X, vector<T*> V, std::function<T(T*,T*)> inner_product) {
+void initialize(lr2<T>& lr, vector<T*> X, vector<T*> V, int n_b, std::function<T(T*,T*)> inner_product_X, std::function<T(T*,T*)> inner_product_V) {
 
   for(Index k=0;k<X.size();k++) {
     for(Index i=0;i<lr.problem_size();i++) {
@@ -130,11 +130,18 @@ void initialize(lr2<T>& lr, vector<T*> X, vector<T*> V, std::function<T(T*,T*)> 
     }
   }
   multi_array<T, 2> X_R(lr.S.shape()), V_R(lr.S.shape());
-  gram_schmidt(lr.X, X_R, inner_product);
-  gram_schmidt(lr.V, V_R, inner_product);
+  gram_schmidt(lr.X, X_R, inner_product_X);
+  gram_schmidt(lr.V, V_R, inner_product_V);
+
+  for(int j = n_b; j < X.size(); j++){
+    for(int i = 0; i < X.size(); i++){
+      X_R(i,j) = T(0.0);
+      V_R(i,j) = T(0.0);
+    }
+  }
 
   matmul_transb(X_R, V_R, lr.S);
 
 };
-template void initialize(lr2<double>& lr, vector<double*> X, vector<double*> V, std::function<double(double*,double*)> inner_product);
-template void initialize(lr2<float>& lr, vector<float*> X, vector<float*> V, std::function<float(float*,float*)> inner_product);
+template void initialize(lr2<double>& lr, vector<double*> X, vector<double*> V, int n_b, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V);
+template void initialize(lr2<float>& lr, vector<float*> X, vector<float*> V, int n_b, std::function<float(float*,float*)> inner_product_X, std::function<float(float*,float*)> inner_product_V);
