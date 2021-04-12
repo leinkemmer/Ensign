@@ -6,9 +6,17 @@ else()
     target_link_libraries(advection fftw3)
 endif()
 
+
 include(FindBLAS)
+include(FindLAPACK)
 
 if (BLAS_FOUND)
     target_compile_options(advection PRIVATE ${BLAS_LINKER_FLAGS})
     target_link_libraries(advection ${BLAS_LIBRARIES})
 endif ()
+if (LAPACK_FOUND)
+    target_compile_options(advection PRIVATE ${LAPACK_LINKER_FLAGS})
+    target_link_libraries(advection ${LAPACK_LIBRARIES})
+endif ()
+
+target_link_libraries(advection ${LAPACKE_LIBRARIES})

@@ -61,6 +61,23 @@ void ptw_mult_col(multi_array<T,2>& a, T* w, multi_array<T,2>& out){
 template void ptw_mult_col(multi_array<double,2>&, double*, multi_array<double,2>&);
 template void ptw_mult_col(multi_array<float,2>&, float*, multi_array<float,2>&);
 
+template<class T> // we should write a kernel for this one, will be performed on the GPU
+void transpose_inplace(multi_array<T,2>& a){
+  Index m = a.shape()[0];
+  T tmp = 0.0;
+  for(Index r = 0; r < m; r++){
+    for(Index i = 1 + r; i < m; i++){
+      tmp = a(r,i);
+      a(r,i) = a(i,r);
+      a(i,r) = tmp;
+    }
+  }
+}
+
+template void transpose_inplace(multi_array<double,2>&);
+template void transpose_inplace(multi_array<float,2>&);
+
+
 template<>
 void matmul(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c){
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU

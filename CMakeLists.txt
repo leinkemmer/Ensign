@@ -14,6 +14,9 @@ if(${CUDA_ENABLED})
     set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-std=c++14;-O3;-g;--compiler-options;-DNDEBUG;--compiler-options;-fopenmp)
 endif()
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/FindLAPACKE")
+find_package(LAPACKE REQUIRED)
+
 include_directories(include)
 
 add_subdirectory(extern/Catch2)
