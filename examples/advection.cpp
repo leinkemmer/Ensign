@@ -98,10 +98,10 @@ int main(){
   int howmany = r;
   int istride = 1;
   int ostride = 1;
-  int* inembed = n;
-  int* onembed = n;
-  //const Index* inembed = n;
-  //const Index* onembed = n;
+  //int* inembed = n;
+  //int* onembed = n;
+  const Index* inembed = n;
+  const Index* onembed = n;
   Index idist;
   Index odist;
 
@@ -181,7 +181,7 @@ int main(){
 
     for(int j = 0; j < (Nx/2 + 1); j++){
       for(int k = 0; k < r; k++){
-        Mhat(j,k) *= exp(-tau*lambda[j]*dc_r[k]);
+        Mhat(j,k) *= exp(-tau*lambda[j]*dc_r[k])*nc_backward;
       }
     }
 
@@ -197,8 +197,6 @@ int main(){
     fftw_execute(q1);
 
     fftw_destroy_plan(q1);
-
-    lr_sol.X *= nc_backward;
 
     gram_schmidt(lr_sol.X, lr_sol.S, ip_x);
 
@@ -217,10 +215,10 @@ int main(){
 
     fftw_destroy_plan(p2);
 
-    for(int j = 0; j<(Nx/2 + 1); j++){
-      for(int k = 0; k<r; k++){
-        Khat(j,k) *= lambda[j];
-      }
+    for(int k = 0; k<r; k++){
+        for(int j = 0; j<(Nx/2 + 1); j++){
+            Khat(j,k) *= lambda[j]*nc_backward;
+        }
     }
 
     fftw_plan q2;
@@ -232,7 +230,6 @@ int main(){
     fftw_execute(q2);
     fftw_destroy_plan(q2);
 
-    dX *= nc_backward;
 
     coeff(lr_sol.X, dX, ww.data(), D);
 
