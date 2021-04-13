@@ -14,8 +14,8 @@ int main(){
   std::default_random_engine generator;
   std::normal_distribution<double> distribution(0.0,1.0);
 
-  Index Nx = 50; // NEEDS TO BE EVEN FOR FOURIER
-  Index Nv = 50; // NEEDS TO BE EVEN FOR FOURIER
+  Index Nx = 10; // NEEDS TO BE EVEN FOR FOURIER
+  Index Nv = 10; // NEEDS TO BE EVEN FOR FOURIER
 
   int r = 2; // rank desired
   int n_b = 1; // number of actual basis functions
@@ -23,7 +23,7 @@ int main(){
   double tstar = 0.1; // final time
   double tau = 0.01; // time step splitting
 
-  int nsteps_ee = 1000; // number of time steps for explicit euler
+  int nsteps_ee = 100000; // number of time steps for explicit euler
 
   double ax = -M_PI;
   double bx = M_PI;
@@ -118,8 +118,8 @@ int main(){
   multi_array<double,2> C({r,r});
 
   vector<double> w;
-  w.push_back(0.0); // First weight zero as trapezoidal for periodic
-  for(int j = 1; j<(Nx-1); j++){
+  //w.push_back(0.0); // First weight zero as trapezoidal for periodic
+  for(int j = 0; j < Nx; j++){
     w.push_back(v[j] * hv);
   }
 
@@ -139,8 +139,8 @@ int main(){
   multi_array<double,2> D({r,r});
 
   vector<double> ww;
-  ww.push_back(0.0); // First weight zero as trapezoidal for periodic
-  for(int j = 1; j<(Nx-1); j++){
+  //ww.push_back(0.0); // First weight zero as trapezoidal for periodic
+  for(int j = 0; j< Nx; j++){
     ww.push_back(hx);
   }
 
