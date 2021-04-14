@@ -8,14 +8,17 @@
 #include <fftw3.h>
 #include <cstring>
 
-#include <lapacke.h>
+extern "C" {
+extern int dgees_(char*,char*,void*,int*,double*,int*, int*, double*, double*, double*, int*, double*, int*, bool*,int*);
+}
+
 
 int main(){
   std::default_random_engine generator;
   std::normal_distribution<double> distribution(0.0,1.0);
 
-  Index Nx = 10; // NEEDS TO BE EVEN FOR FOURIER
-  Index Nv = 10; // NEEDS TO BE EVEN FOR FOURIER
+  Index Nx = 50; // NEEDS TO BE EVEN FOR FOURIER
+  Index Nv = 50; // NEEDS TO BE EVEN FOR FOURIER
 
   int r = 2; // rank desired
   int n_b = 1; // number of actual basis functions
@@ -23,7 +26,7 @@ int main(){
   double tstar = 0.1; // final time
   double tau = 0.01; // time step splitting
 
-  int nsteps_ee = 100000; // number of time steps for explicit euler
+  int nsteps_ee = 100; // number of time steps for explicit euler
 
   double ax = -M_PI;
   double bx = M_PI;
@@ -98,10 +101,10 @@ int main(){
   int howmany = r;
   int istride = 1;
   int ostride = 1;
-  //int* inembed = n;
-  //int* onembed = n;
-  const Index* inembed = n;
-  const Index* onembed = n;
+  int* inembed = n;
+  int* onembed = n;
+  //const Index* inembed = n;
+  //const Index* onembed = n;
   Index idist;
   Index odist;
 
@@ -129,10 +132,26 @@ int main(){
   dc_i.reserve(r);
 
   multi_array<double,2> T({r,r});
-  int value = 0;
 
   multi_array<complex<double>,2> Mhat({Nx/2 + 1,r});
   multi_array<complex<double>,2> Tc({r,r});
+
+  int value = 0;
+  char jobvs = 'V';
+  char sort = 'N';
+  int nn = r;
+  int lda = r;
+  int ldvs = r;
+  int info;
+  int lwork = -1;
+  double work_opt;
+
+  // Dumb call to obtain optimal value to work
+  dgees_(&jobvs,&sort,nullptr,&nn,T.begin(),&lda,&value,dc_r.data(),dc_i.data(),T.begin(),&ldvs,&work_opt,&lwork,nullptr,&info);
+
+  lwork = int(work_opt);
+  vector<double> work;
+  work.reserve(lwork);
 
   // For D coefficients
 
@@ -143,6 +162,7 @@ int main(){
   for(int j = 0; j< Nx; j++){
     ww.push_back(hx);
   }
+
 
 
   for(int i = 0; i < nsteps; i++){
@@ -168,7 +188,9 @@ int main(){
 
     multi_array<double,2> D_C(C); // needed because dgees overwrites input, and I need C later on
 
-    LAPACKE_dgees(LAPACK_COL_MAJOR,'V','N',nullptr,r,D_C.begin(),r,&value,dc_r.data(),dc_i.data(),T.begin(),r);
+    dgees_(&jobvs,&sort,nullptr,&nn,D_C.begin(),&lda,&value,dc_r.data(),dc_i.data(),T.begin(),&ldvs,work.data(),&lwork,nullptr,&info);
+
+    //LAPACKE_dgees(LAPACK_COL_MAJOR,'V','N',nullptr,r,D_C.begin(),r,&value,dc_r.data(),dc_i.data(),T.begin(),r);
 
     // Forced casting as we need two complex matrices
     for(int j = 0; j < r; j++){
