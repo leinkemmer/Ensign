@@ -14,8 +14,6 @@ extern int dgees_(char*,char*,void*,int*,double*,int*, int*, double*, double*, d
 
 
 int main(){
-  std::default_random_engine generator;
-  std::normal_distribution<double> distribution(0.0,1.0);
 
   Index Nx = 10; // NEEDS TO BE EVEN FOR FOURIER
   Index Nv = 10; // NEEDS TO BE EVEN FOR FOURIER
@@ -24,7 +22,7 @@ int main(){
   int n_b = 1; // number of actual basis functions
 
   double tstar = 0.1; // final time
-  double tau = 0.1; // time step splitting
+  double tau = 0.01; // time step splitting
 
   int nsteps_ee = 1000; // number of time steps for explicit euler
 
@@ -62,6 +60,9 @@ int main(){
   vector<vector<double>> RX;
   vector<vector<double>> RV;
 
+  std::default_random_engine generator(time(0));
+  std::normal_distribution<double> distribution(0.0,1.0);
+
   for(Index i = 0; i < (r-n_b); i++){
     vector<double> randx;
     vector<double> randv;
@@ -89,10 +90,6 @@ int main(){
 
   lr2<double> lr_sol(r,{Nx,Nv});
 
-  lr_sol.X = lr0.X;
-  lr_sol.S = lr0.S;
-  lr_sol.V = lr0.V;
-
   // For FFT -- Pay attention we have to cast to int as Index seems not to work with fftw_many
 
   int rank = 1;
@@ -102,10 +99,24 @@ int main(){
   int ostride = 1;
   int* inembed = &n;
   int* onembed = &n;
-  Index idist;
-  Index odist;
+  Index idist = Nx;
+  Index odist = Nx/2 + 1;
 
   multi_array<complex<double>,2> Khat({Nx/2+1,r});
+
+  fftw_plan p;
+  p = fftw_plan_many_dft_r2c(rank, &n, howmany, lr_sol.X.begin(), inembed, istride, idist, (fftw_complex*)Khat.begin(), onembed, ostride, odist, FFTW_MEASURE);
+
+  fftw_plan q;
+  idist = Nx/2 + 1;
+  odist = Nx;
+
+  q = fftw_plan_many_dft_c2r(rank, &n, howmany, (fftw_complex*) Khat.begin(), inembed, istride, idist, lr_sol.X.begin(), onembed, ostride, odist, FFTW_MEASURE);
+
+  // Mandatory to initialize after plan creation if we use FFTW_MEASURE
+  lr_sol.X = lr0.X;
+  lr_sol.S = lr0.S;
+  lr_sol.V = lr0.V;
 
   vector<complex<double>> lambda;
   for(int j = 0; j < (Nx/2 + 1) ; j++){
@@ -166,24 +177,13 @@ int main(){
 
     matmul(tmpX,lr_sol.S,lr_sol.X);
 
-    fftw_plan p1;
-
-    idist = Nx;
-    odist = Nx/2 + 1;
-
-    p1 = fftw_plan_many_dft_r2c(rank, &n, howmany, lr_sol.X.begin(), inembed, istride, idist, (fftw_complex*)Khat.begin(), onembed, ostride, odist, FFTW_ESTIMATE);
-
-    fftw_execute(p1);
-
-    fftw_destroy_plan(p1);
+    fftw_execute_dft_r2c(p,lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
     coeff(lr_sol.V, lr_sol.V, w.data(), C);
 
     multi_array<double,2> D_C(C); // needed because dgees overwrites input, and I need C later on
 
     dgees_(&jobvs,&sort,nullptr,&nn,D_C.begin(),&lda,&value,dc_r.data(),dc_i.data(),T.begin(),&ldvs,work.data(),&lwork,nullptr,&info);
-
-    //LAPACKE_dgees(LAPACK_COL_MAJOR,'V','N',nullptr,r,D_C.begin(),r,&value,dc_r.data(),dc_i.data(),T.begin(),r);
 
     // Forced casting as we need two complex matrices
     for(int j = 0; j < r; j++){
@@ -202,16 +202,7 @@ int main(){
 
     matmul_transb(Mhat,Tc,Khat);
 
-    fftw_plan q1;
-
-    idist = Nx/2 + 1;
-    odist = Nx;
-
-    q1 = fftw_plan_many_dft_c2r(rank, &n, howmany, (fftw_complex*) Khat.begin(), inembed, istride, idist, lr_sol.X.begin(), onembed, ostride, odist, FFTW_ESTIMATE);
-
-    fftw_execute(q1);
-
-    fftw_destroy_plan(q1);
+    fftw_execute_dft_c2r(q,(fftw_complex*)Khat.begin(),lr_sol.X.begin());
 
     gram_schmidt(lr_sol.X, lr_sol.S, ip_x);
 
@@ -219,16 +210,8 @@ int main(){
 
     multi_array<double,2> dX({Nx,r});
 
-    fftw_plan p2;
+    fftw_execute_dft_r2c(p,lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
-    idist = Nx;
-    odist = Nx/2 + 1;
-
-    p2 = fftw_plan_many_dft_r2c(rank, &n, howmany, lr_sol.X.begin(), inembed, istride, idist, (fftw_complex*)Khat.begin(), onembed, ostride, odist, FFTW_ESTIMATE);
-
-    fftw_execute(p2);
-
-    fftw_destroy_plan(p2);
 
     for(int k = 0; k<r; k++){
         for(int j = 0; j<(Nx/2 + 1); j++){
@@ -236,15 +219,7 @@ int main(){
         }
     }
 
-    fftw_plan q2;
-
-    idist = Nx/2 + 1;
-    odist = Nx;
-
-    q2 = fftw_plan_many_dft_c2r(rank, &n, howmany, (fftw_complex*) Khat.begin(), inembed, istride, idist, dX.begin(), onembed, ostride, odist, FFTW_ESTIMATE);
-    fftw_execute(q2);
-    fftw_destroy_plan(q2);
-
+    fftw_execute_dft_c2r(q,(fftw_complex*)Khat.begin(),dX.begin());
 
     coeff(lr_sol.X, dX, ww.data(), D);
 
