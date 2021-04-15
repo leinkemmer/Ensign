@@ -36,6 +36,7 @@ void gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, std::funct
     for(Index k=0;k<j;k++) {
       R(k,j) = inner_product(Q.extract({j}), Q.extract({k}));
       cblas_daxpy(dims[0], -R(k,j), Q.extract({k}), 1, Q.extract({j}),1);
+      R(j,k) = 0.0;
     }
     R(j,j) = sqrt(inner_product(Q.extract({j}), Q.extract({j})));
     if(std::abs(R(j,j)) < double(1000)*std::numeric_limits<double>::epsilon()){
@@ -53,6 +54,7 @@ void gram_schmidt(multi_array<float,2>& Q, multi_array<float,2>& R, std::functio
     for(Index k=0;k<j;k++) {
       R(k,j) = inner_product(Q.extract({j}), Q.extract({k}));
       cblas_saxpy(dims[0], -R(k,j), Q.extract({k}), 1, Q.extract({j}),1);
+      R(j,k) = float(0.0);
     }
     R(j,j) = sqrt(inner_product(Q.extract({j}), Q.extract({j})));
     if(std::abs(R(j,j)) < float(1000)*std::numeric_limits<float>::epsilon()){
@@ -130,6 +132,9 @@ void initialize(lr2<T>& lr, vector<T*> X, vector<T*> V, int n_b, std::function<T
     }
   }
   multi_array<T, 2> X_R(lr.S.shape()), V_R(lr.S.shape());
+  set_zero(X_R);
+  set_zero(V_R);
+
   gram_schmidt(lr.X, X_R, inner_product_X);
   gram_schmidt(lr.V, V_R, inner_product_V);
 

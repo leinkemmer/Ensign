@@ -17,16 +17,16 @@ int main(){
   std::default_random_engine generator;
   std::normal_distribution<double> distribution(0.0,1.0);
 
-  Index Nx = 50; // NEEDS TO BE EVEN FOR FOURIER
-  Index Nv = 50; // NEEDS TO BE EVEN FOR FOURIER
+  Index Nx = 10; // NEEDS TO BE EVEN FOR FOURIER
+  Index Nv = 10; // NEEDS TO BE EVEN FOR FOURIER
 
   int r = 2; // rank desired
   int n_b = 1; // number of actual basis functions
 
   double tstar = 0.1; // final time
-  double tau = 0.01; // time step splitting
+  double tau = 0.1; // time step splitting
 
-  int nsteps_ee = 100; // number of time steps for explicit euler
+  int nsteps_ee = 1000; // number of time steps for explicit euler
 
   double ax = -M_PI;
   double bx = M_PI;
@@ -96,15 +96,12 @@ int main(){
   // For FFT -- Pay attention we have to cast to int as Index seems not to work with fftw_many
 
   int rank = 1;
-  int* n = (int*)&Nx;
-  //const Index* n = &Nx;
+  int n = int(Nx);
   int howmany = r;
   int istride = 1;
   int ostride = 1;
-  int* inembed = n;
-  int* onembed = n;
-  //const Index* inembed = n;
-  //const Index* onembed = n;
+  int* inembed = &n;
+  int* onembed = &n;
   Index idist;
   Index odist;
 
@@ -121,8 +118,7 @@ int main(){
   multi_array<double,2> C({r,r});
 
   vector<double> w;
-  //w.push_back(0.0); // First weight zero as trapezoidal for periodic
-  for(int j = 0; j < Nx; j++){
+  for(int j = 0; j < Nv; j++){
     w.push_back(v[j] * hv);
   }
 
@@ -158,17 +154,14 @@ int main(){
   multi_array<double,2> D({r,r});
 
   vector<double> ww;
-  //ww.push_back(0.0); // First weight zero as trapezoidal for periodic
   for(int j = 0; j< Nx; j++){
     ww.push_back(hx);
   }
 
 
-
   for(int i = 0; i < nsteps; i++){
 
     /* K step */
-
     multi_array<double,2> tmpX(lr_sol.X);
 
     matmul(tmpX,lr_sol.S,lr_sol.X);
@@ -178,7 +171,7 @@ int main(){
     idist = Nx;
     odist = Nx/2 + 1;
 
-    p1 = fftw_plan_many_dft_r2c(rank, n, howmany, lr_sol.X.begin(), inembed, istride, idist, (fftw_complex*)Khat.begin(), onembed, ostride, odist, FFTW_ESTIMATE);
+    p1 = fftw_plan_many_dft_r2c(rank, &n, howmany, lr_sol.X.begin(), inembed, istride, idist, (fftw_complex*)Khat.begin(), onembed, ostride, odist, FFTW_ESTIMATE);
 
     fftw_execute(p1);
 
@@ -214,7 +207,7 @@ int main(){
     idist = Nx/2 + 1;
     odist = Nx;
 
-    q1 = fftw_plan_many_dft_c2r(rank, n, howmany, (fftw_complex*) Khat.begin(), inembed, istride, idist, lr_sol.X.begin(), onembed, ostride, odist, FFTW_ESTIMATE);
+    q1 = fftw_plan_many_dft_c2r(rank, &n, howmany, (fftw_complex*) Khat.begin(), inembed, istride, idist, lr_sol.X.begin(), onembed, ostride, odist, FFTW_ESTIMATE);
 
     fftw_execute(q1);
 
@@ -231,7 +224,7 @@ int main(){
     idist = Nx;
     odist = Nx/2 + 1;
 
-    p2 = fftw_plan_many_dft_r2c(rank, n, howmany, lr_sol.X.begin(), inembed, istride, idist, (fftw_complex*)Khat.begin(), onembed, ostride, odist, FFTW_ESTIMATE);
+    p2 = fftw_plan_many_dft_r2c(rank, &n, howmany, lr_sol.X.begin(), inembed, istride, idist, (fftw_complex*)Khat.begin(), onembed, ostride, odist, FFTW_ESTIMATE);
 
     fftw_execute(p2);
 
@@ -248,7 +241,7 @@ int main(){
     idist = Nx/2 + 1;
     odist = Nx;
 
-    q2 = fftw_plan_many_dft_c2r(rank, n, howmany, (fftw_complex*) Khat.begin(), inembed, istride, idist, dX.begin(), onembed, ostride, odist, FFTW_ESTIMATE);
+    q2 = fftw_plan_many_dft_c2r(rank, &n, howmany, (fftw_complex*) Khat.begin(), inembed, istride, idist, dX.begin(), onembed, ostride, odist, FFTW_ESTIMATE);
     fftw_execute(q2);
     fftw_destroy_plan(q2);
 

@@ -190,6 +190,18 @@ struct multi_array {
         return out;
     }
 
+    friend std::ostream &operator<<(std::ostream &os, const multi_array &A) {
+
+    for (int i=0; i < A.shape()[0]; i++) {
+        for (int j=0; j < A.shape()[1]; j++) {
+            os << A.v[i + j*A.shape()[0]] << "  " ;
+        }
+        os << '\n';
+    }
+    return os;
+}
+
+
     bool operator==(const multi_array& lhs){
         if (lhs.shape() != shape()){
             return false;
