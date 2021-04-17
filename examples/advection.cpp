@@ -12,7 +12,6 @@ extern "C" {
 extern int dgees_(char*,char*,void*,int*,double*,int*, int*, double*, double*, double*, int*, double*, int*, bool*,int*);
 }
 
-
 int main(){
 
   Index Nx = 10; // NEEDS TO BE EVEN FOR FOURIER

@@ -126,14 +126,16 @@ template<class T>
 void initialize(lr2<T>& lr, vector<T*> X, vector<T*> V, int n_b, std::function<T(T*,T*)> inner_product_X, std::function<T(T*,T*)> inner_product_V) {
 
   for(Index k=0;k<X.size();k++) {
-    for(Index i=0;i<lr.problem_size();i++) {
+    for(Index i=0;i<lr.problem_size_X();i++) {
       lr.X(i, k) = X[k][i];
+    }
+  }
+  for(Index k=0;k<V.size();k++) {
+    for(Index i=0;i<lr.problem_size_V();i++) {
       lr.V(i, k) = V[k][i];
     }
   }
   multi_array<T, 2> X_R(lr.S.shape()), V_R(lr.S.shape());
-  set_zero(X_R);
-  set_zero(V_R);
 
   gram_schmidt(lr.X, X_R, inner_product_X);
   gram_schmidt(lr.V, V_R, inner_product_V);
@@ -141,6 +143,11 @@ void initialize(lr2<T>& lr, vector<T*> X, vector<T*> V, int n_b, std::function<T
   for(int j = n_b; j < X.size(); j++){
     for(int i = 0; i < X.size(); i++){
       X_R(i,j) = T(0.0);
+    }
+  }
+
+  for(int j = n_b; j < V.size(); j++){
+    for(int i = 0; i < V.size(); i++){
       V_R(i,j) = T(0.0);
     }
   }

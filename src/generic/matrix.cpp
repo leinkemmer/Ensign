@@ -77,7 +77,6 @@ void transpose_inplace(multi_array<T,2>& a){
 template void transpose_inplace(multi_array<double,2>&);
 template void transpose_inplace(multi_array<float,2>&);
 
-
 template<>
 void matmul(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c){
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
@@ -368,6 +367,22 @@ void matmul_transab(const multi_array<float,2>& a, const multi_array<float,2>& b
         cout << "ERROR: inputs and output must be all on CPU or on GPU" << __FILE__ << ":"
         << __LINE__ << endl;
         exit(1);
+      }
+
+}
+
+template<>
+void matvec(const multi_array<double,2>& a, const multi_array<double,1>& b, multi_array<double,1>& c){
+  if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
+    cblas_dgemv(CblasColMajor, CblasNoTrans,
+      a.shape()[0], a.shape()[1],
+      1.0, a.begin(), a.shape()[0],
+      b.begin(), 1, 0.0,
+      c.begin(), 1);
+    } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
+      // TO DO
+      } else {
+        // TO DO
       }
 
 }

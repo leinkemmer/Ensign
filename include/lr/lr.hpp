@@ -29,8 +29,11 @@ struct lr2 {
       V = _V;
     }
 
-    Index problem_size() {
+    Index problem_size_X() {
         return X.shape()[0];
+    }
+    Index problem_size_V() {
+        return V.shape()[0];
     }
 };
 
