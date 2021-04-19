@@ -30,7 +30,7 @@ int main(){
   double alpha = 0.01;
   double kappa = 0.5;
 
-  int nsteps = tstar/tau;
+  Index nsteps = tstar/tau;
 
   double ts_ee_forward = tau/nsteps_ee;
   double ts_ee_backward = -tau/nsteps_ee;
@@ -115,7 +115,7 @@ int main(){
 
   double ncx = 1.0 / Nx;
 
-  for(int j = 0; j < (Nx/2 + 1) ; j++){
+  for(Index j = 0; j < (Nx/2 + 1) ; j++){
     lambdax(j) = complex<double>(0.0,2.0*M_PI/(bx-ax)*j);
     lambdax_n(j) = complex<double>(0.0,2.0*M_PI/(bx-ax)*j*ncx);
   }
@@ -125,7 +125,7 @@ int main(){
 
   double ncv = 1.0 / Nv;
 
-  for(int j = 0; j < (Nv/2 + 1) ; j++){
+  for(Index j = 0; j < (Nv/2 + 1) ; j++){
     lambdav(j) = complex<double>(0.0,2.0*M_PI/(bv-av)*j);
     lambdav_n(j) = complex<double>(0.0,2.0*M_PI/(bv-av)*j*ncv);
   }
@@ -137,7 +137,7 @@ int main(){
 
   multi_array<double,1> wv({Nv});
 
-  for(int j = 0; j < Nv; j++){
+  for(Index j = 0; j < Nv; j++){
     wv(j) = v(j) * hv;
   }
 
@@ -192,7 +192,7 @@ int main(){
   multi_array<double,2> tmpX({Nx,r});
   multi_array<double,2> tmpV({Nv,r});
 
-  for(int i = 0; i < nsteps; i++){
+  for(Index i = 0; i < nsteps; i++){
 
     cout << "Time step " << i << " on " << nsteps << endl;
 
@@ -209,7 +209,7 @@ int main(){
 
     matvec(lr_sol.X,rho,ef);
 
-    for(int ii = 0; ii < Nx; ii++){
+    for(Index ii = 0; ii < Nx; ii++){
         ef(ii) += 1.0;
     }
 
@@ -223,7 +223,7 @@ int main(){
     fftw_execute_dft_c2r(qe,(fftw_complex*)efhat.begin(),ef.begin());
 
     energy(i) = 0.0;
-    for(int ii = 0; ii < Nx; ii++){
+    for(Index ii = 0; ii < Nx; ii++){
       energy(i) += 0.5*pow(ef(ii),2)*hx;
     }
 
@@ -260,7 +260,7 @@ int main(){
       matmul(Khat,Tc,Mhattmp);
 
       for(int k = 0; k < r; k++){
-        for(int j = 0; j < (Nx/2 + 1); j++){
+        for(Index j = 0; j < (Nx/2 + 1); j++){
           Mhat(j,k) *= exp(ts_ee_backward*lambdax(j)*dc_r(k));
           Mhat(j,k) += ts_ee_forward*phi1(ts_ee_backward*lambdax(j)*dc_r(k))*Mhattmp(j,k);
         }
@@ -276,7 +276,7 @@ int main(){
     gram_schmidt(lr_sol.X, lr_sol.S, ip_x);
 
     /* S step */
-    for(int ii = 0; ii < Nx; ii++){
+    for(Index ii = 0; ii < Nx; ii++){
       wx(ii) = hx*ef(ii);
     }
 
@@ -329,7 +329,7 @@ int main(){
       matmul(Lhat,Tc,Nhattmp);
 
       for(int k = 0; k < r; k++){
-        for(int j = 0; j < (Nv/2 + 1); j++){
+        for(Index j = 0; j < (Nv/2 + 1); j++){
           Nhat(j,k) *= exp(ts_ee_forward*lambdav(j)*dc_r(k));
           Nhat(j,k) += ts_ee_backward*phi1(ts_ee_forward*lambdav(j)*dc_r(k))*Nhattmp(j,k);
         }
