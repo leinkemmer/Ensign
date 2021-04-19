@@ -49,7 +49,7 @@ template void set_identity(multi_array<double,2>&);
 template void set_identity(multi_array<float,2>&);
 
 template<class T> // we should write a kernel for this one, will be performed on the GPU
-void ptw_mult_col(multi_array<T,2>& a, T* w, multi_array<T,2>& out){
+void ptw_mult_row(multi_array<T,2>& a, T* w, multi_array<T,2>& out){
   Index N = a.shape()[0];
   for(int r = 0; r < a.shape()[1]; r++){
     T* ptr = a.extract({r});
@@ -58,8 +58,11 @@ void ptw_mult_col(multi_array<T,2>& a, T* w, multi_array<T,2>& out){
     }
   }
 }
-template void ptw_mult_col(multi_array<double,2>&, double*, multi_array<double,2>&);
-template void ptw_mult_col(multi_array<float,2>&, float*, multi_array<float,2>&);
+template void ptw_mult_row(multi_array<double,2>&, double*, multi_array<double,2>&);
+template void ptw_mult_row(multi_array<float,2>&, float*, multi_array<float,2>&);
+template void ptw_mult_row(multi_array<complex<double>,2>&, complex<double>*, multi_array<complex<double>,2>&);
+template void ptw_mult_row(multi_array<complex<float>,2>&, complex<float>*, multi_array<complex<float>,2>&);
+
 
 template<class T> // we should write a kernel for this one, will be performed on the GPU
 void transpose_inplace(multi_array<T,2>& a){

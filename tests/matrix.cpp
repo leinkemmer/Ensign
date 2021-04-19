@@ -115,8 +115,8 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
       }
     }
 
-    ptw_mult_col(A,w.begin(),A);
-    ptw_mult_col(Af,wf.begin(),Af);
+    ptw_mult_row(A,w.begin(),A);
+    ptw_mult_row(Af,wf.begin(),Af);
 
     REQUIRE(bool(A==R));
     REQUIRE(bool(Af==Rf));

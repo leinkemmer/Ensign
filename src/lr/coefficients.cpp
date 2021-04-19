@@ -10,7 +10,7 @@ void coeff_T(multi_array<T,d1>& a, multi_array<T,d2>& b, T w, multi_array<T,d1+d
 template<class T, size_t d1, size_t d2>
 void coeff_T(multi_array<T,d1>& a, multi_array<T,d2>& b, T* w, multi_array<T,d1+d2-2>& out) {
   multi_array<T,d2> tmp(b.shape());
-  ptw_mult_col(b,w,tmp);
+  ptw_mult_row(b,w,tmp);
   matmul_transa(a,tmp,out);
 }
 

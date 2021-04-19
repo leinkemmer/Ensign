@@ -3,6 +3,9 @@
 #include <generic/common.hpp>
 #include <generic/storage.hpp>
 
+extern "C" {
+extern int dgees_(char*,char*,void*,int*,double*,int*, int*, double*, double*, double*, int*, double*, int*, bool*,int*);
+}
 
 template<class T>
 void set_zero(multi_array<T,2>& a);
@@ -11,7 +14,7 @@ template<class T>
 void set_identity(multi_array<T,2>& a);
 
 template<class T>
-void ptw_mult_col(multi_array<T,2>& a, T* w, multi_array<T,2>& out);
+void ptw_mult_row(multi_array<T,2>& a, T* w, multi_array<T,2>& out);
 
 template<class T>
 void transpose_inplace(multi_array<T,2>& a);

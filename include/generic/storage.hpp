@@ -113,6 +113,16 @@ struct multi_array {
         return k;
     }
 
+    void to_cplx(multi_array<complex<T>,d>& out) {
+      std::transform(begin(), end(), out.begin(), [](const T& c){return complex<T>(c,T(0.0));} );
+    }
+
+    void save_vector(std::string fn) {
+        std::ofstream fs(fn.c_str(), std::ios::binary);
+        fs.write((char*)data(), sizeof(T)*num_elements());
+    }
+
+
     T& operator()(array<Index,d> idx) {
       return v[linear_idx(idx)];
     }
@@ -192,13 +202,22 @@ struct multi_array {
 
     friend std::ostream &operator<<(std::ostream &os, const multi_array &A) {
 
-    for (int i=0; i < A.shape()[0]; i++) {
-        for (int j=0; j < A.shape()[1]; j++) {
-            os << A.v[i + j*A.shape()[0]] << "  " ;
+      if(A.shape().size() == 1){
+        for (Index i=0; i < A.shape()[0]; i++) {
+            os << A.v[i] << '\n';
         }
-        os << '\n';
-    }
-    return os;
+      }else if(A.shape().size() == 2){
+        for (Index i=0; i < A.shape()[0]; i++) {
+            for (Index j=0; j < A.shape()[1]; j++) {
+                os << A.v[i + j*A.shape()[0]] << "  " ;
+            }
+            os << '\n';
+        }
+      } else {
+        cout << "ERROR: dimension for cout not yet supported" << endl;
+        exit(1);
+      }
+      return os;
 }
 
 
