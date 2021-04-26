@@ -17,7 +17,7 @@ int main(){
   int n_b = 1; // number of actual basis functions
 
   double tstar = 100; // final time
-  double tau = 0.0125; // time step splitting
+  double tau = 0.00625; // time step splitting
 
   int nsteps_ee = 50; // number of time steps for explicit euler
 
@@ -187,7 +187,73 @@ int main(){
   fftw_plan pe = fftw_plan_dft_r2c_1d(Nx, ef.begin(), (fftw_complex*) efhat.begin(), FFTW_MEASURE);
   fftw_plan qe = fftw_plan_dft_c2r_1d(Nx, (fftw_complex*) efhat.begin(), ef.begin(), FFTW_MEASURE);
 
-  multi_array<double,1> energy({nsteps});
+  // For plots
+  multi_array<double,1> int_x({r});
+  multi_array<double,1> int_v({r});
+  multi_array<double,1> tmp_vec({r});
+
+
+  multi_array<double,1> el_energy({nsteps});
+  multi_array<double,1> err_mass({nsteps});
+  multi_array<double,1> err_energy({nsteps});
+
+  // Invariants: Mass
+  double mass0 = 0.0;
+  double mass = 0.0;
+
+  coeff_rho(lr_sol.X,hx,int_x);
+  coeff_rho(lr_sol.V,hv,int_v);
+
+  matvec(lr_sol.S,int_v,tmp_vec);
+
+  for(int ii = 0; ii < r; ii++){
+    mass0 += (int_x(ii)*tmp_vec(ii));
+  }
+
+  // Invariants: Energy
+  double el_energy0 = 0.0;
+  double energy0 = 0.0;
+  double energy = 0.0;
+
+  coeff_rho(lr_sol.V,hv,rho);
+
+  rho *= -1.0;
+
+  matvec(lr_sol.X,rho,ef);
+
+  for(Index ii = 0; ii < Nx; ii++){
+      ef(ii) += 1.0;
+  }
+
+  fftw_execute_dft_r2c(pe,ef.begin(),(fftw_complex*)efhat.begin());
+
+  efhat(0) = complex<double>(0.0,0.0);
+  for(Index ii = 1; ii < (Nx/2+1); ii++){
+    efhat(ii) /= (lambdax(ii)/ncx);
+  }
+
+  fftw_execute_dft_c2r(qe,(fftw_complex*)efhat.begin(),ef.begin());
+  el_energy0 = 0.0;
+  for(Index ii = 0; ii < Nx; ii++){
+    el_energy0 += 0.5*pow(ef(ii),2)*hx;
+  }
+
+  multi_array<double,1> wv2({Nv});
+
+  for(Index j = 0; j < Nv; j++){
+    wv2(j) = pow(v(j),2) * hv;
+  }
+
+  coeff_rho(lr_sol.V,wv2.begin(),int_v);
+
+  matvec(lr_sol.S,int_v,tmp_vec);
+
+    for(int ii = 0; ii < r; ii++){
+      energy0 += (0.5*int_x(ii)*tmp_vec(ii));
+    }
+
+    energy0 += el_energy0;
+
 
   multi_array<double,2> tmpX({Nx,r});
   multi_array<double,2> tmpV({Nv,r});
@@ -221,11 +287,6 @@ int main(){
     }
 
     fftw_execute_dft_c2r(qe,(fftw_complex*)efhat.begin(),ef.begin());
-
-    energy(i) = 0.0;
-    for(Index ii = 0; ii < Nx; ii++){
-      energy(i) += 0.5*pow(ef(ii),2)*hx;
-    }
 
     // Main of K step
 
@@ -345,12 +406,47 @@ int main(){
 
     transpose_inplace(lr_sol.S);
 
+    el_energy(i) = 0.0;
+    for(Index ii = 0; ii < Nx; ii++){
+      el_energy(i) += 0.5*pow(ef(ii),2)*hx;
+    }
+
     cout.precision(15);
-    cout << energy(i) << endl;
+    cout << el_energy(i) << endl;
+
+    coeff_rho(lr_sol.X,hx,int_x);
+    coeff_rho(lr_sol.V,hv,int_v);
+
+    matvec(lr_sol.S,int_v,tmp_vec);
+
+    mass = 0.0;
+    for(int ii = 0; ii < r; ii++){
+      mass += (int_x(ii)*tmp_vec(ii));
+    }
+
+    err_mass(i) = abs(mass0-mass);
+    cout << err_mass(i) << endl;
+
+    coeff_rho(lr_sol.V,wv2.begin(),int_v);
+
+    matvec(lr_sol.S,int_v,tmp_vec);
+
+    energy = 0.0;
+      for(int ii = 0; ii < r; ii++){
+        energy += (0.5*int_x(ii)*tmp_vec(ii));
+      }
+
+      energy += el_energy(i);
+
+      err_energy(i) = abs(energy0-energy);
+      cout << err_energy(i) << endl;
+
 
   }
 
-  energy.save_vector("energy.bin");
+  el_energy.save_vector("energy.bin");
+  err_mass.save_vector("err_mass.bin");
+  err_energy.save_vector("err_energy.bin");
 
   return 0;
 }

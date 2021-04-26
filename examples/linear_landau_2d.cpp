@@ -320,7 +320,7 @@ int main(){
 
   for(Index i = 0; i < nsteps; i++){
 
-    cout << "Time step " << i << " on " << nsteps << endl;
+    cout << "Time step " << i + 1 << " on " << nsteps << endl;
 
     tmpX = lr_sol.X;
 
@@ -404,7 +404,7 @@ int main(){
       fftw_execute_dft_c2r(qx,(fftw_complex*)Khat.begin(),lr_sol.X.begin());
 
       // Full step
-      fftw_execute_dft_r2c(px,lr_sol.X.begin(),(fftw_complex*)Khat.begin()); // Posso evitarlo evitando la moltiplic. ncxx e usando Khat
+      fftw_execute_dft_r2c(px,lr_sol.X.begin(),(fftw_complex*)Khat.begin()); // Posso evitarlo evitando la moltiplic. ncxx e usando Khat (no perche c2r modifica input)
       matmul(Khat,Twc,Mhat);
 
       for(Index jj = 0; jj < nsteps_ee; jj++){
