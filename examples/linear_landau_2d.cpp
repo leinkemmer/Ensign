@@ -8,6 +8,7 @@
 #include <fftw3.h>
 #include <cstring>
 
+
 int main(){
 
   Index Nx = 32; // NEEDS TO BE EVEN FOR FOURIER
@@ -112,7 +113,7 @@ int main(){
 
   initialize(lr0, X, V, n_b, ip_xx, ip_vv);
 
-  lr2<double> lr_sol(r,{Nx*Ny,Nv*Nw});
+  lr2<double> lr_sol(r,{Nx*Ny,Nv*Nw}); // TODO: call as (5, X, V) and then automatically fill with random numbers
 
   multi_array<complex<double>,1> lambdax({Ny*(Nx/2+1)});
   multi_array<complex<double>,1> lambday({Ny*(Nx/2+1)});
@@ -177,7 +178,7 @@ int main(){
   //int nx = int(Nx);
   //int nv = int(Nv);
 
-  multi_array<int,1> dimsx({2});
+  multi_array<int,1> dimsx({2}); // TODO: make an array
   dimsx(0) = int(Ny);
   dimsx(1) = int(Nx);
   // ocio che sono swappate perche facciamo per colmajor
@@ -185,7 +186,7 @@ int main(){
   multi_array<complex<double>,2> Khat({Ny*(Nx/2+1),r});
   multi_array<complex<double>,2> Khattmp({Ny*(Nx/2+1),r});
 
-  fftw_plan px = fftw_plan_many_dft_r2c(2, dimsx.begin(), r, lr_sol.X.begin(), NULL, 1, Nx*Ny, (fftw_complex*)Khat.begin(), NULL, 1, Ny*(Nx/2 + 1), FFTW_MEASURE);
+  fftw_plan px = fftw_plan_many_dft_r2c(2, dimsx.begin(), r, lr_sol.X.begin(), NULL, 1, Nx*Ny, (fftw_complex*)Khat.begin(), NULL, 1, Ny*(Nx/2 + 1), FFTW_MEASURE); // TODO: write a function
   fftw_plan qx = fftw_plan_many_dft_c2r(2, dimsx.begin(), r, (fftw_complex*) Khat.begin(), NULL, 1, Ny*(Nx/2 + 1), lr_sol.X.begin(), NULL, 1, Nx*Ny, FFTW_MEASURE);
 
   multi_array<int,1> dimsv({2});
@@ -260,7 +261,7 @@ int main(){
   multi_array<complex<double>,2> Tvc({r,r});
   multi_array<complex<double>,2> Twc({r,r});
 
-  int value = 0;
+  int value = 0;   // TODO: put QR/diag in a function
   char jobvs = 'V';
   char sort = 'N';
   int nn = r;
@@ -342,8 +343,9 @@ int main(){
 
     for(Index j = 0; j < Ny; j++){
       for(Index i = 0; i < (Nx/2+1); i++){
-        efhatx(i+j*(Nx/2+1)) = efhat(i+j*(Nx/2+1)) * lambdax(i+j*(Nx/2+1)) / (pow(lambdax(i+j*(Nx/2+1)),2) + pow(lambday(i+j*(Nx/2+1)),2)) * ncxx;
-        efhaty(i+j*(Nx/2+1)) = efhat(i+j*(Nx/2+1)) * lambday(i+j*(Nx/2+1)) / (pow(lambdax(i+j*(Nx/2+1)),2) + pow(lambday(i+j*(Nx/2+1)),2)) * ncxx ;
+        complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(bx-ax)*i); // TODO: calculate lambdax and lambday directly here
+        efhatx(i+j*(Nx/2+1)) = efhat(i+j*(Nx/2+1)) * lambdax(i+j*(Nx/2+1)) / (pow(lambdax,2) + pow(lambday(i+j*(Nx/2+1)),2)) * ncxx;
+        efhaty(i+j*(Nx/2+1)) = efhat(i+j*(Nx/2+1)) * lambday(i+j*(Nx/2+1)) / (pow(lambdax,2) + pow(lambday(i+j*(Nx/2+1)),2)) * ncxx ;
       }
     }
     efhatx(0) = complex<double>(0.0,0.0);
@@ -401,7 +403,7 @@ int main(){
 
       matmul_transb(Mhat,Tvc,Khat);
       Khat *= ncxx;
-      fftw_execute_dft_c2r(qx,(fftw_complex*)Khat.begin(),lr_sol.X.begin());
+      fftw_execute_dft_c2r(qx,(fftw_complex*)Khat.begin(),lr_sol.X.begin()); // TODO: could use FFTW_PRESERVE_INPUT here
 
       // Full step
       fftw_execute_dft_r2c(px,lr_sol.X.begin(),(fftw_complex*)Khat.begin()); // Posso evitarlo evitando la moltiplic. ncxx e usando Khat (no perche c2r modifica input)
@@ -562,7 +564,7 @@ int main(){
   }
 
 
-  energy.save_vector("energy_2d.bin");
+  energy.save_vector("energy_2d.bin"); // TODO: write to file in each time step
 
   return 0;
 }
