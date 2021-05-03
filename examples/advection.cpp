@@ -55,7 +55,7 @@ int main(){
 
   X.push_back(x1.data());
   V.push_back(v1.data());
-
+/*
   vector<vector<double>> RX;
   vector<vector<double>> RV;
 
@@ -79,13 +79,13 @@ int main(){
     X.push_back(RX[i].data());
     V.push_back(RV[i].data());
   }
-
+*/
   std::function<double(double*,double*)> ip_x = inner_product_from_const_weight(hx, Nx);
   std::function<double(double*,double*)> ip_v = inner_product_from_const_weight(hv, Nv);
 
   lr2<double> lr0(r,{Nx,Nv});
 
-  initialize(lr0, X, V, n_b, ip_x, ip_v);
+  initialize(lr0, X, V, ip_x, ip_v);
 
   lr2<double> lr_sol(r,{Nx,Nv});
 

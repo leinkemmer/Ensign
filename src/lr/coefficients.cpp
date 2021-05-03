@@ -1,4 +1,3 @@
-#include <generic/matrix.hpp>
 #include <lr/coefficients.hpp>
 
 template<class T, size_t d1, size_t d2>
@@ -15,7 +14,7 @@ void coeff_T(multi_array<T,d1>& a, multi_array<T,d2>& b, T* w, multi_array<T,d1+
 }
 
 template<class T, size_t d1>
-void coeff_rho_T(multi_array<T,d1>& a, T* w, multi_array<T,1>& out) {
+void coeff_one_T(multi_array<T,d1>& a, T* w, multi_array<T,1>& out) {
   for(Index i = 0; i < a.shape()[1]; i++){
     out(i) = T(0.0);
     for(Index j = 0; j < a.shape()[0]; j++){
@@ -25,7 +24,7 @@ void coeff_rho_T(multi_array<T,d1>& a, T* w, multi_array<T,1>& out) {
 }
 
 template<class T, size_t d1>
-void coeff_rho_T(multi_array<T,d1>& a, T w, multi_array<T,1>& out) {
+void coeff_one_T(multi_array<T,d1>& a, T w, multi_array<T,1>& out) {
   for(Index i = 0; i < a.shape()[1]; i++){
     out(i) = T(0.0);
     for(Index j = 0; j < a.shape()[0]; j++){
@@ -54,19 +53,19 @@ void coeff(multi_array<float,2>& a, multi_array<float,2>& b, float* w, multi_arr
 }
 
 template<>
-void coeff_rho(multi_array<double,2>& a, double* w, multi_array<double,1>& out) {
-    coeff_rho_T<double,2>(a, w, out);
+void coeff_one(multi_array<double,2>& a, double* w, multi_array<double,1>& out) {
+    coeff_one_T<double,2>(a, w, out);
 }
 template<>
-void coeff_rho(multi_array<float,2>& a, float* w, multi_array<float,1>& out) {
-    coeff_rho_T<float,2>(a, w, out);
+void coeff_one(multi_array<float,2>& a, float* w, multi_array<float,1>& out) {
+    coeff_one_T<float,2>(a, w, out);
 }
 
 template<>
-void coeff_rho(multi_array<double,2>& a, double w, multi_array<double,1>& out) {
-    coeff_rho_T<double,2>(a, w, out);
+void coeff_one(multi_array<double,2>& a, double w, multi_array<double,1>& out) {
+    coeff_one_T<double,2>(a, w, out);
 }
 template<>
-void coeff_rho(multi_array<float,2>& a, float w, multi_array<float,1>& out) {
-    coeff_rho_T<float,2>(a, w, out);
+void coeff_one(multi_array<float,2>& a, float w, multi_array<float,1>& out) {
+    coeff_one_T<float,2>(a, w, out);
 }

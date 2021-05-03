@@ -58,7 +58,7 @@ int main(){
 
   X.push_back(x1.begin());
   V.push_back(v1.begin());
-
+/*
   multi_array<double,2> RX({Nx,r-n_b});
   multi_array<double,2> RV({Nv,r-n_b});
 
@@ -76,13 +76,13 @@ int main(){
     X.push_back(RX.begin() + j*Nx);
     V.push_back(RV.begin() + j*Nv);
   }
-
+*/
   std::function<double(double*,double*)> ip_x = inner_product_from_const_weight(hx, Nx);
   std::function<double(double*,double*)> ip_v = inner_product_from_const_weight(hv, Nv);
 
   lr2<double> lr0(r,{Nx,Nv});
 
-  initialize(lr0, X, V, n_b, ip_x, ip_v);
+  initialize(lr0, X, V, ip_x, ip_v);
 
   lr2<double> lr_sol(r,{Nx,Nv});
 
@@ -201,8 +201,8 @@ int main(){
   double mass0 = 0.0;
   double mass = 0.0;
 
-  coeff_rho(lr_sol.X,hx,int_x);
-  coeff_rho(lr_sol.V,hv,int_v);
+  coeff_one(lr_sol.X,hx,int_x);
+  coeff_one(lr_sol.V,hv,int_v);
 
   matvec(lr_sol.S,int_v,tmp_vec);
 
@@ -215,7 +215,7 @@ int main(){
   double energy0 = 0.0;
   double energy = 0.0;
 
-  coeff_rho(lr_sol.V,hv,rho);
+  coeff_one(lr_sol.V,hv,rho);
 
   rho *= -1.0;
 
@@ -244,7 +244,7 @@ int main(){
     wv2(j) = pow(v(j),2) * hv;
   }
 
-  coeff_rho(lr_sol.V,wv2.begin(),int_v);
+  coeff_one(lr_sol.V,wv2.begin(),int_v);
 
   matvec(lr_sol.S,int_v,tmp_vec);
 
@@ -269,7 +269,7 @@ int main(){
 
     // Electric field
 
-    coeff_rho(lr_sol.V,hv,rho);
+    coeff_one(lr_sol.V,hv,rho);
 
     rho *= -1.0;
 
@@ -414,8 +414,8 @@ int main(){
     cout.precision(15);
     cout << el_energy(i) << endl;
 
-    coeff_rho(lr_sol.X,hx,int_x);
-    coeff_rho(lr_sol.V,hv,int_v);
+    coeff_one(lr_sol.X,hx,int_x);
+    coeff_one(lr_sol.V,hv,int_v);
 
     matvec(lr_sol.S,int_v,tmp_vec);
 
@@ -427,7 +427,7 @@ int main(){
     err_mass(i) = abs(mass0-mass);
     cout << err_mass(i) << endl;
 
-    coeff_rho(lr_sol.V,wv2.begin(),int_v);
+    coeff_one(lr_sol.V,wv2.begin(),int_v);
 
     matvec(lr_sol.S,int_v,tmp_vec);
 

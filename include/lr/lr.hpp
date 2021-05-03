@@ -35,10 +35,13 @@ struct lr2 {
     Index problem_size_V() {
         return V.shape()[0];
     }
+    Index rank(){
+      return S.shape()[0];
+    }
 };
 
 template<class T>
-void initialize(lr2<T>& lr, vector<T*> X, vector<T*> V, int n_b, std::function<T(T*,T*)> inner_product_X, std::function<T(T*,T*)> inner_product_V);
+void initialize(lr2<T>& lr, vector<T*> X, vector<T*> V, std::function<T(T*,T*)> inner_product_X, std::function<T(T*,T*)> inner_product_V);
 
 template<class T>
 std::function<T(T*,T*)> inner_product_from_weight(T* w, Index N);

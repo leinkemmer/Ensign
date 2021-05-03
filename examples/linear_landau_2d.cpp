@@ -8,218 +8,162 @@
 #include <fftw3.h>
 #include <cstring>
 
+array<fftw_plan,2> create_plans_2d(array<Index,2> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq){
+  array<fftw_plan,2> out;
+  array<int,2> dims = {int(dims_[1]),int(dims_[0])};
+
+  out[0] = fftw_plan_many_dft_r2c(2, dims.begin(), real.shape()[1], real.begin(), NULL, 1, dims[1]*dims[0], (fftw_complex*)freq.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), FFTW_MEASURE);
+  out[1] = fftw_plan_many_dft_c2r(2, dims.begin(), real.shape()[1], (fftw_complex*)freq.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), real.begin(), NULL, 1, dims[1]*dims[0], FFTW_MEASURE);
+
+  return out;
+}
+
+array<fftw_plan,2> create_plans_2d(array<Index,2> dims_, multi_array<double,1>& real, multi_array<complex<double>,1>& freq){
+  array<fftw_plan,2> out;
+  array<int,2> dims = {int(dims_[1]),int(dims_[0])};
+
+  out[0] = fftw_plan_many_dft_r2c(2, dims.begin(), 1, real.begin(), NULL, 1, dims[1]*dims[0], (fftw_complex*)freq.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), FFTW_MEASURE);
+  out[1] = fftw_plan_many_dft_c2r(2, dims.begin(), 1, (fftw_complex*)freq.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), real.begin(), NULL, 1, dims[1]*dims[0], FFTW_MEASURE);
+
+  return out;
+}
+
+void schur(multi_array<double,2>& CC, multi_array<double,2>& TT, multi_array<double,1>& diag_r, int& lwork){
+  int value = 0;
+  char jobvs = 'V';
+  char sort = 'N';
+  int nn = CC.shape()[0];
+  int lda = CC.shape()[0];
+  int ldvs = CC.shape()[0];
+  int info;
+  double work_opt;
+  multi_array<double,1> diag_i({nn});
+  multi_array<double,2> D(CC);
+
+  if(lwork == -1){ // Dumb call to obtain optimal value to work
+    dgees_(&jobvs,&sort,nullptr,&nn,D.begin(),&lda,&value,diag_r.begin(),diag_i.begin(),TT.begin(),&ldvs,&work_opt,&lwork,nullptr,&info);
+    lwork = int(work_opt);
+  }else{
+    multi_array<double,1> work({lwork});
+    dgees_(&jobvs,&sort,nullptr,&nn,D.begin(),&lda,&value,diag_r.begin(),diag_i.begin(),TT.begin(),&ldvs,work.begin(),&lwork,nullptr,&info);
+  }
+}
+
 
 int main(){
 
-  Index Nx = 32; // NEEDS TO BE EVEN FOR FOURIER
-  Index Ny = 32; // NEEDS TO BE EVEN FOR FOURIER
-
-  Index Nv = 64; // NEEDS TO BE EVEN FOR FOURIER
-  Index Nw = 64; // NEEDS TO BE EVEN FOR FOURIER
+  array<Index,2> N_xx = {64,64}; // Sizes in space
+  array<Index,2> N_vv = {256,256}; // Sizes in velocity
 
   int r = 5; // rank desired
-  int n_b = 1; // number of actual basis functions
 
-  double tstar = 100; // final time
-  double tau = 0.025; // time step splitting
+  double tstar = 20; // final time
+  double tau = 0.00625; // time step splitting
 
-  double ax = 0;
-  double bx = 4.0*M_PI;
-  double ay = 0;
-  double by = 4.0*M_PI;
-
-  double av = -6.0;
-  double bv = 6.0;
-  double aw = -6.0;
-  double bw = 6.0;
+  array<double,4> lim_xx = {0.0,4.0*M_PI,0.0,4.0*M_PI}; // Limits for box [ax,bx] x [ay,by] {ax,bx,ay,by}
+  array<double,4> lim_vv = {-6.0,6.0,-6.0,6.0}; // Limits for box [av,bv] x [aw,bw] {av,bv,aw,bw}
 
   double alpha = 0.01;
   double kappa1 = 0.5;
   double kappa2 = 0.5;
 
-  Index nsteps_split = 10; // Number of time steps internal splitting
-  Index nsteps_ee = 10; // Number of time steps of exponential euler in internal splitting
+  Index nsteps_split = 1; // Number of time steps internal splitting
+  Index nsteps_ee = 1; // Number of time steps of exponential euler in internal splitting
 
   Index nsteps = tstar/tau;
-
-  //nsteps = 1;
 
   double ts_split = tau / nsteps_split;
   double ts_ee = ts_split / nsteps_ee;
 
-  double hx = (bx-ax) / Nx;
-  double hy = (by-ay) / Ny;
-
-  double hv = (bv-av) / Nv;
-  double hw = (bw-aw) / Nw;
-
-  vector<double*> X, V; // ONLY VECTOR SURVIVED
-
-  multi_array<double,1> x({Nx*Ny});
-  multi_array<double,1> y({Nx*Ny});
-
-  multi_array<double,1> xx({Nx*Ny});
-
-  for(Index j = 0; j < Ny; j++){
-    for(Index i = 0; i < Nx; i++){
-        x(i+j*Nx) = ax + i*hx;
-        y(i+j*Nx) = ay + j*hy;
-
-        xx(i+j*Nx) = 1.0 + alpha*cos(kappa1*x(i+j*Nx)) + alpha*cos(kappa2*y(i+j*Nx));
-    }
+  array<double,2> h_xx, h_vv;
+  int jj = 0;
+  for(int ii = 0; ii < 2; ii++){
+    h_xx[ii] = (lim_xx[jj+1]-lim_xx[jj])/ N_xx[ii];
+    h_vv[ii] = (lim_vv[jj+1]-lim_vv[jj])/ N_vv[ii];
+    jj+=2;
   }
 
-  multi_array<double,1> v({Nv*Nw});
-  multi_array<double,1> w({Nv*Nw});
+  vector<double*> X, V;
 
-  multi_array<double,1> vv({Nv*Nw});
+  Index dxx_mult = N_xx[0]*N_xx[1];
+  Index dxxh_mult = N_xx[1]*(N_xx[0]/2 + 1);
 
-  for(Index j = 0; j < Nw; j++){
-    for(Index i = 0; i < Nv; i++){
-      v(i+j*Nv) = av + i*hv;
-      w(i+j*Nv) = aw + j*hw;
+  Index dvv_mult = N_vv[0]*N_vv[1];
+  Index dvvh_mult = N_vv[1]*(N_vv[0]/2 + 1);
 
-      vv(i+j*Nv) = (1.0/(2*M_PI)) *exp(-(pow(v(i+j*Nv),2)+pow(w(i+j*Nv),2))/2.0);
+  multi_array<double,1> xx({dxx_mult});
+
+  for(Index j = 0; j < N_xx[1]; j++){
+    for(Index i = 0; i < N_xx[0]; i++){
+        double x = lim_xx[0] + i*h_xx[0];
+        double y = lim_xx[2] + j*h_xx[1];
+        xx(i+j*N_xx[0]) = 1.0 + alpha*cos(kappa1*x) + alpha*cos(kappa2*y);
     }
   }
-
   X.push_back(xx.begin());
+
+  multi_array<double,1> v({dvv_mult});
+  multi_array<double,1> w({dvv_mult});
+  multi_array<double,1> vv({dvv_mult});
+
+  for(Index j = 0; j < N_vv[1]; j++){
+    for(Index i = 0; i < N_vv[0]; i++){
+      v(i+j*N_vv[0]) = lim_vv[0] + i*h_vv[0];
+      w(i+j*N_vv[0]) = lim_vv[2] + j*h_vv[1];
+      vv(i+j*N_vv[0]) = (1.0/(2*M_PI)) *exp(-(pow(v(i+j*N_vv[0]),2)+pow(w(i+j*N_vv[0]),2))/2.0);
+    }
+  }
   V.push_back(vv.begin());
 
-  multi_array<double,2> RX({Nx*Ny,r-n_b});
-  multi_array<double,2> RV({Nv*Nw,r-n_b});
+  lr2<double> lr_sol(r,{dxx_mult,dvv_mult});
 
-  std::default_random_engine generator(time(0));
-  std::normal_distribution<double> distribution(0.0,1.0);
+  // For Electric field
 
-  for(Index j = 0; j < (r-n_b); j++){
-    for(Index i = 0; i < (Nx*Ny); i++){
-      RX(i,j) = distribution(generator);
-      //RX(i,j) = i + j;
-    }
-    for(Index i = 0; i < (Nv*Nw); i++){
-      RV(i,j) = distribution(generator);
-      //RV(i,j) = i + j;
-    }
+  multi_array<double,1> rho({r});
+  multi_array<double,1> ef({dxx_mult});
+  multi_array<double,1> efx({dxx_mult});
+  multi_array<double,1> efy({dxx_mult});
 
-    X.push_back(RX.begin() + j*(Nx*Ny));
-    V.push_back(RV.begin() + j*(Nv*Nw));
-  }
+  multi_array<complex<double>,1> efhat({dxxh_mult});
+  multi_array<complex<double>,1> efhatx({dxxh_mult});
+  multi_array<complex<double>,1> efhaty({dxxh_mult});
 
-  std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(hx*hy, Nx*Ny);
-  std::function<double(double*,double*)> ip_vv = inner_product_from_const_weight(hv*hw, Nv*Nw);
+  array<fftw_plan,2> plans_e = create_plans_2d(N_xx, ef, efhat);
 
-  lr2<double> lr0(r,{Nx*Ny,Nv*Nw});
+  // Some FFT stuff for X and V
 
-  initialize(lr0, X, V, n_b, ip_xx, ip_vv);
+  multi_array<complex<double>,1> lambdax_n({dxxh_mult});
+  multi_array<complex<double>,1> lambday_n({dxxh_mult});
 
-  lr2<double> lr_sol(r,{Nx*Ny,Nv*Nw}); // TODO: call as (5, X, V) and then automatically fill with random numbers
+  double ncxx = 1.0 / (dxx_mult);
 
-  multi_array<complex<double>,1> lambdax({Ny*(Nx/2+1)});
-  multi_array<complex<double>,1> lambday({Ny*(Nx/2+1)});
-  multi_array<complex<double>,1> lambdax_n({Ny*(Nx/2+1)});
-  multi_array<complex<double>,1> lambday_n({Ny*(Nx/2+1)});
-
-  double ncxx = 1.0 / (Nx*Ny);
-
-  for(Index j = 0; j < Ny; j++){
-    for(Index i = 0; i < (Nx/2+1); i++){
-        lambdax(i+j*(Nx/2+1)) = complex<double>(0.0,2.0*M_PI/(bx-ax)*i);
-        lambdax_n(i+j*(Nx/2+1)) = complex<double>(0.0,2.0*M_PI/(bx-ax)*i)*ncxx;
+  Index mult;
+  for(Index j = 0; j < N_xx[1]; j++){
+    (j < (N_xx[1]/2+1)) ? (mult = j) : (mult = (j-N_xx[1]));
+    for(Index i = 0; i < (N_xx[0]/2+1); i++){
+        lambdax_n(i+j*(N_xx[0]/2+1)) = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i)*ncxx;
+        lambday_n(i+j*(N_xx[0]/2+1)) = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult)*ncxx;
       }
   }
 
-  // Think about a smarter way to define them
-  for(Index j = 0; j < (Ny/2+1); j++){
-    for(Index i = 0; i < (Nx/2+1); i++){
-        lambday(i+j*(Nx/2+1)) = complex<double>(0.0,2.0*M_PI/(by-ay)*j);
-        lambday_n(i+j*(Nx/2+1)) = complex<double>(0.0,2.0*M_PI/(by-ay)*j)*ncxx;
+  multi_array<complex<double>,1> lambdav_n({dvvh_mult});
+  multi_array<complex<double>,1> lambdaw_n({dvvh_mult});
+
+  double ncvv = 1.0 / (dvv_mult);
+
+  for(Index j = 0; j < N_vv[1]; j++){
+    (j < (N_vv[1]/2+1)) ? (mult = j) : (mult = (j-N_vv[1]));
+    for(Index i = 0; i < (N_vv[0]/2+1); i++){
+        lambdav_n(i+j*(N_vv[0]/2+1)) = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i)*ncvv;
+        lambdaw_n(i+j*(N_vv[0]/2+1)) = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult)*ncvv;
       }
   }
 
-  for(Index j = (Ny/2+1); j < Ny; j++){
-    for(Index i = 0; i < (Nx/2+1); i++){
-        lambday(i+j*(Nx/2+1)) = complex<double>(0.0,2.0*M_PI/(by-ay)*(j-Ny));
-        lambday_n(i+j*(Nx/2+1)) = complex<double>(0.0,2.0*M_PI/(by-ay)*(j-Ny))*ncxx;
-      }
-  }
+  multi_array<complex<double>,2> Khat({dxxh_mult,r});
+  array<fftw_plan,2> plans_xx = create_plans_2d(N_xx, lr_sol.X, Khat);
 
-  multi_array<complex<double>,1> lambdav({Nw*(Nv/2+1)});
-  multi_array<complex<double>,1> lambdaw({Nw*(Nv/2+1)});
-  multi_array<complex<double>,1> lambdav_n({Nw*(Nv/2+1)});
-  multi_array<complex<double>,1> lambdaw_n({Nw*(Nv/2+1)});
-
-  double ncvv = 1.0 / (Nv*Nw);
-
-  for(Index j = 0; j < Nw; j++){
-    for(Index i = 0; i < (Nv/2+1); i++){
-        lambdav(i+j*(Nv/2+1)) = complex<double>(0.0,2.0*M_PI/(bv-av)*i);
-        lambdav_n(i+j*(Nv/2+1)) = complex<double>(0.0,2.0*M_PI/(bv-av)*i)*ncvv;
-      }
-  }
-
-  // Think about a smarter way to define them
-  for(Index j = 0; j < (Nw/2+1); j++){
-    for(Index i = 0; i < (Nv/2+1); i++){
-        lambdaw(i+j*(Nv/2+1)) = complex<double>(0.0,2.0*M_PI/(bw-aw)*j);
-        lambdaw_n(i+j*(Nv/2+1)) = complex<double>(0.0,2.0*M_PI/(bw-aw)*j)*ncvv;
-      }
-  }
-
-  for(Index j = (Nw/2+1); j < Nw; j++){
-    for(Index i = 0; i < (Nv/2+1); i++){
-        lambdaw(i+j*(Nv/2+1)) = complex<double>(0.0,2.0*M_PI/(bw-aw)*(j-Nw));
-        lambdaw_n(i+j*(Nv/2+1)) = complex<double>(0.0,2.0*M_PI/(bw-aw)*(j-Nw))*ncvv;
-      }
-  }
-
-
-  // For FFT -- Pay attention we have to cast to int as Index seems not to work with fftw_many
-  //int nx = int(Nx);
-  //int nv = int(Nv);
-
-  multi_array<int,1> dimsx({2}); // TODO: make an array
-  dimsx(0) = int(Ny);
-  dimsx(1) = int(Nx);
-  // ocio che sono swappate perche facciamo per colmajor
-
-  multi_array<complex<double>,2> Khat({Ny*(Nx/2+1),r});
-  multi_array<complex<double>,2> Khattmp({Ny*(Nx/2+1),r});
-
-  fftw_plan px = fftw_plan_many_dft_r2c(2, dimsx.begin(), r, lr_sol.X.begin(), NULL, 1, Nx*Ny, (fftw_complex*)Khat.begin(), NULL, 1, Ny*(Nx/2 + 1), FFTW_MEASURE); // TODO: write a function
-  fftw_plan qx = fftw_plan_many_dft_c2r(2, dimsx.begin(), r, (fftw_complex*) Khat.begin(), NULL, 1, Ny*(Nx/2 + 1), lr_sol.X.begin(), NULL, 1, Nx*Ny, FFTW_MEASURE);
-
-  multi_array<int,1> dimsv({2});
-  dimsv(0) = int(Nw);
-  dimsv(1) = int(Nv);
-  // ocio che sono swappate perche facciamo per colmajor
-
-  multi_array<complex<double>,2> Lhat({Nw*(Nv/2+1),r});
-  multi_array<complex<double>,2> Lhattmp({Nw*(Nv/2+1),r});
-
-  fftw_plan pv = fftw_plan_many_dft_r2c(2, dimsv.begin(), r, lr_sol.V.begin(), NULL, 1, Nv*Nw, (fftw_complex*)Lhat.begin(), NULL, 1, Nw*(Nv/2 + 1), FFTW_MEASURE);
-  fftw_plan qv = fftw_plan_many_dft_c2r(2, dimsv.begin(), r, (fftw_complex*) Lhat.begin(), NULL, 1, Nw*(Nv/2 + 1), lr_sol.V.begin(), NULL, 1, Nv*Nw, FFTW_MEASURE);
-
-  // Mandatory to initialize after plan creation if we use FFTW_MEASURE
-  lr_sol.X = lr0.X;
-  lr_sol.S = lr0.S;
-  lr_sol.V = lr0.V;
-
-  multi_array<double,2> Kex({Nx*Ny,r});
-  multi_array<double,2> Key({Nx*Ny,r});
-
-  multi_array<complex<double>,2> Kexhat({Ny*(Nx/2+1),r});
-  multi_array<complex<double>,2> Keyhat({Ny*(Nx/2+1),r});
-
-  multi_array<complex<double>,2> Mhattmp({Ny*(Nx/2+1),r});
-
-  multi_array<double,2> Lv({Nv*Nw,r});
-  multi_array<double,2> Lw({Nv*Nw,r});
-
-  multi_array<complex<double>,2> Lvhat({Nw*(Nv/2+1),r});
-  multi_array<complex<double>,2> Lwhat({Nw*(Nv/2+1),r});
-
-  multi_array<complex<double>,2> Nhattmp({Nw*(Nv/2+1),r});
+  multi_array<complex<double>,2> Lhat({dvvh_mult,r});
+  array<fftw_plan,2> plans_vv = create_plans_2d(N_vv, lr_sol.V, Lhat);
 
   // For C coefficients
   multi_array<double,2> C1v({r,r});
@@ -231,51 +175,19 @@ int main(){
   multi_array<complex<double>,2> C2vc({r,r});
   multi_array<complex<double>,2> C2wc({r,r});
 
-  multi_array<double,1> we_v({Nv*Nw});
-  multi_array<double,1> we_w({Nv*Nw});
+  multi_array<double,1> we_v({dvv_mult});
+  multi_array<double,1> we_w({dvv_mult});
 
-  for(Index j = 0; j < (Nv*Nw); j++){
-    we_v(j) = v(j) * hv * hw;
-    we_w(j) = w(j) * hv * hw;
+  for(Index j = 0; j < (dvv_mult); j++){
+    we_v(j) = v(j) * h_vv[0] * h_vv[1];
+    we_w(j) = w(j) * h_vv[0] * h_vv[1];
   }
 
-  multi_array<double,2> dV_v({Nv*Nw,r});
-  multi_array<double,2> dV_w({Nv*Nw,r});
+  multi_array<double,2> dV_v({dvv_mult,r});
+  multi_array<double,2> dV_w({dvv_mult,r});
 
-  multi_array<complex<double>,2> dVhat_v({Nw*(Nv/2+1),r});
-  multi_array<complex<double>,2> dVhat_w({Nw*(Nv/2+1),r});
-
-  // For Schur decomposition
-  multi_array<double,1> dcv_r({r});
-  multi_array<double,1> dcv_i({r});
-  multi_array<double,1> dcw_r({r});
-  multi_array<double,1> dcw_i({r});
-
-  multi_array<double,2> Tv({r,r});
-  multi_array<double,2> Tw({r,r});
-
-  //multi_array<double,2> multmp({r,r});
-
-  multi_array<complex<double>,2> Mhat({Ny*(Nx/2 + 1),r});
-  multi_array<complex<double>,2> Nhat({Nw*(Nv/2 + 1),r});
-  multi_array<complex<double>,2> Tvc({r,r});
-  multi_array<complex<double>,2> Twc({r,r});
-
-  int value = 0;   // TODO: put QR/diag in a function
-  char jobvs = 'V';
-  char sort = 'N';
-  int nn = r;
-  int lda = r;
-  int ldvs = r;
-  int info;
-  int lwork = -1;
-  double work_opt;
-
-  // Dumb call to obtain optimal value to work
-  dgees_(&jobvs,&sort,nullptr,&nn,Tv.begin(),&lda,&value,dcv_r.begin(),dcv_i.begin(),Tv.begin(),&ldvs,&work_opt,&lwork,nullptr,&info);
-
-  lwork = int(work_opt);
-  multi_array<double,1> work({lwork});
+  multi_array<complex<double>,2> dVhat_v({dvvh_mult,r});
+  multi_array<complex<double>,2> dVhat_w({dvvh_mult,r});
 
   // For D coefficients
 
@@ -285,104 +197,201 @@ int main(){
   multi_array<double,2> D2x({r,r});
   multi_array<double,2> D2y({r,r});
 
-  multi_array<complex<double>,2> D2xc({r,r});
-  multi_array<complex<double>,2> D2yc({r,r});
+  multi_array<double,1> we_x({dxx_mult});
+  multi_array<double,1> we_y({dxx_mult});
 
-  multi_array<double,1> we_x({Nx*Ny});
-  multi_array<double,1> we_y({Nx*Ny});
+  multi_array<double,2> dX_x({dxx_mult,r});
+  multi_array<double,2> dX_y({dxx_mult,r});
 
-  multi_array<double,2> dX_x({Nx*Ny,r});
-  multi_array<double,2> dX_y({Nx*Ny,r});
+  multi_array<complex<double>,2> dXhat_x({dxxh_mult,r});
+  multi_array<complex<double>,2> dXhat_y({dxxh_mult,r});
 
-  multi_array<complex<double>,2> dXhat_x({Ny*(Nx/2+1),r});
-  multi_array<complex<double>,2> dXhat_y({Ny*(Nx/2+1),r});
+  // For Schur decomposition
+  multi_array<double,1> dcv_r({r});
+  multi_array<double,1> dcw_r({r});
 
-  // For Electric field
+  multi_array<double,2> Tv({r,r});
+  multi_array<double,2> Tw({r,r});
 
-  multi_array<double,1> rho({r});
-  multi_array<double,1> ef({Nx*Ny});
-  multi_array<double,1> efx({Nx*Ny});
-  multi_array<double,1> efy({Nx*Ny});
+  multi_array<complex<double>,2> Mhat({dxxh_mult,r});
+  multi_array<complex<double>,2> Nhat({dvvh_mult,r});
+  multi_array<complex<double>,2> Tvc({r,r});
+  multi_array<complex<double>,2> Twc({r,r});
 
-  multi_array<complex<double>,1> efhat({Ny*(Nx/2 + 1)});
-  multi_array<complex<double>,1> efhatx({Ny*(Nx/2 + 1)});
-  multi_array<complex<double>,1> efhaty({Ny*(Nx/2 + 1)});
+  int lwork = -1;
+  schur(Tv, Tv, dcv_r, lwork); // dumb call to obtain optimal value to work
 
-  fftw_plan pe = fftw_plan_dft_r2c_2d(Ny,Nx, ef.begin(), (fftw_complex*) efhat.begin(), FFTW_MEASURE);
-  fftw_plan qe = fftw_plan_dft_c2r_2d(Ny, Nx, (fftw_complex*) efhat.begin(), ef.begin(), FFTW_MEASURE);
+  // For K step
 
-  multi_array<double,1> energy({nsteps});
+   multi_array<double,2> Kex({dxx_mult,r});
+   multi_array<double,2> Key({dxx_mult,r});
 
-  multi_array<double,2> tmpX({Nx*Ny,r});
-  multi_array<double,2> tmpV({Nv*Nw,r});
+   multi_array<complex<double>,2> Kexhat({dxxh_mult,r});
+   multi_array<complex<double>,2> Keyhat({dxxh_mult,r});
 
-//  cout << lr_sol.V << endl;
+   // For L step
+   multi_array<double,2> Lv({dvv_mult,r});
+   multi_array<double,2> Lw({dvv_mult,r});
 
+   multi_array<complex<double>,2> Lvhat({dvvh_mult,r});
+   multi_array<complex<double>,2> Lwhat({dvvh_mult,r});
 
+  // Temporary objects to perform multiplications
+  multi_array<double,2> tmpX({dxx_mult,r});
+  multi_array<double,2> tmpS({r,r});
+  multi_array<double,2> tmpV({dvv_mult,r});
+
+  multi_array<complex<double>,2> tmpXhat({dxxh_mult,r});
+  multi_array<complex<double>,2> tmpVhat({dvvh_mult,r});
+
+  // Quantities of interest
+  multi_array<double,1> int_x({r});
+  multi_array<double,1> int_v({r});
+  multi_array<double,1> int_v2({r});
+
+  double mass0 = 0.0;
+  double mass = 0.0;
+  double energy0 = 0.0;
+  double energy = 0.0;
+  double el_energy = 0.0;
+  double err_mass = 0.0;
+  double err_energy = 0.0;
+
+  // Initialization
+  std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(h_xx[0]*h_xx[1], dxx_mult);
+  std::function<double(double*,double*)> ip_vv = inner_product_from_const_weight(h_vv[0]*h_vv[1], dvv_mult);
+
+  initialize(lr_sol, X, V, ip_xx, ip_vv); // Mandatory to initialize after plan creation as we use FFTW_MEASURE
+
+  // Initial mass
+  coeff_one(lr_sol.X,h_xx[0]*h_xx[1],int_x);
+  coeff_one(lr_sol.V,h_vv[0]*h_vv[1],int_v);
+
+  matvec(lr_sol.S,int_v,rho);
+
+  for(int ii = 0; ii < r; ii++){
+    mass0 += (int_x(ii)*rho(ii));
+  }
+
+  // Initial energy
+  coeff_one(lr_sol.V,h_vv[0]*h_vv[1],rho);
+  rho *= -1.0;
+  matvec(lr_sol.X,rho,ef);
+  for(Index ii = 0; ii < dxx_mult; ii++){
+      ef(ii) += 1.0;
+  }
+  fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
+  for(Index j = 0; j < N_xx[1]; j++){
+    (j < (N_xx[1]/2+1)) ? (mult = j) : (mult = (j-N_xx[1]));
+    for(Index i = 0; i < (N_xx[0]/2+1); i++){
+      complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+      complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult);
+      efhatx(i+j*(N_xx[0]/2+1)) = efhat(i+j*(N_xx[0]/2+1)) * lambdax / (pow(lambdax,2) + pow(lambday,2)) * ncxx;
+      efhaty(i+j*(N_xx[0]/2+1)) = efhat(i+j*(N_xx[0]/2+1)) * lambday / (pow(lambdax,2) + pow(lambday,2)) * ncxx ;
+    }
+  }
+  efhatx(0) = complex<double>(0.0,0.0);
+  efhaty(0) = complex<double>(0.0,0.0);
+  fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
+  fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
+
+  energy0 = 0.0;
+  for(Index ii = 0; ii < (dxx_mult); ii++){
+    energy0 += 0.5*(pow(efx(ii),2)+pow(efy(ii),2))*h_xx[0]*h_xx[1];
+  }
+
+  multi_array<double,1> we_v2({dvv_mult});
+  multi_array<double,1> we_w2({dvv_mult});
+
+  for(Index j = 0; j < (dvv_mult); j++){
+    we_v2(j) = pow(v(j),2) * h_vv[0] * h_vv[1];
+    we_w2(j) = pow(w(j),2) * h_vv[0] * h_vv[1];
+  }
+
+  coeff_one(lr_sol.V,we_v2.begin(),int_v);
+  coeff_one(lr_sol.V,we_w2.begin(),int_v2);
+
+  int_v += int_v2;
+
+  matvec(lr_sol.S,int_v,rho);
+
+  for(int ii = 0; ii < r; ii++){
+    energy0 += 0.5*(int_x(ii)*rho(ii));
+  }
+
+  cout.precision(15);
+  cout << std::scientific;
+
+  ofstream el_energyf;
+  ofstream err_massf;
+  ofstream err_energyf;
+
+  el_energyf.open("el_energy_2d.txt");
+  err_massf.open("err_mass_2d.txt");
+  err_energyf.open("err_energy_2d.txt");
+
+  el_energyf.precision(16);
+  err_massf.precision(16);
+  err_energyf.precision(16);
+
+  el_energyf << tstar << endl;
+  el_energyf << tau << endl;
+
+  // Main cycle
   for(Index i = 0; i < nsteps; i++){
 
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
 
     tmpX = lr_sol.X;
-
     matmul(tmpX,lr_sol.S,lr_sol.X);
 
     // Electric field
 
-    coeff_rho(lr_sol.V,hv*hw,rho);
-
+    coeff_one(lr_sol.V,h_vv[0]*h_vv[1],rho);
     rho *= -1.0;
-
     matvec(lr_sol.X,rho,ef);
 
-    for(Index ii = 0; ii < Nx*Ny; ii++){
+    for(Index ii = 0; ii < dxx_mult; ii++){
         ef(ii) += 1.0;
     }
 
-    fftw_execute_dft_r2c(pe,ef.begin(),(fftw_complex*)efhat.begin());
+    fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
 
-    for(Index j = 0; j < Ny; j++){
-      for(Index i = 0; i < (Nx/2+1); i++){
-        complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(bx-ax)*i); // TODO: calculate lambdax and lambday directly here
-        efhatx(i+j*(Nx/2+1)) = efhat(i+j*(Nx/2+1)) * lambdax(i+j*(Nx/2+1)) / (pow(lambdax,2) + pow(lambday(i+j*(Nx/2+1)),2)) * ncxx;
-        efhaty(i+j*(Nx/2+1)) = efhat(i+j*(Nx/2+1)) * lambday(i+j*(Nx/2+1)) / (pow(lambdax,2) + pow(lambday(i+j*(Nx/2+1)),2)) * ncxx ;
+    for(Index j = 0; j < N_xx[1]; j++){
+      (j < (N_xx[1]/2+1)) ? (mult = j) : (mult = (j-N_xx[1]));
+      for(Index i = 0; i < (N_xx[0]/2+1); i++){
+        complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+        complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult);
+
+        efhatx(i+j*(N_xx[0]/2+1)) = efhat(i+j*(N_xx[0]/2+1)) * lambdax / (pow(lambdax,2) + pow(lambday,2)) * ncxx;
+        efhaty(i+j*(N_xx[0]/2+1)) = efhat(i+j*(N_xx[0]/2+1)) * lambday / (pow(lambdax,2) + pow(lambday,2)) * ncxx ;
       }
     }
+
     efhatx(0) = complex<double>(0.0,0.0);
     efhaty(0) = complex<double>(0.0,0.0);
 
-    fftw_execute_dft_c2r(qe,(fftw_complex*)efhatx.begin(),efx.begin());
-    fftw_execute_dft_c2r(qe,(fftw_complex*)efhaty.begin(),efy.begin());
-
-    energy(i) = 0.0;
-    for(Index ii = 0; ii < (Nx*Ny); ii++){
-      energy(i) += 0.5*(pow(efx(ii),2)+pow(efy(ii),2))*hx*hy;
-    }
+    fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
+    fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
 
     // Main of K step
 
     coeff(lr_sol.V, lr_sol.V, we_v.begin(), C1v);
     coeff(lr_sol.V, lr_sol.V, we_w.begin(), C1w);
 
-    fftw_execute_dft_r2c(pv,lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
+    fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)tmpVhat.begin());
 
-    ptw_mult_row(Lhat,lambdav_n.begin(),dVhat_v);
-    ptw_mult_row(Lhat,lambdaw_n.begin(),dVhat_w);
+    ptw_mult_row(tmpVhat,lambdav_n.begin(),dVhat_v);
+    ptw_mult_row(tmpVhat,lambdaw_n.begin(),dVhat_w);
 
-    fftw_execute_dft_c2r(qv,(fftw_complex*)dVhat_v.begin(),dV_v.begin());
-    fftw_execute_dft_c2r(qv,(fftw_complex*)dVhat_w.begin(),dV_w.begin());
+    fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_v.begin(),dV_v.begin());
+    fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_w.begin(),dV_w.begin());
 
-    coeff(lr_sol.V, dV_v, hv*hw, C2v);
-    coeff(lr_sol.V, dV_w, hv*hw, C2w);
+    coeff(lr_sol.V, dV_v, h_vv[0]*h_vv[1], C2v);
+    coeff(lr_sol.V, dV_w, h_vv[0]*h_vv[1], C2w);
 
-    cout.precision(15);
-    cout << std::scientific;
-
-    multi_array<double,2> D_C1v(C1v); // needed because dgees overwrites input, and I need C later on
-    multi_array<double,2> D_C1w(C1w); // needed because dgees overwrites input, and I need C later on
-
-    dgees_(&jobvs,&sort,nullptr,&nn,D_C1v.begin(),&lda,&value,dcv_r.begin(),dcv_i.begin(),Tv.begin(),&ldvs,work.begin(),&lwork,nullptr,&info);
-    dgees_(&jobvs,&sort,nullptr,&nn,D_C1w.begin(),&lda,&value,dcw_r.begin(),dcw_i.begin(),Tw.begin(),&ldvs,work.begin(),&lwork,nullptr,&info);
+    schur(C1v, Tv, dcv_r, lwork);
+    schur(C1w, Tw, dcw_r, lwork);
 
     Tv.to_cplx(Tvc);
     Tw.to_cplx(Twc);
@@ -391,22 +400,25 @@ int main(){
 
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
-      // Full step
-      fftw_execute_dft_r2c(px,lr_sol.X.begin(),(fftw_complex*)Khat.begin());
+      // Full step -- Exact solution
+      fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
       matmul(Khat,Tvc,Mhat);
 
       for(int k = 0; k < r; k++){
-        for(Index j = 0; j < (Ny*(Nx/2 + 1)); j++){
-          Mhat(j,k) *= exp(-ts_split*lambdax(j)*dcv_r(k));
+        for(Index j = 0; j < N_xx[1]; j++){
+          for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+              complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+              Mhat(i+j*(N_xx[0]/2+1),k) *= exp(-ts_split*lambdax*dcv_r(k))*ncxx;
+          }
         }
       }
 
       matmul_transb(Mhat,Tvc,Khat);
-      Khat *= ncxx;
-      fftw_execute_dft_c2r(qx,(fftw_complex*)Khat.begin(),lr_sol.X.begin()); // TODO: could use FFTW_PRESERVE_INPUT here
+      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin()); // TODO: could use FFTW_PRESERVE_INPUT here
+      // NOT POSSIBLE FOR multidimensional transforms, see documentation
 
-      // Full step
-      fftw_execute_dft_r2c(px,lr_sol.X.begin(),(fftw_complex*)Khat.begin()); // Posso evitarlo evitando la moltiplic. ncxx e usando Khat (no perche c2r modifica input)
+      // Full step -- Exponential Euler
+      fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
       matmul(Khat,Twc,Mhat);
 
       for(Index jj = 0; jj < nsteps_ee; jj++){
@@ -414,27 +426,31 @@ int main(){
         ptw_mult_row(lr_sol.X,efx.begin(),Kex);
         ptw_mult_row(lr_sol.X,efy.begin(),Key);
 
-        fftw_execute_dft_r2c(px,Kex.begin(),(fftw_complex*)Kexhat.begin());
-        fftw_execute_dft_r2c(px,Key.begin(),(fftw_complex*)Keyhat.begin());
+        fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
+        fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
 
         matmul_transb(Kexhat,C2vc,Khat);
-        matmul_transb(Keyhat,C2wc,Khattmp);
+        matmul_transb(Keyhat,C2wc,tmpXhat);
 
-        Khat += Khattmp;
+        Khat += tmpXhat;
 
-        matmul(Khat,Twc,Mhattmp);
+        matmul(Khat,Twc,tmpXhat);
 
         for(int k = 0; k < r; k++){
-          for(Index j = 0; j < (Ny*(Nx/2 + 1)); j++){
-            Mhat(j,k) *= exp(-ts_ee*lambday(j)*dcw_r(k));
-            Mhat(j,k) += ts_ee*phi1(-ts_ee*lambday(j)*dcw_r(k))*Mhattmp(j,k);
+          for(Index j = 0; j < N_xx[1]; j++){
+            (j < (N_xx[1]/2+1)) ? (mult = j) : (mult = (j-N_xx[1]));
+            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult);
+
+              Mhat(i+j*(N_xx[0]/2+1),k) *= exp(-ts_ee*lambday*dcw_r(k))*ncxx;
+              Mhat(i+j*(N_xx[0]/2+1),k) += ts_ee*phi1(-ts_ee*lambday*dcw_r(k))*tmpXhat(i+j*(N_xx[0]/2+1),k)*ncxx;
+            }
           }
         }
 
         matmul_transb(Mhat,Twc,Khat);
 
-        Khat *= ncxx;
-        fftw_execute_dft_c2r(qx,(fftw_complex*)Khat.begin(),lr_sol.X.begin());
+        fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
       }
     }
 
@@ -442,42 +458,42 @@ int main(){
 
     // S Step
 
-    for(Index j = 0; j < (Nx*Ny); j++){
-      we_x(j) = efx(j) * hx * hy;
-      we_y(j) = efy(j) * hx * hy;
+    for(Index j = 0; j < (dxx_mult); j++){
+      we_x(j) = efx(j) * h_xx[0] * h_xx[1];
+      we_y(j) = efy(j) * h_xx[0] * h_xx[1];
     }
 
     coeff(lr_sol.X, lr_sol.X, we_x.begin(), D1x);
     coeff(lr_sol.X, lr_sol.X, we_y.begin(), D1y);
 
-    fftw_execute_dft_r2c(px,lr_sol.X.begin(),(fftw_complex*)Khat.begin());
+    fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)tmpXhat.begin());
 
-    ptw_mult_row(Khat,lambdax_n.begin(),dXhat_x);
-    ptw_mult_row(Khat,lambday_n.begin(),dXhat_y);
+    ptw_mult_row(tmpXhat,lambdax_n.begin(),dXhat_x);
+    ptw_mult_row(tmpXhat,lambday_n.begin(),dXhat_y);
 
-    fftw_execute_dft_c2r(qx,(fftw_complex*)dXhat_x.begin(),dX_x.begin());
-    fftw_execute_dft_c2r(qx,(fftw_complex*)dXhat_y.begin(),dX_y.begin());
+    fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_x.begin(),dX_x.begin());
+    fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_y.begin(),dX_y.begin());
 
-    coeff(lr_sol.X, dX_x, hx*hy, D2x);
-    coeff(lr_sol.X, dX_y, hx*hy, D2y);
+    coeff(lr_sol.X, dX_x, h_xx[0]*h_xx[1], D2x);
+    coeff(lr_sol.X, dX_y, h_xx[0]*h_xx[1], D2y);
 
-
+    // Explicit Euler
     for(Index jj = 0; jj< nsteps_split; jj++){
-      matmul_transb(lr_sol.S,C1v,D_C1v);
-      matmul(D2x,D_C1v,Tv);
+      matmul_transb(lr_sol.S,C1v,tmpS);
+      matmul(D2x,tmpS,Tv);
 
-      matmul_transb(lr_sol.S,C1w,D_C1v);
-      matmul(D2y,D_C1v,Tw);
+      matmul_transb(lr_sol.S,C1w,tmpS);
+      matmul(D2y,tmpS,Tw);
 
       Tv += Tw;
 
-      matmul_transb(lr_sol.S,C2v,D_C1v);
-      matmul(D1x,D_C1v,Tw);
+      matmul_transb(lr_sol.S,C2v,tmpS);
+      matmul(D1x,tmpS,Tw);
 
       Tv -= Tw;
 
-      matmul_transb(lr_sol.S,C2w,D_C1v);
-      matmul(D1y,D_C1v,Tw);
+      matmul_transb(lr_sol.S,C2w,tmpS);
+      matmul(D1y,tmpS,Tw);
 
       Tv -= Tw;
 
@@ -485,17 +501,14 @@ int main(){
       lr_sol.S += Tv;
     }
 
-    // L step
+    // L step - here we reuse some old variable names
 
     tmpV = lr_sol.V;
 
     matmul_transb(tmpV,lr_sol.S,lr_sol.V);
 
-    D_C1v = D1x; // needed because dgees overwrites input, and I need C later on
-    D_C1w = D1y; // needed because dgees overwrites input, and I need C later on
-
-    dgees_(&jobvs,&sort,nullptr,&nn,D_C1v.begin(),&lda,&value,dcv_r.begin(),dcv_i.begin(),Tv.begin(),&ldvs,work.begin(),&lwork,nullptr,&info);
-    dgees_(&jobvs,&sort,nullptr,&nn,D_C1w.begin(),&lda,&value,dcw_r.begin(),dcw_i.begin(),Tw.begin(),&ldvs,work.begin(),&lwork,nullptr,&info);
+    schur(D1x, Tv, dcv_r, lwork);
+    schur(D1y, Tw, dcw_r, lwork);
 
     Tv.to_cplx(Tvc);
     Tw.to_cplx(Twc);
@@ -504,53 +517,57 @@ int main(){
 
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
-    //  cout << ii << endl;
-      // Full step
-      fftw_execute_dft_r2c(pv,lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
+      // Full step -- Exact solution
+      fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
       matmul(Lhat,Tvc,Nhat);
 
       for(int k = 0; k < r; k++){
-        for(Index j = 0; j < (Nw*(Nv/2 + 1)); j++){
-          Nhat(j,k) *= exp(ts_split*lambdav(j)*dcv_r(k));
+        for(Index j = 0; j < N_vv[1]; j++){
+          for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+              complex<double> lambdav = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i);
+              Nhat(i+j*(N_vv[0]/2+1),k) *= exp(ts_split*lambdav*dcv_r(k))*ncvv;
+          }
         }
       }
 
       matmul_transb(Nhat,Tvc,Lhat);
-      Lhat *= ncvv;
-      fftw_execute_dft_c2r(qv,(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
+      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
 
-      // Full step
-      fftw_execute_dft_r2c(pv,lr_sol.V.begin(),(fftw_complex*)Lhat.begin()); // Posso evitarlo evitando la moltiplic. ncxx e usando Khat
+      // Full step -- Exponential euler
+      fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin()); // TODO: use FFTW_PRESERVE_INPUT
+      // NOT POSSIBLE FOR multidimensional transforms, see documentation
+
       matmul(Lhat,Twc,Nhat);
-
-//      cout << Nhat << endl;
 
       for(Index jj = 0; jj < nsteps_ee; jj++){
 
         ptw_mult_row(lr_sol.V,v.begin(),Lv);
         ptw_mult_row(lr_sol.V,w.begin(),Lw);
 
-        fftw_execute_dft_r2c(pv,Lv.begin(),(fftw_complex*)Lvhat.begin());
-        fftw_execute_dft_r2c(pv,Lw.begin(),(fftw_complex*)Lwhat.begin());
+        fftw_execute_dft_r2c(plans_vv[0],Lv.begin(),(fftw_complex*)Lvhat.begin());
+        fftw_execute_dft_r2c(plans_vv[0],Lw.begin(),(fftw_complex*)Lwhat.begin());
 
         matmul_transb(Lvhat,C2vc,Lhat);
-        matmul_transb(Lwhat,C2wc,Lhattmp);
+        matmul_transb(Lwhat,C2wc,tmpVhat);
 
-        Lhat += Lhattmp;
+        Lhat += tmpVhat;
 
-        matmul(Lhat,Twc,Nhattmp);
+        matmul(Lhat,Twc,tmpVhat);
 
         for(int k = 0; k < r; k++){
-          for(Index j = 0; j < (Nw*(Nv/2 + 1)); j++){
-            Nhat(j,k) *= exp(ts_ee*lambdaw(j)*dcw_r(k));
-            Nhat(j,k) -= ts_ee*phi1(ts_ee*lambdaw(j)*dcw_r(k))*Nhattmp(j,k);
+          for(Index j = 0; j < N_vv[1]; j++){
+            (j < (N_vv[1]/2+1)) ? (mult = j) : (mult = (j-N_vv[1]));
+            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+              complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult);
+              Nhat(i+j*(N_vv[0]/2+1),k) *= exp(ts_ee*lambdaw*dcw_r(k))*ncvv;
+              Nhat(i+j*(N_vv[0]/2+1),k) -= ts_ee*phi1(ts_ee*lambdaw*dcw_r(k))*tmpVhat(i+j*(N_vv[0]/2+1),k)*ncvv;
+            }
           }
         }
 
         matmul_transb(Nhat,Twc,Lhat);
 
-        Lhat *= ncvv;
-        fftw_execute_dft_c2r(qv,(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
+        fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
       }
 
     }
@@ -559,12 +576,53 @@ int main(){
 
     transpose_inplace(lr_sol.S);
 
-    cout << energy(i) << endl;
+    // Electric energy
+    el_energy = 0.0;
+    for(Index ii = 0; ii < (dxx_mult); ii++){
+      el_energy += 0.5*(pow(efx(ii),2)+pow(efy(ii),2))*h_xx[0]*h_xx[1];
+    }
+    cout << "Electric energy: " << el_energy << endl;
+    el_energyf << el_energy << endl;
+
+    // Error Mass
+    coeff_one(lr_sol.X,h_xx[0]*h_xx[1],int_x);
+    coeff_one(lr_sol.V,h_vv[0]*h_vv[1],int_v);
+
+    matvec(lr_sol.S,int_v,rho);
+
+    mass = 0.0;
+    for(int ii = 0; ii < r; ii++){
+      mass += (int_x(ii)*rho(ii));
+    }
+
+    err_mass = abs(mass0-mass);
+
+    cout << "Error in mass: " << err_mass << endl;
+    err_massf << err_mass << endl;
+
+    coeff_one(lr_sol.V,we_v2.begin(),int_v);
+    coeff_one(lr_sol.V,we_w2.begin(),int_v2);
+
+    int_v += int_v2;
+
+    matvec(lr_sol.S,int_v,rho);
+
+    energy = el_energy;
+    for(int ii = 0; ii < r; ii++){
+      energy += 0.5*(int_x(ii)*rho(ii));
+    }
+
+    err_energy = abs(energy0-energy);
+
+    cout << "Error in energy: " << err_energy << endl;
+    err_energyf << err_energy << endl;
+
 
   }
 
-
-  energy.save_vector("energy_2d.bin"); // TODO: write to file in each time step
+  el_energyf.close();
+  err_massf.close();
+  err_energyf.close();
 
   return 0;
 }
