@@ -1,4 +1,5 @@
 #include <generic/matrix.hpp>
+#include <generic/timer.hpp>
 #ifdef __CUDACC__
 #endif
 
@@ -81,6 +82,7 @@ template void transpose_inplace(multi_array<float,2>&);
 
 template<>
 void matmul(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c){
+  gt::start("matmul");
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
       a.shape()[0], b.shape()[1], a.shape()[1],
@@ -109,10 +111,12 @@ void matmul(const multi_array<double,2>& a, const multi_array<double,2>& b, mult
         << __LINE__ << endl;
         exit(1);
       }
+  gt::stop("matmul");
 }
 
 template<>
 void matmul(const multi_array<complex<double>,2>& a, const multi_array<complex<double>,2>& b, multi_array<complex<double>,2>& c){
+  gt::start("matmul");
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     complex<double> one(1.0,0.0);
     complex<double> zero(0.0,0.0);
@@ -127,11 +131,12 @@ void matmul(const multi_array<complex<double>,2>& a, const multi_array<complex<d
       } else {
         // TO DO
       }
-
+  gt::stop("matmul");
 }
 
 template<>
 void matmul(const multi_array<float,2>& a, const multi_array<float,2>& b, multi_array<float,2>& c){
+  gt::start("matmul");
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
       a.shape()[0], b.shape()[1], a.shape()[1],
@@ -160,11 +165,12 @@ void matmul(const multi_array<float,2>& a, const multi_array<float,2>& b, multi_
       << __LINE__ << endl;
       exit(1);
   }
-
+  gt::stop("matmul");
 }
 
 template<>
 void matmul_transa(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c){
+  gt::start("matmul");
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans,
       a.shape()[1], b.shape()[1], a.shape()[0],
@@ -193,10 +199,11 @@ void matmul_transa(const multi_array<double,2>& a, const multi_array<double,2>& 
     << __LINE__ << endl;
     exit(1);
   }
-
+  gt::stop("matmul");
 }
 template<>
 void matmul_transa(const multi_array<float,2>& a, const multi_array<float,2>& b, multi_array<float,2>& c){
+  gt::start("matmul");
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_sgemm(CblasColMajor, CblasTrans, CblasNoTrans,
       a.shape()[1], b.shape()[1], a.shape()[0],
@@ -225,10 +232,11 @@ void matmul_transa(const multi_array<float,2>& a, const multi_array<float,2>& b,
         << __LINE__ << endl;
         exit(1);
       }
-
+  gt::stop("matmul");
 }
 template<>
 void matmul_transb(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c){
+  gt::start("matmul");
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
 
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
@@ -258,9 +266,11 @@ void matmul_transb(const multi_array<double,2>& a, const multi_array<double,2>& 
         << __LINE__ << endl;
         exit(1);
       }
+  gt::stop("matmul");
 }
 template<>
 void matmul_transb(const multi_array<float,2>& a, const multi_array<float,2>& b, multi_array<float,2>& c){
+  gt::start("matmul");
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_sgemm(CblasColMajor, CblasNoTrans, CblasTrans,
       a.shape()[0], b.shape()[0], a.shape()[1],
@@ -289,9 +299,11 @@ void matmul_transb(const multi_array<float,2>& a, const multi_array<float,2>& b,
         << __LINE__ << endl;
         exit(1);
       }
+  gt::stop("matmul");
 }
 template<>
 void matmul_transb(const multi_array<complex<double>,2>& a, const multi_array<complex<double>,2>& b, multi_array<complex<double>,2>& c){
+  gt::start("matmul");
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     complex<double> one(1.0,0.0);
     complex<double> zero(0.0,0.0);
@@ -306,10 +318,12 @@ void matmul_transb(const multi_array<complex<double>,2>& a, const multi_array<co
       } else {
         // TO DO
       }
+  gt::stop("matmul");
 }
 
 template<>
 void matmul_transab(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c){
+  gt::start("matmul");
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_dgemm(CblasColMajor, CblasTrans, CblasTrans,
       a.shape()[1], b.shape()[0], a.shape()[0],
@@ -338,10 +352,12 @@ void matmul_transab(const multi_array<double,2>& a, const multi_array<double,2>&
         << __LINE__ << endl;
         exit(1);
       }
+  gt::stop("matmul");
 }
 
 template<>
 void matmul_transab(const multi_array<float,2>& a, const multi_array<float,2>& b, multi_array<float,2>& c){
+  gt::start("matmul");
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_sgemm(CblasColMajor, CblasTrans, CblasTrans,
       a.shape()[1], b.shape()[0], a.shape()[0],
@@ -370,7 +386,7 @@ void matmul_transab(const multi_array<float,2>& a, const multi_array<float,2>& b
         << __LINE__ << endl;
         exit(1);
       }
-
+  gt::stop("matmul");
 }
 
 template<>

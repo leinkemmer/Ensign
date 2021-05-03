@@ -2,6 +2,7 @@
 #include <generic/matrix.hpp>
 #include <generic/storage.hpp>
 #include <lr/coefficients.hpp>
+#include <generic/timer.hpp>
 
 #include <random>
 #include <complex>
@@ -361,6 +362,7 @@ int main(){
   el_energyf << tstar << endl;
   el_energyf << tau << endl;
 
+  gt::start("time_loop");
   for(Index i = 0; i < nsteps; i++){
 
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
@@ -369,6 +371,7 @@ int main(){
     matmul(tmpX,lr_sol.S,lr_sol.X);
 
     // Electric field
+    gt::start("electric_field");
 
     coeff_one(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],rho);
     rho *= -1.0;
@@ -408,7 +411,10 @@ int main(){
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatz.begin(),efz.begin());
 
+    gt::stop("electric_field");
+
     // Main of K step
+    gt::start("K");
 
     coeff(lr_sol.V, lr_sol.V, we_v.begin(), C1v);
     coeff(lr_sol.V, lr_sol.V, we_w.begin(), C1w);
@@ -528,7 +534,11 @@ int main(){
 
     gram_schmidt(lr_sol.X, lr_sol.S, ip_xx);
 
+    gt::stop("K");
+
     // S Step
+
+    gt::start("S");
 
     for(Index j = 0; j < (dxx_mult); j++){
       we_x(j) = efx(j) * h_xx[0] * h_xx[1] * h_xx[2];
@@ -587,7 +597,11 @@ int main(){
       lr_sol.S += Tv;
     }
 
+    gt::stop("S");
+
     // L step - here we reuse some old variable names
+    
+    gt::start("L");
 
     tmpV = lr_sol.V;
 
@@ -694,7 +708,10 @@ int main(){
 
     transpose_inplace(lr_sol.S);
 
+    gt::stop("L");
+
     // Electric energy
+    gt::start("output");
     el_energy = 0.0;
     for(Index ii = 0; ii < (dxx_mult); ii++){
       el_energy += 0.5*(pow(efx(ii),2)+pow(efy(ii),2)+pow(efz(ii),2))*h_xx[0]*h_xx[1]*h_xx[2];
@@ -738,11 +755,18 @@ int main(){
 
     cout << "Error in energy: " << err_energy << endl;
     err_energyf << err_energy << endl;
+
+
+    gt::stop("output");
   }
+  gt::stop("time_loop");
 
 
   el_energyf.close();
   err_massf.close();
   err_energyf.close();
+
+  cout << gt::sorted_output() << endl;
+
   return 0;
 }
