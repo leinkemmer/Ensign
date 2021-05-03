@@ -4,7 +4,7 @@
 #include <generic/storage.hpp>
 
 extern "C" {
-extern int dgees_(char*,char*,void*,int*,double*,int*, int*, double*, double*, double*, int*, double*, int*, bool*,int*);
+  extern int dgees_(char*,char*,void*,int*,double*,int*, int*, double*, double*, double*, int*, double*, int*, bool*,int*);
 }
 
 template<class T>

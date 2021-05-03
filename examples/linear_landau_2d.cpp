@@ -52,9 +52,9 @@ int main(){
 
   for(Index j = 0; j < N_xx[1]; j++){
     for(Index i = 0; i < N_xx[0]; i++){
-        double x = lim_xx[0] + i*h_xx[0];
-        double y = lim_xx[2] + j*h_xx[1];
-        xx(i+j*N_xx[0]) = 1.0 + alpha*cos(kappa1*x) + alpha*cos(kappa2*y);
+      double x = lim_xx[0] + i*h_xx[0];
+      double y = lim_xx[2] + j*h_xx[1];
+      xx(i+j*N_xx[0]) = 1.0 + alpha*cos(kappa1*x) + alpha*cos(kappa2*y);
     }
   }
   X.push_back(xx.begin());
@@ -96,11 +96,11 @@ int main(){
 
   Index mult;
   for(Index j = 0; j < N_xx[1]; j++){
-    (j < (N_xx[1]/2+1)) ? (mult = j) : (mult = (j-N_xx[1]));
+    if(j < (N_xx[1]/2)) { mult = j; } else if(j == (N_xx[1]/2)) { mult = 0.0; } else { mult = (j-N_xx[1]); }
     for(Index i = 0; i < (N_xx[0]/2+1); i++){
-        lambdax_n(i+j*(N_xx[0]/2+1)) = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i)*ncxx;
-        lambday_n(i+j*(N_xx[0]/2+1)) = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult)*ncxx;
-      }
+      lambdax_n(i+j*(N_xx[0]/2+1)) = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i)*ncxx;
+      lambday_n(i+j*(N_xx[0]/2+1)) = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult)*ncxx;
+    }
   }
 
   multi_array<complex<double>,1> lambdav_n({dvvh_mult});
@@ -109,11 +109,11 @@ int main(){
   double ncvv = 1.0 / (dvv_mult);
 
   for(Index j = 0; j < N_vv[1]; j++){
-    (j < (N_vv[1]/2+1)) ? (mult = j) : (mult = (j-N_vv[1]));
+    if(j < (N_vv[1]/2)) { mult = j; } else if(j == (N_vv[1]/2)) { mult = 0.0; } else { mult = (j-N_vv[1]); }
     for(Index i = 0; i < (N_vv[0]/2+1); i++){
-        lambdav_n(i+j*(N_vv[0]/2+1)) = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i)*ncvv;
-        lambdaw_n(i+j*(N_vv[0]/2+1)) = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult)*ncvv;
-      }
+      lambdav_n(i+j*(N_vv[0]/2+1)) = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i)*ncvv;
+      lambdaw_n(i+j*(N_vv[0]/2+1)) = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult)*ncvv;
+    }
   }
 
   multi_array<complex<double>,2> Khat({dxxh_mult,r});
@@ -180,18 +180,18 @@ int main(){
 
   // For K step
 
-   multi_array<double,2> Kex({dxx_mult,r});
-   multi_array<double,2> Key({dxx_mult,r});
+  multi_array<double,2> Kex({dxx_mult,r});
+  multi_array<double,2> Key({dxx_mult,r});
 
-   multi_array<complex<double>,2> Kexhat({dxxh_mult,r});
-   multi_array<complex<double>,2> Keyhat({dxxh_mult,r});
+  multi_array<complex<double>,2> Kexhat({dxxh_mult,r});
+  multi_array<complex<double>,2> Keyhat({dxxh_mult,r});
 
-   // For L step
-   multi_array<double,2> Lv({dvv_mult,r});
-   multi_array<double,2> Lw({dvv_mult,r});
+  // For L step
+  multi_array<double,2> Lv({dvv_mult,r});
+  multi_array<double,2> Lw({dvv_mult,r});
 
-   multi_array<complex<double>,2> Lvhat({dvvh_mult,r});
-   multi_array<complex<double>,2> Lwhat({dvvh_mult,r});
+  multi_array<complex<double>,2> Lvhat({dvvh_mult,r});
+  multi_array<complex<double>,2> Lwhat({dvvh_mult,r});
 
   // Temporary objects to perform multiplications
   multi_array<double,2> tmpX({dxx_mult,r});
@@ -235,11 +235,11 @@ int main(){
   rho *= -1.0;
   matvec(lr_sol.X,rho,ef);
   for(Index ii = 0; ii < dxx_mult; ii++){
-      ef(ii) += 1.0;
+    ef(ii) += 1.0;
   }
   fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
   for(Index j = 0; j < N_xx[1]; j++){
-    (j < (N_xx[1]/2+1)) ? (mult = j) : (mult = (j-N_xx[1]));
+    if(j < (N_xx[1]/2)) { mult = j; } else if(j == (N_xx[1]/2)) { mult = 0.0; } else { mult = (j-N_xx[1]); }
     for(Index i = 0; i < (N_xx[0]/2+1); i++){
       complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
       complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult);
@@ -249,6 +249,9 @@ int main(){
   }
   efhatx(0) = complex<double>(0.0,0.0);
   efhaty(0) = complex<double>(0.0,0.0);
+  efhatx((N_xx[0]/2)*(N_xx[0]/2+1)) = complex<double>(0.0,0.0);
+  efhaty((N_xx[0]/2)*(N_xx[0]/2+1)) = complex<double>(0.0,0.0);
+
   fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
   fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
 
@@ -283,9 +286,9 @@ int main(){
   ofstream err_massf;
   ofstream err_energyf;
 
-  el_energyf.open("el_energy_2d_DUMB.txt");
-  err_massf.open("err_mass_2d_DUMB.txt");
-  err_energyf.open("err_energy_2d_DUMB.txt");
+  el_energyf.open("el_energy_2d.txt");
+  err_massf.open("err_mass_2d.txt");
+  err_energyf.open("err_energy_2d.txt");
 
   el_energyf.precision(16);
   err_massf.precision(16);
@@ -309,13 +312,13 @@ int main(){
     matvec(lr_sol.X,rho,ef);
 
     for(Index ii = 0; ii < dxx_mult; ii++){
-        ef(ii) += 1.0;
+      ef(ii) += 1.0;
     }
 
     fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
 
     for(Index j = 0; j < N_xx[1]; j++){
-      (j < (N_xx[1]/2+1)) ? (mult = j) : (mult = (j-N_xx[1]));
+      if(j < (N_xx[1]/2)) { mult = j; } else if(j == (N_xx[1]/2)) { mult = 0.0; } else { mult = (j-N_xx[1]); }
       for(Index i = 0; i < (N_xx[0]/2+1); i++){
         complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
         complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult);
@@ -327,6 +330,8 @@ int main(){
 
     efhatx(0) = complex<double>(0.0,0.0);
     efhaty(0) = complex<double>(0.0,0.0);
+    efhatx((N_xx[0]/2)*(N_xx[0]/2+1)) = complex<double>(0.0,0.0);
+    efhaty((N_xx[0]/2)*(N_xx[0]/2+1)) = complex<double>(0.0,0.0);
 
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
@@ -364,8 +369,8 @@ int main(){
       for(int k = 0; k < r; k++){
         for(Index j = 0; j < N_xx[1]; j++){
           for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-              Mhat(i+j*(N_xx[0]/2+1),k) *= exp(-ts_split*lambdax*dcv_r(k))*ncxx;
+            complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+            Mhat(i+j*(N_xx[0]/2+1),k) *= exp(-ts_split*lambdax*dcv_r(k))*ncxx;
           }
         }
       }
@@ -395,7 +400,7 @@ int main(){
 
         for(int k = 0; k < r; k++){
           for(Index j = 0; j < N_xx[1]; j++){
-            (j < (N_xx[1]/2+1)) ? (mult = j) : (mult = (j-N_xx[1]));
+            if(j < (N_xx[1]/2)) { mult = j; } else if(j == (N_xx[1]/2)) { mult = 0.0; } else { mult = (j-N_xx[1]); }
             for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
               complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult);
 
@@ -481,8 +486,8 @@ int main(){
       for(int k = 0; k < r; k++){
         for(Index j = 0; j < N_vv[1]; j++){
           for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-              complex<double> lambdav = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i);
-              Nhat(i+j*(N_vv[0]/2+1),k) *= exp(ts_split*lambdav*dcv_r(k))*ncvv;
+            complex<double> lambdav = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i);
+            Nhat(i+j*(N_vv[0]/2+1),k) *= exp(ts_split*lambdav*dcv_r(k))*ncvv;
           }
         }
       }
@@ -513,7 +518,7 @@ int main(){
 
         for(int k = 0; k < r; k++){
           for(Index j = 0; j < N_vv[1]; j++){
-            (j < (N_vv[1]/2+1)) ? (mult = j) : (mult = (j-N_vv[1]));
+            if(j < (N_vv[1]/2)) { mult = j; } else if(j == (N_vv[1]/2)) { mult = 0.0; } else { mult = (j-N_vv[1]); }
             for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
               complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult);
               Nhat(i+j*(N_vv[0]/2+1),k) *= exp(ts_ee*lambdaw*dcw_r(k))*ncvv;

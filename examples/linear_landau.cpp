@@ -170,7 +170,7 @@ int main(){
   matvec(lr_sol.X,rho,ef);
 
   for(Index ii = 0; ii < Nx; ii++){
-      ef(ii) += 1.0;
+    ef(ii) += 1.0;
   }
 
   fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
@@ -198,9 +198,9 @@ int main(){
 
   matvec(lr_sol.S,int_v,tmp_vec);
 
-    for(int ii = 0; ii < r; ii++){
-      energy0 += (0.5*int_x(ii)*tmp_vec(ii));
-    }
+  for(int ii = 0; ii < r; ii++){
+    energy0 += (0.5*int_x(ii)*tmp_vec(ii));
+  }
 
   cout.precision(15);
   cout << std::scientific;
@@ -242,7 +242,7 @@ int main(){
     matvec(lr_sol.X,rho,ef);
 
     for(Index ii = 0; ii < Nx; ii++){
-        ef(ii) += 1.0;
+      ef(ii) += 1.0;
     }
 
     fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
@@ -404,9 +404,9 @@ int main(){
     matvec(lr_sol.S,int_v,tmp_vec);
 
     energy = el_energy;
-      for(int ii = 0; ii < r; ii++){
-        energy += (0.5*int_x(ii)*tmp_vec(ii));
-      }
+    for(int ii = 0; ii < r; ii++){
+      energy += (0.5*int_x(ii)*tmp_vec(ii));
+    }
 
     err_energy = abs(energy0-energy);
 
