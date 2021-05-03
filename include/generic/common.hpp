@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <assert.h>
 #include <complex>
+#include <cblas.h>
+#include <fftw3.h>
 
 #ifdef __CUDACC__
 #include <cuda_runtime.h>

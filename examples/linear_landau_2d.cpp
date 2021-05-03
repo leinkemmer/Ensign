@@ -5,50 +5,7 @@
 
 #include <random>
 #include <complex>
-#include <fftw3.h>
 #include <cstring>
-
-array<fftw_plan,2> create_plans_2d(array<Index,2> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq){
-  array<fftw_plan,2> out;
-  array<int,2> dims = {int(dims_[1]),int(dims_[0])};
-
-  out[0] = fftw_plan_many_dft_r2c(2, dims.begin(), real.shape()[1], real.begin(), NULL, 1, dims[1]*dims[0], (fftw_complex*)freq.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), FFTW_MEASURE);
-  out[1] = fftw_plan_many_dft_c2r(2, dims.begin(), real.shape()[1], (fftw_complex*)freq.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), real.begin(), NULL, 1, dims[1]*dims[0], FFTW_MEASURE);
-
-  return out;
-}
-
-array<fftw_plan,2> create_plans_2d(array<Index,2> dims_, multi_array<double,1>& real, multi_array<complex<double>,1>& freq){
-  array<fftw_plan,2> out;
-  array<int,2> dims = {int(dims_[1]),int(dims_[0])};
-
-  out[0] = fftw_plan_many_dft_r2c(2, dims.begin(), 1, real.begin(), NULL, 1, dims[1]*dims[0], (fftw_complex*)freq.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), FFTW_MEASURE);
-  out[1] = fftw_plan_many_dft_c2r(2, dims.begin(), 1, (fftw_complex*)freq.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), real.begin(), NULL, 1, dims[1]*dims[0], FFTW_MEASURE);
-
-  return out;
-}
-
-void schur(multi_array<double,2>& CC, multi_array<double,2>& TT, multi_array<double,1>& diag_r, int& lwork){
-  int value = 0;
-  char jobvs = 'V';
-  char sort = 'N';
-  int nn = CC.shape()[0];
-  int lda = CC.shape()[0];
-  int ldvs = CC.shape()[0];
-  int info;
-  double work_opt;
-  multi_array<double,1> diag_i({nn});
-  multi_array<double,2> D(CC);
-
-  if(lwork == -1){ // Dumb call to obtain optimal value to work
-    dgees_(&jobvs,&sort,nullptr,&nn,D.begin(),&lda,&value,diag_r.begin(),diag_i.begin(),TT.begin(),&ldvs,&work_opt,&lwork,nullptr,&info);
-    lwork = int(work_opt);
-  }else{
-    multi_array<double,1> work({lwork});
-    dgees_(&jobvs,&sort,nullptr,&nn,D.begin(),&lda,&value,diag_r.begin(),diag_i.begin(),TT.begin(),&ldvs,work.begin(),&lwork,nullptr,&info);
-  }
-}
-
 
 int main(){
 
@@ -326,9 +283,9 @@ int main(){
   ofstream err_massf;
   ofstream err_energyf;
 
-  el_energyf.open("el_energy_2d.txt");
-  err_massf.open("err_mass_2d.txt");
-  err_energyf.open("err_energy_2d.txt");
+  el_energyf.open("el_energy_2d_DUMB.txt");
+  err_massf.open("err_mass_2d_DUMB.txt");
+  err_energyf.open("err_energy_2d_DUMB.txt");
 
   el_energyf.precision(16);
   err_massf.precision(16);
