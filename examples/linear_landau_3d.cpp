@@ -9,9 +9,9 @@
 #include <cstring>
 
 int main(){
-
+  gt::start("initialization");
   array<Index,3> N_xx = {16,16,16}; // Sizes in space
-  array<Index,3> N_vv = {32,32,32}; // Sizes in velocity
+  array<Index,3> N_vv = {16,16,16}; // Sizes in velocity
   int r = 10; // rank desired
 
   double tstar = 20; // final time
@@ -19,6 +19,7 @@ int main(){
 
   array<double,6> lim_xx = {0.0,4.0*M_PI,0.0,4.0*M_PI,0.0,4.0*M_PI}; // Limits for box [ax,bx] x [ay,by] x [az,bz] {ax,bx,ay,by,az,bz}
   array<double,6> lim_vv = {-6.0,6.0,-6.0,6.0,-6.0,6.0}; // Limits for box [av,bv] x [aw,bw] x [au,bu] {av,bv,aw,bw,au,bu}
+
 
   double alpha = 0.01;
   double kappa1 = 0.5;
@@ -112,12 +113,16 @@ int main(){
   Index mult_j;
   Index mult_k;
 
+  multi_array<complex<double>,1> lambday({dxxh_mult});
+
   for(Index k = 0; k < N_xx[2]; k++){
     if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
     for(Index j = 0; j < N_xx[1]; j++){
       if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
       for(Index i = 0; i < (N_xx[0]/2+1); i++){
         Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+        lambday(idx) = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+
         lambdax_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i)*ncxx;
         lambday_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j)*ncxx;
         lambdaz_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k)*ncxx;
@@ -361,17 +366,20 @@ int main(){
 
   el_energyf << tstar << endl;
   el_energyf << tau << endl;
+  gt::stop("initialization");
 
-  gt::start("time_loop");
   for(Index i = 0; i < nsteps; i++){
 
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
+
+    gt::start("time_loop");
+
+    gt::start("electric_field");
 
     tmpX = lr_sol.X;
     matmul(tmpX,lr_sol.S,lr_sol.X);
 
     // Electric field
-    gt::start("electric_field");
 
     coeff_one(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],rho);
     rho *= -1.0;
@@ -414,7 +422,8 @@ int main(){
     gt::stop("electric_field");
 
     // Main of K step
-    gt::start("K");
+
+    gt::start("coefficients C");
 
     coeff(lr_sol.V, lr_sol.V, we_v.begin(), C1v);
     coeff(lr_sol.V, lr_sol.V, we_w.begin(), C1w);
@@ -434,6 +443,11 @@ int main(){
     coeff(lr_sol.V, dV_w, h_vv[0]*h_vv[1]*h_vv[2], C2w);
     coeff(lr_sol.V, dV_u, h_vv[0]*h_vv[1]*h_vv[2], C2u);
 
+    gt::stop("coefficients C");
+
+    gt::start("K");
+
+    gt::start("Schur");
     schur(C1v, Tv, dcv_r, lwork);
     schur(C1w, Tw, dcw_r, lwork);
     schur(C1u, Tu, dcu_r, lwork);
@@ -445,9 +459,12 @@ int main(){
     C2w.to_cplx(C2wc);
     C2u.to_cplx(C2uc);
 
+    gt::stop("Schur");
+
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
       // Full step -- Exact solution
+      gt::start("First_split");
       fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
       matmul(Khat,Tvc,Mhat);
@@ -465,10 +482,11 @@ int main(){
       }
 
       matmul_transb(Mhat,Tvc,Khat);
+      gt::stop("First_split");
 
+      gt::start("Second_split");
       // Full step -- Exact solution
       matmul(Khat,Twc,Mhat);
-
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
           for(Index j = 0; j < N_xx[1]; j++){
@@ -481,25 +499,35 @@ int main(){
           }
         }
       }
+      matmul(Khat,Twc,Mhat);
 
       matmul_transb(Mhat,Twc,Khat);
 
-      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin()); // TODO: could use FFTW_PRESERVE_INPUT here
-      // NOT POSSIBLE FOR multidimensional transforms, see documentation
+      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
+
+      gt::stop("Second_split");
 
       // Full step -- Exponential Euler
+
       fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
       matmul(Khat,Tuc,Mhat);
 
       for(Index jj = 0; jj < nsteps_ee; jj++){
+        gt::start("Split_ptw_mult");
 
         ptw_mult_row(lr_sol.X,efx.begin(),Kex);
         ptw_mult_row(lr_sol.X,efy.begin(),Key);
         ptw_mult_row(lr_sol.X,efz.begin(),Kez);
+        gt::stop("Split_ptw_mult");
+
+        gt::start("Split_fft");
 
         fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
         fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
         fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
+        gt::stop("Split_fft");
+
+        gt::start("Split_matmult");
 
         matmul_transb(Kexhat,C2vc,Khat);
         matmul_transb(Keyhat,C2wc,tmpXhat);
@@ -509,6 +537,9 @@ int main(){
         Khat += tmpXhat;
 
         matmul(Khat,Tuc,tmpXhat);
+        gt::stop("Split_matmult");
+
+        gt::start("Split_ee");
 
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_xx[2]; k++){
@@ -520,16 +551,18 @@ int main(){
                 Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
 
                 Mhat(idx,rr) *= exp(-ts_ee*lambdaz*dcu_r(rr))*ncxx;
-                Mhat(idx,rr) += ts_ee*phi1(-ts_ee*lambdaz*dcu_r(rr))*tmpXhat(idx,rr)*ncxx;
+                Mhat(idx,rr) += ts_ee*phi1_im(-ts_ee*lambdaz*dcu_r(rr))*tmpXhat(idx,rr)*ncxx;
               }
             }
           }
         }
+        gt::stop("Split_ee");
 
         matmul_transb(Mhat,Tuc,Khat);
 
         fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
       }
+
     }
 
     gram_schmidt(lr_sol.X, lr_sol.S, ip_xx);
@@ -537,8 +570,7 @@ int main(){
     gt::stop("K");
 
     // S Step
-
-    gt::start("S");
+    gt::start("coefficients D");
 
     for(Index j = 0; j < (dxx_mult); j++){
       we_x(j) = efx(j) * h_xx[0] * h_xx[1] * h_xx[2];
@@ -563,6 +595,10 @@ int main(){
     coeff(lr_sol.X, dX_x, h_xx[0]*h_xx[1]*h_xx[2], D2x);
     coeff(lr_sol.X, dX_y, h_xx[0]*h_xx[1]*h_xx[2], D2y);
     coeff(lr_sol.X, dX_z, h_xx[0]*h_xx[1]*h_xx[2], D2z);
+
+    gt::stop("coefficients D");
+
+    gt::start("S");
 
     // Explicit Euler
     for(Index jj = 0; jj< nsteps_split; jj++){
@@ -600,12 +636,12 @@ int main(){
     gt::stop("S");
 
     // L step - here we reuse some old variable names
-    
-    gt::start("L");
 
     tmpV = lr_sol.V;
 
     matmul_transb(tmpV,lr_sol.S,lr_sol.V);
+
+    gt::start("L");
 
     schur(D1x, Tv, dcv_r, lwork);
     schur(D1y, Tw, dcw_r, lwork);
@@ -659,8 +695,7 @@ int main(){
       fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
 
       // Full step -- Exponential euler
-      fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin()); // TODO: use FFTW_PRESERVE_INPUT
-      // NOT POSSIBLE FOR multidimensional transforms, see documentation
+      fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
 
       matmul(Lhat,Tuc,Nhat);
 
@@ -691,7 +726,7 @@ int main(){
                 Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
 
                 Nhat(idx,rr) *= exp(ts_ee*lambdau*dcu_r(rr))*ncvv;
-                Nhat(idx,rr) -= ts_ee*phi1(ts_ee*lambdau*dcu_r(rr))*tmpVhat(idx,rr)*ncvv;
+                Nhat(idx,rr) -= ts_ee*phi1_im(ts_ee*lambdau*dcu_r(rr))*tmpVhat(idx,rr)*ncvv;
               }
             }
           }
@@ -709,6 +744,8 @@ int main(){
     transpose_inplace(lr_sol.S);
 
     gt::stop("L");
+
+    gt::stop("time_loop");
 
     // Electric energy
     gt::start("output");
@@ -756,10 +793,8 @@ int main(){
     cout << "Error in energy: " << err_energy << endl;
     err_energyf << err_energy << endl;
 
-
     gt::stop("output");
   }
-  gt::stop("time_loop");
 
 
   el_energyf.close();

@@ -405,7 +405,7 @@ int main(){
               complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult);
 
               Mhat(i+j*(N_xx[0]/2+1),k) *= exp(-ts_ee*lambday*dcw_r(k))*ncxx;
-              Mhat(i+j*(N_xx[0]/2+1),k) += ts_ee*phi1(-ts_ee*lambday*dcw_r(k))*tmpXhat(i+j*(N_xx[0]/2+1),k)*ncxx;
+              Mhat(i+j*(N_xx[0]/2+1),k) += ts_ee*phi1_im(-ts_ee*lambday*dcw_r(k))*tmpXhat(i+j*(N_xx[0]/2+1),k)*ncxx;
             }
           }
         }
@@ -522,7 +522,7 @@ int main(){
             for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
               complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult);
               Nhat(i+j*(N_vv[0]/2+1),k) *= exp(ts_ee*lambdaw*dcw_r(k))*ncvv;
-              Nhat(i+j*(N_vv[0]/2+1),k) -= ts_ee*phi1(ts_ee*lambdaw*dcw_r(k))*tmpVhat(i+j*(N_vv[0]/2+1),k)*ncvv;
+              Nhat(i+j*(N_vv[0]/2+1),k) -= ts_ee*phi1_im(ts_ee*lambdaw*dcw_r(k))*tmpVhat(i+j*(N_vv[0]/2+1),k)*ncvv;
             }
           }
         }

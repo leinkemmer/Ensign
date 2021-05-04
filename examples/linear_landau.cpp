@@ -291,7 +291,7 @@ int main(){
           complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(bx-ax)*j);
 
           Mhat(j,k) *= exp(-ts_ee*lambdax*dc_r(k));
-          Mhat(j,k) += ts_ee*phi1(-ts_ee*lambdax*dc_r(k))*Mhattmp(j,k);
+          Mhat(j,k) += ts_ee*phi1_im(-ts_ee*lambdax*dc_r(k))*Mhattmp(j,k);
         }
       }
       matmul_transb(Mhat,Tc,Khat);
@@ -360,7 +360,7 @@ int main(){
           complex<double> lambdav = complex<double>(0.0,2.0*M_PI/(bv-av)*j);
 
           Nhat(j,k) *= exp(ts_ee*lambdav*dc_r(k));
-          Nhat(j,k) += -ts_ee*phi1(ts_ee*lambdav*dc_r(k))*Nhattmp(j,k);
+          Nhat(j,k) += -ts_ee*phi1_im(ts_ee*lambdav*dc_r(k))*Nhattmp(j,k);
         }
       }
       matmul_transb(Nhat,Tc,Lhat);
