@@ -9,16 +9,20 @@
 #include <cstring>
 
 int main(){
-  gt::start("initialization");
+  multi_array<double,1> error({10});
+  //gt::start("initialization");
   array<Index,3> N_xx = {16,16,16}; // Sizes in space
-  array<Index,3> N_vv = {16,16,16}; // Sizes in velocity
+  array<Index,3> N_vv = {32,32,32}; // Sizes in velocity
   int r = 10; // rank desired
 
-  double tstar = 20; // final time
-  double tau = 0.00625; // time step splitting
+  double tstar = 10; // final time
+  double tauref = pow(2,-10);
+  double tau = tauref; // time step splitting
+  int i_err = 0;
 
   array<double,6> lim_xx = {0.0,4.0*M_PI,0.0,4.0*M_PI,0.0,4.0*M_PI}; // Limits for box [ax,bx] x [ay,by] x [az,bz] {ax,bx,ay,by,az,bz}
   array<double,6> lim_vv = {-6.0,6.0,-6.0,6.0,-6.0,6.0}; // Limits for box [av,bv] x [aw,bw] x [au,bu] {av,bv,aw,bw,au,bu}
+
 
   double alpha = 0.01;
   double kappa1 = 0.5;
@@ -26,7 +30,7 @@ int main(){
   double kappa3 = 0.5;
 
   Index nsteps_split = 1; // Number of time steps internal splitting
-  Index nsteps_ee = 1; // Number of time steps of exponential euler in internal splitting
+  Index nsteps_ee = 2; // Number of time steps of exponential euler in internal splitting
 
   Index nsteps = tstar/tau;
 
@@ -366,18 +370,25 @@ int main(){
 
   el_energyf << tstar << endl;
   el_energyf << tau << endl;
-  gt::stop("initialization");
+  //gt::stop("initialization");
+
+  multi_array<double,2> X0(lr_sol.X);
+  multi_array<double,2> V0(lr_sol.V);
+  multi_array<double,2> S0(lr_sol.S);
+
+  multi_array<double,1> error_vec({6});
+
 
   for(Index i = 0; i < nsteps; i++){
 
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
 
-    gt::start("time_loop");
+    //gt::start("time_loop");
 
     tmpX = lr_sol.X;
     matmul(tmpX,lr_sol.S,lr_sol.X);
 
-    gt::start("electric_field");
+    //gt::start("electric_field");
 
     // Electric field
 
@@ -419,11 +430,11 @@ int main(){
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatz.begin(),efz.begin());
 
-    gt::stop("electric_field");
+    //gt::stop("electric_field");
 
     // Main of K step
 
-    gt::start("coefficients C");
+    //gt::start("coefficients C");
 
     coeff(lr_sol.V, lr_sol.V, we_v.begin(), C1v);
     coeff(lr_sol.V, lr_sol.V, we_w.begin(), C1w);
@@ -443,11 +454,11 @@ int main(){
     coeff(lr_sol.V, dV_w, h_vv[0]*h_vv[1]*h_vv[2], C2w);
     coeff(lr_sol.V, dV_u, h_vv[0]*h_vv[1]*h_vv[2], C2u);
 
-    gt::stop("coefficients C");
+    //gt::stop("coefficients C");
 
-    gt::start("K");
+    //gt::start("K");
 
-    gt::start("Schur_K");
+    //gt::start("Schur_K");
     schur(C1v, Tv, dcv_r, lwork);
     schur(C1w, Tw, dcw_r, lwork);
     schur(C1u, Tu, dcu_r, lwork);
@@ -459,12 +470,12 @@ int main(){
     C2w.to_cplx(C2wc);
     C2u.to_cplx(C2uc);
 
-    gt::stop("Schur_K");
+    //gt::stop("Schur_K");
 
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
       // Full step -- Exact solution
-      gt::start("First_split_K");
+      //gt::start("First_split_K");
       fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
       matmul(Khat,Tvc,Mhat);
@@ -482,9 +493,9 @@ int main(){
       }
 
       matmul_transb(Mhat,Tvc,Khat);
-      gt::stop("First_split_K");
+      //gt::stop("First_split_K");
 
-      gt::start("Second_split_K");
+      //gt::start("Second_split_K");
       // Full step -- Exact solution
       matmul(Khat,Twc,Mhat);
       for(int rr = 0; rr < r; rr++){
@@ -503,10 +514,10 @@ int main(){
 
       fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
 
-      gt::stop("Second_split_K");
+      //gt::stop("Second_split_K");
 
       // Full step -- Exponential Euler
-      gt::start("Third_split_K");
+      //gt::start("Third_split_K");
 
       fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
       matmul(Khat,Tuc,Mhat);
@@ -551,18 +562,18 @@ int main(){
 
         fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
       }
-      gt::stop("Third_split_K");
+      //gt::stop("Third_split_K");
 
     }
 
-    gt::start("Gram_Schmidt_K");
+    //gt::start("Gram_Schmidt_K");
     gram_schmidt(lr_sol.X, lr_sol.S, ip_xx);
-    gt::stop("Gram_Schmidt_K");
+    //gt::stop("Gram_Schmidt_K");
 
-    gt::stop("K");
+    //gt::stop("K");
 
     // S Step
-    gt::start("coefficients D");
+    //gt::start("coefficients D");
 
     for(Index j = 0; j < (dxx_mult); j++){
       we_x(j) = efx(j) * h_xx[0] * h_xx[1] * h_xx[2];
@@ -588,9 +599,9 @@ int main(){
     coeff(lr_sol.X, dX_y, h_xx[0]*h_xx[1]*h_xx[2], D2y);
     coeff(lr_sol.X, dX_z, h_xx[0]*h_xx[1]*h_xx[2], D2z);
 
-    gt::stop("coefficients D");
+    //gt::stop("coefficients D");
 
-    gt::start("S");
+    //gt::start("S");
 
     // Explicit Euler
     for(Index jj = 0; jj< nsteps_split; jj++){
@@ -625,7 +636,7 @@ int main(){
       lr_sol.S += Tv;
     }
 
-    gt::stop("S");
+    //gt::stop("S");
 
     // L step - here we reuse some old variable names
 
@@ -633,9 +644,9 @@ int main(){
 
     matmul_transb(tmpV,lr_sol.S,lr_sol.V);
 
-    gt::start("L");
+    //gt::start("L");
 
-    gt::start("Schur_L");
+    //gt::start("Schur_L");
     schur(D1x, Tv, dcv_r, lwork);
     schur(D1y, Tw, dcw_r, lwork);
     schur(D1z, Tu, dcu_r, lwork);
@@ -646,11 +657,11 @@ int main(){
     D2x.to_cplx(C2vc);
     D2y.to_cplx(C2wc);
     D2z.to_cplx(C2uc);
-    gt::stop("Schur_L");
+    //gt::stop("Schur_L");
 
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
-      gt::start("First_split_L");
+      //gt::start("First_split_L");
 
       // Full step -- Exact solution
       fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
@@ -671,9 +682,9 @@ int main(){
 
       matmul_transb(Nhat,Tvc,Lhat);
 
-      gt::stop("First_split_L");
+      //gt::stop("First_split_L");
 
-      gt::start("Second_split_L");
+      //gt::start("Second_split_L");
 
       matmul(Lhat,Twc,Nhat);
 
@@ -693,9 +704,9 @@ int main(){
       matmul_transb(Nhat,Twc,Lhat);
 
       fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
-      gt::stop("Second_split_L");
+      //gt::stop("Second_split_L");
 
-      gt::start("Third_split_L");
+      //gt::start("Third_split_L");
 
       // Full step -- Exponential euler
       fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
@@ -740,30 +751,30 @@ int main(){
 
         fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
       }
-      gt::stop("Third_split_L");
+      //gt::stop("Third_split_L");
 
     }
-    gt::start("Gram_Schmidt_L");
+    //gt::start("Gram_Schmidt_L");
     gram_schmidt(lr_sol.V, lr_sol.S, ip_vv);
-    gt::stop("Gram_Schmidt_L");
+    //gt::stop("Gram_Schmidt_L");
 
-    gt::start("Transpose_S");
+    //gt::start("Transpose_S");
 
     transpose_inplace(lr_sol.S);
 
-    gt::stop("Transpose_S");
+    //gt::stop("Transpose_S");
 
-    gt::stop("L");
+    //gt::stop("L");
 
-    gt::stop("time_loop");
+    //gt::stop("time_loop");
 
     // Electric energy
-    gt::start("output");
+    //gt::start("output");
     el_energy = 0.0;
     for(Index ii = 0; ii < (dxx_mult); ii++){
       el_energy += 0.5*(pow(efx(ii),2)+pow(efy(ii),2)+pow(efz(ii),2))*h_xx[0]*h_xx[1]*h_xx[2];
     }
-    //cout << "Electric energy: " << el_energy << endl;
+    cout << "Electric energy: " << el_energy << endl;
     //el_energyf << el_energy << endl;
 
     // Error Mass
@@ -779,7 +790,7 @@ int main(){
 
     err_mass = abs(mass0-mass);
 
-    //cout << "Error in mass: " << err_mass << endl;
+    cout << "Error in mass: " << err_mass << endl;
     //err_massf << err_mass << endl;
 
     coeff_one(lr_sol.V,we_v2.begin(),int_v);
@@ -800,10 +811,10 @@ int main(){
 
     err_energy = abs(energy0-energy);
 
-    //cout << "Error in energy: " << err_energy << endl;
+    cout << "Error in energy: " << err_energy << endl;
     //err_energyf << err_energy << endl;
 
-    gt::stop("output");
+    //gt::stop("output");
   }
 
 
@@ -811,7 +822,480 @@ int main(){
   err_massf.close();
   err_energyf.close();
 
-  cout << gt::sorted_output() << endl;
+  multi_array<double,2> refsol({dxx_mult,dvv_mult});
+  multi_array<double,2> tmpsol({dxx_mult,r});
+
+  matmul(lr_sol.X,lr_sol.S,tmpsol);
+  matmul_transb(tmpsol,lr_sol.V,refsol);
+
+  for(double tau = pow(2,-3); tau > pow(2,-9); tau /= 2.0){
+    lr_sol.X = X0;
+    lr_sol.S = S0;
+    lr_sol.V = V0;
+
+    Index nsteps = tstar/tau;
+
+    double ts_split = tau / nsteps_split;
+    double ts_ee = ts_split / nsteps_ee;
+
+    for(Index i = 0; i < nsteps; i++){
+
+      cout << "Time step " << i + 1 << " on " << nsteps << endl;
+
+      //gt::start("time_loop");
+
+      tmpX = lr_sol.X;
+      matmul(tmpX,lr_sol.S,lr_sol.X);
+
+      //gt::start("electric_field");
+
+      // Electric field
+
+      coeff_one(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],rho);
+      rho *= -1.0;
+      matvec(lr_sol.X,rho,ef);
+
+      for(Index ii = 0; ii < dxx_mult; ii++){
+        ef(ii) += 1.0;
+      }
+
+      fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
+
+      for(Index k = 0; k < N_xx[2]; k++){
+        if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+        for(Index j = 0; j < N_xx[1]; j++){
+          if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+          for(Index i = 0; i < (N_xx[0]/2+1); i++){
+            complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+            complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+            complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+            Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+            efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
+            efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
+            efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
+          }
+        }
+      }
+      for(Index k = 0; k < (N_xx[2]/2 + 1); k += (N_xx[2]/2)){
+        for(Index j = 0; j < (N_xx[1]/2 + 1); j += (N_xx[1]/2)){
+          efhatx(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
+          efhaty(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
+          efhatz(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
+        }
+      }
+      fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
+      fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
+      fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatz.begin(),efz.begin());
+
+      //gt::stop("electric_field");
+
+      // Main of K step
+
+      //gt::start("coefficients C");
+
+      coeff(lr_sol.V, lr_sol.V, we_v.begin(), C1v);
+      coeff(lr_sol.V, lr_sol.V, we_w.begin(), C1w);
+      coeff(lr_sol.V, lr_sol.V, we_u.begin(), C1u);
+
+      fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)tmpVhat.begin());
+
+      ptw_mult_row(tmpVhat,lambdav_n.begin(),dVhat_v);
+      ptw_mult_row(tmpVhat,lambdaw_n.begin(),dVhat_w);
+      ptw_mult_row(tmpVhat,lambdau_n.begin(),dVhat_u);
+
+      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_v.begin(),dV_v.begin());
+      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_w.begin(),dV_w.begin());
+      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_u.begin(),dV_u.begin());
+
+      coeff(lr_sol.V, dV_v, h_vv[0]*h_vv[1]*h_vv[2], C2v);
+      coeff(lr_sol.V, dV_w, h_vv[0]*h_vv[1]*h_vv[2], C2w);
+      coeff(lr_sol.V, dV_u, h_vv[0]*h_vv[1]*h_vv[2], C2u);
+
+      //gt::stop("coefficients C");
+
+      //gt::start("K");
+
+      //gt::start("Schur_K");
+      schur(C1v, Tv, dcv_r, lwork);
+      schur(C1w, Tw, dcw_r, lwork);
+      schur(C1u, Tu, dcu_r, lwork);
+
+      Tv.to_cplx(Tvc);
+      Tw.to_cplx(Twc);
+      Tu.to_cplx(Tuc);
+      C2v.to_cplx(C2vc);
+      C2w.to_cplx(C2wc);
+      C2u.to_cplx(C2uc);
+
+      //gt::stop("Schur_K");
+
+      // Internal splitting
+      for(Index ii = 0; ii < nsteps_split; ii++){
+        // Full step -- Exact solution
+        //gt::start("First_split_K");
+        fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
+
+        matmul(Khat,Tvc,Mhat);
+
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_xx[2]; k++){
+            for(Index j = 0; j < N_xx[1]; j++){
+              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+                Mhat(idx,rr) *= exp(-ts_split*lambdax*dcv_r(rr));
+              }
+            }
+          }
+        }
+
+        matmul_transb(Mhat,Tvc,Khat);
+        //gt::stop("First_split_K");
+
+        //gt::start("Second_split_K");
+        // Full step -- Exact solution
+        matmul(Khat,Twc,Mhat);
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_xx[2]; k++){
+            for(Index j = 0; j < N_xx[1]; j++){
+              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+                Mhat(idx,rr) *= exp(-ts_split*lambday*dcw_r(rr))*ncxx;
+              }
+            }
+          }
+        }
+        matmul_transb(Mhat,Twc,Khat);
+
+        fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
+
+        //gt::stop("Second_split_K");
+
+        // Full step -- Exponential Euler
+        //gt::start("Third_split_K");
+
+        fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
+        matmul(Khat,Tuc,Mhat);
+
+        for(Index jj = 0; jj < nsteps_ee; jj++){
+
+          ptw_mult_row(lr_sol.X,efx.begin(),Kex);
+          ptw_mult_row(lr_sol.X,efy.begin(),Key);
+          ptw_mult_row(lr_sol.X,efz.begin(),Kez);
+
+          fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
+
+          matmul_transb(Kexhat,C2vc,Khat);
+          matmul_transb(Keyhat,C2wc,tmpXhat);
+          Khat += tmpXhat;
+
+          matmul_transb(Kezhat,C2uc,tmpXhat);
+          Khat += tmpXhat;
+
+          matmul(Khat,Tuc,tmpXhat);
+
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                  Mhat(idx,rr) *= exp(-ts_ee*lambdaz*dcu_r(rr));
+                  Mhat(idx,rr) += ts_ee*phi1_im(-ts_ee*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
+                }
+              }
+            }
+          }
+
+          matmul_transb(Mhat,Tuc,Khat);
+          Khat *= ncxx;
+
+          fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
+        }
+        //gt::stop("Third_split_K");
+
+      }
+
+      //gt::start("Gram_Schmidt_K");
+      gram_schmidt(lr_sol.X, lr_sol.S, ip_xx);
+      //gt::stop("Gram_Schmidt_K");
+
+      //gt::stop("K");
+
+      // S Step
+      //gt::start("coefficients D");
+
+      for(Index j = 0; j < (dxx_mult); j++){
+        we_x(j) = efx(j) * h_xx[0] * h_xx[1] * h_xx[2];
+        we_y(j) = efy(j) * h_xx[0] * h_xx[1] * h_xx[2];
+        we_z(j) = efz(j) * h_xx[0] * h_xx[1] * h_xx[2];
+      }
+
+      coeff(lr_sol.X, lr_sol.X, we_x.begin(), D1x);
+      coeff(lr_sol.X, lr_sol.X, we_y.begin(), D1y);
+      coeff(lr_sol.X, lr_sol.X, we_z.begin(), D1z);
+
+      fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)tmpXhat.begin());
+
+      ptw_mult_row(tmpXhat,lambdax_n.begin(),dXhat_x);
+      ptw_mult_row(tmpXhat,lambday_n.begin(),dXhat_y);
+      ptw_mult_row(tmpXhat,lambdaz_n.begin(),dXhat_z);
+
+      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_x.begin(),dX_x.begin());
+      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_y.begin(),dX_y.begin());
+      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_z.begin(),dX_z.begin());
+
+      coeff(lr_sol.X, dX_x, h_xx[0]*h_xx[1]*h_xx[2], D2x);
+      coeff(lr_sol.X, dX_y, h_xx[0]*h_xx[1]*h_xx[2], D2y);
+      coeff(lr_sol.X, dX_z, h_xx[0]*h_xx[1]*h_xx[2], D2z);
+
+      //gt::stop("coefficients D");
+
+      //gt::start("S");
+
+      // Explicit Euler
+      for(Index jj = 0; jj< nsteps_split; jj++){
+        matmul_transb(lr_sol.S,C1v,tmpS);
+        matmul(D2x,tmpS,Tv);
+
+        matmul_transb(lr_sol.S,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+
+        matmul_transb(lr_sol.S,C1u,tmpS);
+        matmul(D2z,tmpS,Tu);
+
+        Tv += Tw;
+        Tv += Tu;
+
+        matmul_transb(lr_sol.S,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+
+        Tv -= Tw;
+
+        matmul_transb(lr_sol.S,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+
+        Tv -= Tw;
+
+        matmul_transb(lr_sol.S,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+
+        Tv -= Tw;
+
+        Tv *= ts_split;
+        lr_sol.S += Tv;
+      }
+
+      //gt::stop("S");
+
+      // L step - here we reuse some old variable names
+
+      tmpV = lr_sol.V;
+
+      matmul_transb(tmpV,lr_sol.S,lr_sol.V);
+
+      //gt::start("L");
+
+      //gt::start("Schur_L");
+      schur(D1x, Tv, dcv_r, lwork);
+      schur(D1y, Tw, dcw_r, lwork);
+      schur(D1z, Tu, dcu_r, lwork);
+
+      Tv.to_cplx(Tvc);
+      Tw.to_cplx(Twc);
+      Tu.to_cplx(Tuc);
+      D2x.to_cplx(C2vc);
+      D2y.to_cplx(C2wc);
+      D2z.to_cplx(C2uc);
+      //gt::stop("Schur_L");
+
+      // Internal splitting
+      for(Index ii = 0; ii < nsteps_split; ii++){
+        //gt::start("First_split_L");
+
+        // Full step -- Exact solution
+        fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
+        matmul(Lhat,Tvc,Nhat);
+
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_vv[2]; k++){
+            for(Index j = 0; j < N_vv[1]; j++){
+              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                complex<double> lambdav = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i);
+                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                Nhat(idx,rr) *= exp(ts_split*lambdav*dcv_r(rr));
+              }
+            }
+          }
+        }
+
+        matmul_transb(Nhat,Tvc,Lhat);
+
+        //gt::stop("First_split_L");
+
+        //gt::start("Second_split_L");
+
+        matmul(Lhat,Twc,Nhat);
+
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_vv[2]; k++){
+            for(Index j = 0; j < N_vv[1]; j++){
+              if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
+              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
+                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                Nhat(idx,rr) *= exp(ts_split*lambdaw*dcw_r(rr))*ncvv;
+              }
+            }
+          }
+        }
+        matmul_transb(Nhat,Twc,Lhat);
+
+        fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
+        //gt::stop("Second_split_L");
+
+        //gt::start("Third_split_L");
+
+        // Full step -- Exponential euler
+        fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
+
+        matmul(Lhat,Tuc,Nhat);
+
+        for(Index jj = 0; jj < nsteps_ee; jj++){
+
+          ptw_mult_row(lr_sol.V,v.begin(),Lv);
+          ptw_mult_row(lr_sol.V,w.begin(),Lw);
+          ptw_mult_row(lr_sol.V,u.begin(),Lu);
+
+          fftw_execute_dft_r2c(plans_vv[0],Lv.begin(),(fftw_complex*)Lvhat.begin());
+          fftw_execute_dft_r2c(plans_vv[0],Lw.begin(),(fftw_complex*)Lwhat.begin());
+          fftw_execute_dft_r2c(plans_vv[0],Lu.begin(),(fftw_complex*)Luhat.begin());
+
+          matmul_transb(Lvhat,C2vc,Lhat);
+          matmul_transb(Lwhat,C2wc,tmpVhat);
+          Lhat += tmpVhat;
+          matmul_transb(Luhat,C2uc,tmpVhat);
+          Lhat += tmpVhat;
+
+          matmul(Lhat,Tuc,tmpVhat);
+
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_vv[2]; k++){
+              if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+              for(Index j = 0; j < N_vv[1]; j++){
+                for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                  complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                  Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                  Nhat(idx,rr) *= exp(ts_ee*lambdau*dcu_r(rr));
+                  Nhat(idx,rr) -= ts_ee*phi1_im(ts_ee*lambdau*dcu_r(rr))*tmpVhat(idx,rr);
+                }
+              }
+            }
+          }
+
+          matmul_transb(Nhat,Tuc,Lhat);
+          Lhat *= ncvv;
+
+          fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
+        }
+        //gt::stop("Third_split_L");
+
+      }
+      //gt::start("Gram_Schmidt_L");
+      gram_schmidt(lr_sol.V, lr_sol.S, ip_vv);
+      //gt::stop("Gram_Schmidt_L");
+
+      //gt::start("Transpose_S");
+
+      transpose_inplace(lr_sol.S);
+
+      //gt::stop("Transpose_S");
+
+      //gt::stop("L");
+
+      //gt::stop("time_loop");
+
+      // Electric energy
+      //gt::start("output");
+      el_energy = 0.0;
+      for(Index ii = 0; ii < (dxx_mult); ii++){
+        el_energy += 0.5*(pow(efx(ii),2)+pow(efy(ii),2)+pow(efz(ii),2))*h_xx[0]*h_xx[1]*h_xx[2];
+      }
+      cout << "Electric energy: " << el_energy << endl;
+      //el_energyf << el_energy << endl;
+
+      // Error Mass
+      coeff_one(lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],int_x);
+      coeff_one(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],int_v);
+
+      matvec(lr_sol.S,int_v,rho);
+
+      mass = 0.0;
+      for(int ii = 0; ii < r; ii++){
+        mass += (int_x(ii)*rho(ii));
+      }
+
+      err_mass = abs(mass0-mass);
+
+      cout << "Error in mass: " << err_mass << endl;
+      //err_massf << err_mass << endl;
+
+      coeff_one(lr_sol.V,we_v2.begin(),int_v);
+      coeff_one(lr_sol.V,we_w2.begin(),int_v2);
+
+      int_v += int_v2;
+
+      coeff_one(lr_sol.V,we_u2.begin(),int_v2);
+
+      int_v += int_v2;
+
+      matvec(lr_sol.S,int_v,rho);
+
+      energy = el_energy;
+      for(int ii = 0; ii < r; ii++){
+        energy += 0.5*(int_x(ii)*rho(ii));
+      }
+
+      err_energy = abs(energy0-energy);
+
+      cout << "Error in energy: " << err_energy << endl;
+      //err_energyf << err_energy << endl;
+
+      //gt::stop("output");
+      }
+
+      multi_array<double,2> sol({dxx_mult,dvv_mult});
+      multi_array<double,2> tmp2sol({dxx_mult,r});
+
+      matmul(lr_sol.X,lr_sol.S,tmp2sol);
+      matmul_transb(tmp2sol,lr_sol.V,sol);
+
+      double error = 0.0;
+      for(int iii = 0; iii < dxx_mult; iii++){
+        for(int jjj = 0; jjj < dvv_mult; jjj++){
+          if( error < abs(refsol(iii,jjj)-sol(iii,jjj))){
+            error = abs(refsol(iii,jjj)-sol(iii,jjj));
+          }
+        }
+      }
+      error_vec(i_err) = error;
+      i_err += 1;
+
+
+    }
+    cout << error_vec << endl;
 
   return 0;
 }
