@@ -35,13 +35,13 @@ T phi1(T a) {
 
 template<class T>
 T phi1(T a) {
-  return (a == complex<double>(0.0,0.0)) ? complex<double>(1.0,0.0) : exp(a/2.0)*sinh(a/2.0)/(a/2.0);
+  return (abs(a) < 1e-7) ? complex<double>(1.0 + a.real(), a.imag()) : exp(a/2.0)*sinh(a/2.0)/(a/2.0);
 }
 
 template<class T>
 T phi1_im(T a) { // use it only for purely imaginary
-  if(a.imag() == 0.0){
-    return complex<double>(1.0,0.0);
+  if(abs(a.imag()) < 1e-7){
+    return complex<double>(1.0+a.imag(),0.0);
   }else{
     return complex<double>(sin(a.imag())/a.imag(),2*pow(sin(a.imag()/2.0),2)/a.imag());
   }
