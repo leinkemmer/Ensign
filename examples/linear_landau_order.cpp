@@ -9,6 +9,11 @@
 
 int main(){
 
+  ofstream time_error_1d;
+  ofstream tau_span_1d;
+  time_error_1d.open("time_error_1d.txt");
+  tau_span_1d.open("tau_span_1d.txt");
+
   Index Nx = 64; // NEEDS TO BE EVEN FOR FOURIER
   Index Nv = 256; // NEEDS TO BE EVEN FOR FOURIER
 
@@ -66,8 +71,6 @@ int main(){
   array<fftw_plan,2> plans_e = create_plans_1d(Nx, ef, efhat);
 
   // For FFT -- Pay attention we have to cast to int as Index seems not to work with fftw_many
-  int nx = int(Nx);
-  int nv = int(Nv);
 
   multi_array<complex<double>,2> Khat({Nx/2+1,r});
   multi_array<complex<double>,2> Lhat({Nv/2+1,r});
@@ -652,6 +655,10 @@ int main(){
         }
       }
       error_vec(i_err) = error;
+
+      time_error_1d << error << endl;
+      tau_span_1d << tau << endl;
+
       i_err += 1;
 
 
@@ -659,5 +666,7 @@ int main(){
 
   cout << error_vec << endl;
 
+  time_error_1d.close();
+  tau_span_1d.close();
   return 0;
 }

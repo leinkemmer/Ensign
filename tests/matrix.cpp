@@ -483,46 +483,184 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
   }
   #endif
 
-  SECTION("Complex multiplication"){
-    multi_array<complex<double>,2> A({2,3});
-    multi_array<complex<double>,2> B({3,4});
-    multi_array<complex<double>,2> AB({2,4});
-    multi_array<complex<double>,2> RAB({2,4});
+
+    SECTION("Complex multiplication on CPU"){
+      multi_array<complex<double>,2> A({2,3});
+      multi_array<complex<double>,2> B({3,4});
+      multi_array<complex<double>,2> AB({2,4});
+      multi_array<complex<double>,2> RAB({2,4});
+
+      complex<double> one(0.0,1.0);
+
+      for(int i = 0; i<2; i++){
+        for(int j = 0; j<3; j++){
+          A(i,j) = complex<double>(i + 2*j) + one;
+          cout << A(i,j) << endl;
+        }
+      }
+
+      for(int i = 0; i<3; i++){
+        for(int j = 0; j<4; j++){
+          B(i,j) = complex<double>(i + 3*j) + one;
+          cout << B(i,j) << endl;
+        }
+      }
+
+      set_zero(RAB);
+      for(int i = 0; i<2; i++){
+        for(int j = 0; j<4; j++){
+          for(int k = 0; k< 3; k++){
+            RAB(i,j) += A(i,k)*B(k,j);
+          }
+        }
+      }
+
+      matmul(A,B,AB);
+
+      for(int i = 0; i<2; i++){
+        for(int j = 0; j<4; j++){
+          cout << AB(i,j) << endl;
+        }
+      }
+
+  //    REQUIRE(bool(RAB == AB)); TO DO
+
+    }
+#ifdef __CUDACC__
+  SECTION("Complex multiplication on GPU"){
+    multi_array<complex<double>,2> A({2,3},stloc::device);
+    multi_array<complex<double>,2> B({3,4},stloc::device);
+    multi_array<complex<double>,2> AB({2,4},stloc::device);
+    multi_array<complex<double>,2> _A({2,3});
+    multi_array<complex<double>,2> _B({3,4});
+    multi_array<complex<double>,2> _AB({2,4});
+    multi_array<complex<double>,2> _RAB({2,4});
 
     complex<double> one(0.0,1.0);
 
     for(int i = 0; i<2; i++){
       for(int j = 0; j<3; j++){
-        A(i,j) = complex<double>(i + 2*j) + one;
-        cout << A(i,j) << endl;
+        _A(i,j) = complex<double>(i + 2*j) + one;
       }
     }
+    A = _A;
 
     for(int i = 0; i<3; i++){
       for(int j = 0; j<4; j++){
-        B(i,j) = complex<double>(i + 3*j) + one;
-        cout << B(i,j) << endl;
+        _B(i,j) = complex<double>(i + 3*j) + one;
       }
     }
+    B = _B;
 
-    set_zero(RAB);
+    set_zero(_RAB);
     for(int i = 0; i<2; i++){
       for(int j = 0; j<4; j++){
         for(int k = 0; k< 3; k++){
-          RAB(i,j) += A(i,k)*B(k,j);
+          _RAB(i,j) += _A(i,k)*_B(k,j);
         }
       }
     }
 
     matmul(A,B,AB);
+    _AB = AB;
 
-    for(int i = 0; i<2; i++){
-      for(int j = 0; j<4; j++){
-        cout << AB(i,j) << endl;
-      }
-    }
+    cout << _AB << endl;
+    cout << _RAB << endl;
 
 //    REQUIRE(bool(RAB == AB)); TO DO
 
   }
+  #endif
+
+#ifdef __CUDACC__
+  SECTION("Complex transpose multiplication (CPU and GPU)"){
+    multi_array<complex<double>,2> A({2,3},stloc::device);
+    multi_array<complex<double>,2> B({4,3},stloc::device);
+    multi_array<complex<double>,2> AB({2,4},stloc::device);
+    multi_array<complex<double>,2> _A({2,3});
+    multi_array<complex<double>,2> _B({4,3});
+    multi_array<complex<double>,2> _AB2({2,4});
+    multi_array<complex<double>,2> _AB({2,4});
+    multi_array<complex<double>,2> _RAB({2,4});
+
+    complex<double> one(0.0,1.0);
+
+    for(int i = 0; i<2; i++){
+      for(int j = 0; j<3; j++){
+        _A(i,j) = complex<double>(i + 2*j) + one;
+      }
+    }
+    A = _A;
+
+    for(int i = 0; i<4; i++){
+      for(int j = 0; j<3; j++){
+        _B(i,j) = complex<double>(i + 3*j) + one;
+      }
+    }
+    B = _B;
+
+    set_zero(_RAB);
+    for(int i = 0; i<2; i++){
+      for(int j = 0; j<4; j++){
+        for(int k = 0; k< 3; k++){
+          _RAB(i,j) += _A(i,k)*_B(j,k);
+        }
+      }
+    }
+
+    matmul_transb(A,B,AB);
+    matmul_transb(_A,_B,_AB2);
+
+    _AB = AB;
+
+    cout << _AB << endl;
+    cout << _AB2 << endl;
+    cout << _RAB << endl;
+
+  //    REQUIRE(bool(RAB == AB)); TO DO
+
+  }
+  #endif
+  #ifdef __CUDACC__
+  SECTION("Matvec (CPU and GPU)"){
+
+    multi_array<double,2> A({2,3},stloc::device);
+    multi_array<double,1> b({3},stloc::device);
+    multi_array<double,1> Ab({2},stloc::device);
+    multi_array<double,2> _A({2,3});
+    multi_array<double,1> _b({3});
+    multi_array<double,1> _Ab2({2});
+    multi_array<double,1> _Ab({2});
+    multi_array<double,1> _RAb({2});
+
+    for(int i = 0; i<2; i++){
+      for(int j = 0; j<3; j++){
+        _A(i,j) = i + 2*j;
+      }
+    }
+    A = _A;
+
+    for(int i = 0; i<3; i++){
+      _b(i) = 1+i;
+      }
+    b = _b;
+
+    _RAb(0) = 0.0;
+    _RAb(1) = 0.0;
+
+    for(int i = 0; i<2; i++){
+        for(int k = 0; k< 3; k++){
+          _RAb(i) += _A(i,k)*_b(k);
+        }
+    }
+
+    matvec(_A,_b,_Ab2);
+    matvec(A,b,Ab);
+    _Ab = Ab;
+    REQUIRE(bool(_RAb == _Ab));
+    REQUIRE(bool(_RAb == _Ab2));
+
+  }
+  #endif
+
 }

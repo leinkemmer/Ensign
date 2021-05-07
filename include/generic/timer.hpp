@@ -3,9 +3,9 @@
 #include <string>
 #include <time.h>
 
-#ifdef _OPENMP
+//#ifdef _OPENMP
 #include <omp.h>
-#endif
+//#endif
 
 /// This timer class measures the elapsed time between two events. Timers can be
 /// started and stopped repeatedly. The total time as well as the average time
@@ -20,7 +20,7 @@ struct timer {
 
     timer();
 
-    void reset(); 
+    void reset();
     void start();
     double stop();
 
@@ -32,7 +32,7 @@ struct timer {
 
 namespace gt {
 
-    bool is_master();   
+    bool is_master();
     void reset();
     void print();
 
@@ -44,4 +44,3 @@ namespace gt {
     double deviation(std::string name);
 
 }
-

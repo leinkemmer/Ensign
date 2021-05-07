@@ -1,7 +1,6 @@
 #pragma once
 
 #include <generic/common.hpp>
-#include <generic/storage.hpp>
 
 // product of an array of numbers
 template<class T, size_t d>

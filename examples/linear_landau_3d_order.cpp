@@ -2,13 +2,19 @@
 #include <generic/matrix.hpp>
 #include <generic/storage.hpp>
 #include <lr/coefficients.hpp>
-#include <generic/timer.hpp>
+//#include <generic/timer.hpp>
 
 #include <random>
 #include <complex>
 #include <cstring>
 
 int main(){
+
+  ofstream time_error_3d;
+  ofstream tau_span_3d;
+  time_error_3d.open("time_error_3d.txt");
+  tau_span_3d.open("tau_span_3d.txt");
+
   multi_array<double,1> error({10});
   //gt::start("initialization");
   array<Index,3> N_xx = {16,16,16}; // Sizes in space
@@ -1291,11 +1297,18 @@ int main(){
         }
       }
       error_vec(i_err) = error;
+
+      time_error_3d << error << endl;
+      tau_span_3d << tau << endl;
+
       i_err += 1;
 
 
     }
     cout << error_vec << endl;
+
+    time_error_3d.close();
+    tau_span_3d.close();
 
   return 0;
 }

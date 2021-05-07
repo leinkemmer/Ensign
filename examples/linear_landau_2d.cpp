@@ -9,10 +9,10 @@
 
 int main(){
 
-  array<Index,2> N_xx = {4,4}; // Sizes in space
-  array<Index,2> N_vv = {6,6}; // Sizes in velocity
+  array<Index,2> N_xx = {64,64}; // Sizes in space
+  array<Index,2> N_vv = {256,256}; // Sizes in velocity
 
-  int r = 2; // rank desired
+  int r = 5; // rank desired
 
   double tstar = 20; // final time
   double tau = 0.00625; // time step splitting
@@ -24,12 +24,10 @@ int main(){
   double kappa1 = 0.5;
   double kappa2 = 0.5;
 
-  Index nsteps_split = 2; // Number of time steps internal splitting
-  Index nsteps_ee = 3; // Number of time steps of exponential euler in internal splitting
+  Index nsteps_split = 1; // Number of time steps internal splitting
+  Index nsteps_ee = 1; // Number of time steps of exponential euler in internal splitting
 
   Index nsteps = tstar/tau;
-
-  nsteps = 1;
 
   double ts_split = tau / nsteps_split;
   double ts_ee = ts_split / nsteps_ee;
@@ -236,9 +234,7 @@ int main(){
   coeff_one(lr_sol.V,h_vv[0]*h_vv[1],rho);
   rho *= -1.0;
   matvec(lr_sol.X,rho,ef);
-  for(Index ii = 0; ii < dxx_mult; ii++){
-    ef(ii) += 1.0;
-  }
+  ef += 1.0;
   fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
   for(Index j = 0; j < N_xx[1]; j++){
     if(j < (N_xx[1]/2)) { mult = j; } else if(j == (N_xx[1]/2)) { mult = 0.0; } else { mult = (j-N_xx[1]); }
@@ -313,9 +309,7 @@ int main(){
     rho *= -1.0;
     matvec(lr_sol.X,rho,ef);
 
-    for(Index ii = 0; ii < dxx_mult; ii++){
-      ef(ii) += 1.0;
-    }
+    ef += 1.0;
 
     fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
 
@@ -386,7 +380,6 @@ int main(){
       matmul(Khat,Twc,Mhat);
 
       for(Index jj = 0; jj < nsteps_ee; jj++){
-        cout << lr_sol.X << endl;
 
         ptw_mult_row(lr_sol.X,efx.begin(),Kex);
         ptw_mult_row(lr_sol.X,efy.begin(),Key);
@@ -416,7 +409,6 @@ int main(){
         matmul_transb(Mhat,Twc,Khat);
         Khat *= ncxx;
         fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
-        cout << lr_sol.X << endl;
       }
     }
 

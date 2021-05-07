@@ -17,7 +17,7 @@ int main(){
   double tstar = 100; // final time
   double tau = 0.00625; // time step splitting
 
-  int nsteps_ee = 50; // number of time steps for explicit euler
+  int nsteps_ee = 10; // number of time steps for explicit euler
 
   double ax = 0;
   double bx = 4.0*M_PI;
@@ -150,7 +150,6 @@ int main(){
   double err_mass = 0.0;
   double err_energy = 0.0;
 
-
   // Initial mass
   coeff_one(lr_sol.X,hx,int_x);
   coeff_one(lr_sol.V,hv,int_v);
@@ -169,10 +168,8 @@ int main(){
 
   matvec(lr_sol.X,rho,ef);
 
-  for(Index ii = 0; ii < Nx; ii++){
-    ef(ii) += 1.0;
-  }
-
+  ef += 1.0;
+  
   fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
 
   efhat(0) = complex<double>(0.0,0.0);
@@ -241,9 +238,7 @@ int main(){
 
     matvec(lr_sol.X,rho,ef);
 
-    for(Index ii = 0; ii < Nx; ii++){
-      ef(ii) += 1.0;
-    }
+    ef += 1.0;
 
     fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
 

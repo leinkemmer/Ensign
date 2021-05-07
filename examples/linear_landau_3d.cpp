@@ -9,9 +9,9 @@
 #include <cstring>
 
 int main(){
-  gt::start("initialization");
+  //gt::start("initialization");
   array<Index,3> N_xx = {16,16,16}; // Sizes in space
-  array<Index,3> N_vv = {16,16,16}; // Sizes in velocity
+  array<Index,3> N_vv = {32,32,32}; // Sizes in velocity
   int r = 10; // rank desired
 
   double tstar = 20; // final time
@@ -290,9 +290,7 @@ int main(){
   coeff_one(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],rho);
   rho *= -1.0;
   matvec(lr_sol.X,rho,ef);
-  for(Index ii = 0; ii < dxx_mult; ii++){
-    ef(ii) += 1.0;
-  }
+  ef += 1.0;
   fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
   for(Index k = 0; k < N_xx[2]; k++){
     if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
@@ -366,18 +364,21 @@ int main(){
 
   el_energyf << tstar << endl;
   el_energyf << tau << endl;
-  gt::stop("initialization");
+  //gt::stop("initialization");
+
+  //ofstream times;
+  //times.open("times_3d.txt");
 
   for(Index i = 0; i < nsteps; i++){
 
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
 
-    gt::start("time_loop");
+    //gt::start("time_loop");
 
     tmpX = lr_sol.X;
     matmul(tmpX,lr_sol.S,lr_sol.X);
 
-    gt::start("electric_field");
+    //gt::start("electric_field");
 
     // Electric field
 
@@ -385,9 +386,7 @@ int main(){
     rho *= -1.0;
     matvec(lr_sol.X,rho,ef);
 
-    for(Index ii = 0; ii < dxx_mult; ii++){
-      ef(ii) += 1.0;
-    }
+    ef += 1.0;
 
     fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
 
@@ -419,11 +418,11 @@ int main(){
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatz.begin(),efz.begin());
 
-    gt::stop("electric_field");
+    //gt::stop("electric_field");
 
     // Main of K step
 
-    gt::start("coefficients C");
+    //gt::start("coefficients C");
 
     coeff(lr_sol.V, lr_sol.V, we_v.begin(), C1v);
     coeff(lr_sol.V, lr_sol.V, we_w.begin(), C1w);
@@ -443,11 +442,11 @@ int main(){
     coeff(lr_sol.V, dV_w, h_vv[0]*h_vv[1]*h_vv[2], C2w);
     coeff(lr_sol.V, dV_u, h_vv[0]*h_vv[1]*h_vv[2], C2u);
 
-    gt::stop("coefficients C");
+    //gt::stop("coefficients C");
 
-    gt::start("K");
+    //gt::start("K");
 
-    gt::start("Schur_K");
+    //gt::start("Schur_K");
     schur(C1v, Tv, dcv_r, lwork);
     schur(C1w, Tw, dcw_r, lwork);
     schur(C1u, Tu, dcu_r, lwork);
@@ -459,12 +458,12 @@ int main(){
     C2w.to_cplx(C2wc);
     C2u.to_cplx(C2uc);
 
-    gt::stop("Schur_K");
+    //gt::stop("Schur_K");
 
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
       // Full step -- Exact solution
-      gt::start("First_split_K");
+      //gt::start("First_split_K");
       fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
       matmul(Khat,Tvc,Mhat);
@@ -482,9 +481,9 @@ int main(){
       }
 
       matmul_transb(Mhat,Tvc,Khat);
-      gt::stop("First_split_K");
+      //gt::stop("First_split_K");
 
-      gt::start("Second_split_K");
+      //gt::start("Second_split_K");
       // Full step -- Exact solution
       matmul(Khat,Twc,Mhat);
       for(int rr = 0; rr < r; rr++){
@@ -503,10 +502,10 @@ int main(){
 
       fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
 
-      gt::stop("Second_split_K");
+      //gt::stop("Second_split_K");
 
       // Full step -- Exponential Euler
-      gt::start("Third_split_K");
+      //gt::start("Third_split_K");
 
       fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
       matmul(Khat,Tuc,Mhat);
@@ -528,6 +527,7 @@ int main(){
         matmul_transb(Kezhat,C2uc,tmpXhat);
         Khat += tmpXhat;
 
+        //gt::start("EE");
         matmul(Khat,Tuc,tmpXhat);
 
         for(int rr = 0; rr < r; rr++){
@@ -550,19 +550,20 @@ int main(){
         Khat *= ncxx;
 
         fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
+        //gt::stop("EE");
       }
-      gt::stop("Third_split_K");
+      //gt::stop("Third_split_K");
 
     }
 
-    gt::start("Gram_Schmidt_K");
+    //gt::start("Gram_Schmidt_K");
     gram_schmidt(lr_sol.X, lr_sol.S, ip_xx);
-    gt::stop("Gram_Schmidt_K");
+    //gt::stop("Gram_Schmidt_K");
 
-    gt::stop("K");
+    //gt::stop("K");
 
     // S Step
-    gt::start("coefficients D");
+    //gt::start("coefficients D");
 
     for(Index j = 0; j < (dxx_mult); j++){
       we_x(j) = efx(j) * h_xx[0] * h_xx[1] * h_xx[2];
@@ -588,9 +589,9 @@ int main(){
     coeff(lr_sol.X, dX_y, h_xx[0]*h_xx[1]*h_xx[2], D2y);
     coeff(lr_sol.X, dX_z, h_xx[0]*h_xx[1]*h_xx[2], D2z);
 
-    gt::stop("coefficients D");
+    //gt::stop("coefficients D");
 
-    gt::start("S");
+    //gt::start("S");
 
     // Explicit Euler
     for(Index jj = 0; jj< nsteps_split; jj++){
@@ -625,7 +626,7 @@ int main(){
       lr_sol.S += Tv;
     }
 
-    gt::stop("S");
+    //gt::stop("S");
 
     // L step - here we reuse some old variable names
 
@@ -633,9 +634,9 @@ int main(){
 
     matmul_transb(tmpV,lr_sol.S,lr_sol.V);
 
-    gt::start("L");
+    //gt::start("L");
 
-    gt::start("Schur_L");
+    //gt::start("Schur_L");
     schur(D1x, Tv, dcv_r, lwork);
     schur(D1y, Tw, dcw_r, lwork);
     schur(D1z, Tu, dcu_r, lwork);
@@ -646,11 +647,11 @@ int main(){
     D2x.to_cplx(C2vc);
     D2y.to_cplx(C2wc);
     D2z.to_cplx(C2uc);
-    gt::stop("Schur_L");
+    //gt::stop("Schur_L");
 
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
-      gt::start("First_split_L");
+      //gt::start("First_split_L");
 
       // Full step -- Exact solution
       fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
@@ -671,9 +672,9 @@ int main(){
 
       matmul_transb(Nhat,Tvc,Lhat);
 
-      gt::stop("First_split_L");
+      //gt::stop("First_split_L");
 
-      gt::start("Second_split_L");
+      //gt::start("Second_split_L");
 
       matmul(Lhat,Twc,Nhat);
 
@@ -693,9 +694,9 @@ int main(){
       matmul_transb(Nhat,Twc,Lhat);
 
       fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
-      gt::stop("Second_split_L");
+      //gt::stop("Second_split_L");
 
-      gt::start("Third_split_L");
+      //gt::start("Third_split_L");
 
       // Full step -- Exponential euler
       fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
@@ -740,31 +741,31 @@ int main(){
 
         fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
       }
-      gt::stop("Third_split_L");
+      //gt::stop("Third_split_L");
 
     }
-    gt::start("Gram_Schmidt_L");
+    //gt::start("Gram_Schmidt_L");
     gram_schmidt(lr_sol.V, lr_sol.S, ip_vv);
-    gt::stop("Gram_Schmidt_L");
+    //gt::stop("Gram_Schmidt_L");
 
-    gt::start("Transpose_S");
+    //gt::start("Transpose_S");
 
     transpose_inplace(lr_sol.S);
 
-    gt::stop("Transpose_S");
+    //gt::stop("Transpose_S");
 
-    gt::stop("L");
+    //gt::stop("L");
 
-    gt::stop("time_loop");
+    //gt::stop("time_loop");
 
     // Electric energy
-    gt::start("output");
+    //gt::start("output");
     el_energy = 0.0;
     for(Index ii = 0; ii < (dxx_mult); ii++){
       el_energy += 0.5*(pow(efx(ii),2)+pow(efy(ii),2)+pow(efz(ii),2))*h_xx[0]*h_xx[1]*h_xx[2];
     }
-    //cout << "Electric energy: " << el_energy << endl;
-    //el_energyf << el_energy << endl;
+    cout << "Electric energy: " << el_energy << endl;
+    el_energyf << el_energy << endl;
 
     // Error Mass
     coeff_one(lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],int_x);
@@ -779,8 +780,8 @@ int main(){
 
     err_mass = abs(mass0-mass);
 
-    //cout << "Error in mass: " << err_mass << endl;
-    //err_massf << err_mass << endl;
+    cout << "Error in mass: " << err_mass << endl;
+    err_massf << err_mass << endl;
 
     coeff_one(lr_sol.V,we_v2.begin(),int_v);
     coeff_one(lr_sol.V,we_w2.begin(),int_v2);
@@ -800,10 +801,10 @@ int main(){
 
     err_energy = abs(energy0-energy);
 
-    //cout << "Error in energy: " << err_energy << endl;
-    //err_energyf << err_energy << endl;
+    cout << "Error in energy: " << err_energy << endl;
+    err_energyf << err_energy << endl;
 
-    gt::stop("output");
+    //gt::stop("output");
   }
 
 
@@ -811,7 +812,11 @@ int main(){
   err_massf.close();
   err_energyf.close();
 
-  cout << gt::sorted_output() << endl;
+//  cout << gt::sorted_output() << endl;
+
+//  times << gt::sorted_output() << endl;
+
+//  times.close();
 
   return 0;
 }

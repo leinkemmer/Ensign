@@ -9,6 +9,11 @@
 
 int main(){
 
+  ofstream time_error_2d;
+  ofstream tau_span_2d;
+  time_error_2d.open("time_error_2d.txt");
+  tau_span_2d.open("tau_span_2d.txt");
+
   array<Index,2> N_xx = {16,16}; // Sizes in space
   array<Index,2> N_vv = {64,64}; // Sizes in velocity
 
@@ -910,11 +915,19 @@ int main(){
       }
     }
     error_vec(i_err) = error;
+
+    time_error_2d << error << endl;
+    tau_span_2d << tau << endl;
+
     i_err += 1;
 
 
   }
 
   cout << error_vec << endl;
+
+  time_error_2d.close();
+  tau_span_2d.close();
+
   return 0;
 }

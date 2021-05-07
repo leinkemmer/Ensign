@@ -64,7 +64,7 @@ template void ptw_mult_row(multi_array<complex<double>,2>&, complex<double>*, mu
 template void ptw_mult_row(multi_array<complex<float>,2>&, complex<float>*, multi_array<complex<float>,2>&);
 
 
-template<class T> // we should write a kernel for this one, will be performed on the GPU
+template<class T> // kernel?
 void transpose_inplace(multi_array<T,2>& a){
   Index m = a.shape()[0];
   T tmp = 0.0;
@@ -124,9 +124,27 @@ void matmul(const multi_array<complex<double>,2>& a, const multi_array<complex<d
       b.begin(), a.shape()[1], &zero,
       c.begin(), a.shape()[0]);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
-      // TO DO
+      #ifdef __CUDACC__
+        cublasHandle_t  handle;
+        cublasCreate (&handle);
+        complex<double> one(1.0,0.0);
+        complex<double> zero(0.0,0.0);
+
+        cublasZgemm(handle,CUBLAS_OP_N,CUBLAS_OP_N,
+          a.shape()[0],b.shape()[1],a.shape()[1],
+          (cuDoubleComplex*)&one,(cuDoubleComplex*)a.begin(),a.shape()[0],
+          (cuDoubleComplex*)b.begin(),a.shape()[1],(cuDoubleComplex*)&zero,
+          (cuDoubleComplex*)c.begin(), a.shape()[0]);
+
+      #else
+        cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
+        << __LINE__ << endl;
+        exit(1);
+      #endif
       } else {
-        // TO DO
+        cout << "ERROR: inputs and output must be all on CPU or on GPU" << __FILE__ << ":"
+        << __LINE__ << endl;
+        exit(1);
       }
 }
 
@@ -299,9 +317,29 @@ void matmul_transb(const multi_array<complex<double>,2>& a, const multi_array<co
       b.begin(), b.shape()[0], &zero,
       c.begin(), a.shape()[0]);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
-      // TO DO
+      #ifdef __CUDACC__
+        cublasHandle_t  handle;
+        cublasCreate (&handle);
+        complex<double> one(1.0,0.0);
+        complex<double> zero(0.0,0.0);
+
+        cublasZgemm(handle,CUBLAS_OP_N,CUBLAS_OP_T,
+          a.shape()[0],b.shape()[0],a.shape()[1],
+          (cuDoubleComplex*)&one,(cuDoubleComplex*)a.begin(),a.shape()[0],
+          (cuDoubleComplex*)b.begin(),b.shape()[0],(cuDoubleComplex*)&zero,
+          (cuDoubleComplex*)c.begin(), a.shape()[0]);
+
+      #else
+        cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
+        << __LINE__ << endl;
+        exit(1);
+      #endif
+
       } else {
-        // TO DO
+        cout << "ERROR: inputs and output must be all on CPU or on GPU" << __FILE__ << ":"
+        << __LINE__ << endl;
+        exit(1);
+
       }
 }
 
@@ -378,9 +416,27 @@ void matvec(const multi_array<double,2>& a, const multi_array<double,1>& b, mult
       b.begin(), 1, 0.0,
       c.begin(), 1);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
-      // TO DO
+      #ifdef __CUDACC__
+      cublasHandle_t  handle;
+      cublasCreate (&handle);
+      double alpha = 1.0;
+      double beta = 0.0;
+
+      cublasDgemv(handle,CUBLAS_OP_N,a.shape()[0], a.shape()[1],
+      &alpha, a.begin(), a.shape()[0],
+      b.begin(), 1, &beta,
+      c.begin(), 1);
+
+      #else
+      cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
+      << __LINE__ << endl;
+      exit(1);
+      #endif
+
       } else {
-        // TO DO
+        cout << "ERROR: inputs and output must be all on CPU or on GPU" << __FILE__ << ":"
+        << __LINE__ << endl;
+        exit(1);
       }
 
 }

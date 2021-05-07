@@ -167,6 +167,11 @@ struct multi_array {
     return *this;
   }
 
+  multi_array& operator+=(const T scalar) {
+    std::transform(begin(), end(), begin(), [&scalar](T& a){return scalar+a;} );
+    return *this;
+  }
+
   multi_array& operator-=(const multi_array& lhs) {
     std::transform(begin(), end(), lhs.begin(), begin(), [](T& a, T& b){return a-b;} );
     return *this;
@@ -178,7 +183,7 @@ struct multi_array {
   }
 
   multi_array& operator/=(const T scalar) {
-    std::transform(begin(), end(), begin(), [&scalar](T& a){return scalar/a;} );
+    std::transform(begin(), end(), begin(), [&scalar](T& a){return a/scalar;} );
     return *this;
   }
 

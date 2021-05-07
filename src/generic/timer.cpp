@@ -80,8 +80,8 @@ namespace gt {
 
     bool is_master() {
         #ifdef _OPENMP
-        if(omp_get_thread_num() != 0)
-            return false;
+        //if(omp_get_thread_num() != 0)
+        //    return false;
         #endif
 
         return true;
@@ -94,7 +94,7 @@ namespace gt {
 
     void print() {
         for(auto el : timers)
-            cout << "gt " << el.first << ": " << el.second.total() << " s" 
+            cout << "gt " << el.first << ": " << el.second.total() << " s"
                 << endl;
     }
 
@@ -110,10 +110,10 @@ namespace gt {
         ss.setf(std::ios_base::scientific);
         for(auto el : sorted) {
             timer& t = el.second;
-            ss << std::setw(40) << el.first 
+            ss << std::setw(40) << el.first
                 << std::setw(15) << t.total()
-                << std::setw(15) << t.count() 
-                << std::setw(15) << t.average() 
+                << std::setw(15) << t.count()
+                << std::setw(15) << t.average()
                 << std::setw(15) << t.deviation()/t.average() << endl;
         }
         return ss.str();
@@ -142,5 +142,3 @@ namespace gt {
         return timers[name].deviation();
     }
 }
-
-
