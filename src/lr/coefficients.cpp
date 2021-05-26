@@ -1,20 +1,5 @@
 #include <lr/coefficients.hpp>
 
-#ifdef __CUDACC__
-template<class T>
-__global__ void ptw_mult_row_k(int nm, int n, T* A, T* v, T* B){
-  int idx = threadIdx.x + blockDim.x * blockIdx.x;
-
-  while(idx < nm){
-    B[idx] = A[idx] * v[idx % n];
-    idx += blockDim.x * gridDim.x;
-  }
-}
-template __global__ void ptw_mult_row_k(int, int, double*, double*, double*);
-template __global__ void ptw_mult_row_k(int, int, float*, float*, float*);
-
-#endif
-
 template<class T>
 void coeff(multi_array<T,2>& a, multi_array<T,2>& b, T w, multi_array<T,2>& out) {
   matmul_transa(a,b,out);

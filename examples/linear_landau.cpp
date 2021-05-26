@@ -4,33 +4,6 @@
 #include <lr/coefficients.hpp>
 #include <generic/kernels.hpp>
 
-#ifdef __CUDACC__
-array<cufftHandle,2> create_plans_1d(Index dims_){
-  array<cufftHandle,2> out;
-  int dims = int(dims_);
-  cufftPlan1d(&out[0], dims, CUFFT_D2Z,1);
-  cufftPlan1d(&out[1], dims, CUFFT_Z2D,1);
-
-  return out;
-}
-
-
-array<cufftHandle,2> create_plans_1d(Index dims_, int howmany){
-  array<cufftHandle,2> out;
-  int dims = int(dims_);
-
-  cufftPlanMany(&out[0], 1, &dims, NULL, 1, dims, NULL, 1, dims/2 + 1, CUFFT_D2Z, howmany);
-  cufftPlanMany(&out[1], 1, &dims, NULL, 1, dims/2 + 1, NULL, 1, dims, CUFFT_Z2D, howmany);
-
-  return out;
-}
-
-void destroy_plans(array<cufftHandle,2>& plans){
-  cufftDestroy(plans[0]);
-  cufftDestroy(plans[1]);
-}
-#endif
-
 int main(){
 
   Index Nx = 64; // NEEDS TO BE EVEN FOR FOURIER

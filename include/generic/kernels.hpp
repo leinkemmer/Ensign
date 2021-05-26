@@ -3,7 +3,19 @@
 #ifdef __CUDACC__
 
 template<class T>
+__global__ void fill_gpu(int n, T* v, T alpha);
+
+template<class T>
+__global__ void ptw_mult_scal(int n, T* A, T alpha);
+
+template<class T>
 __global__ void ptw_mult_row_k(int nm, int n, T* A, T* v, T* B);
+
+template<class T>
+__global__ void ptw_sum_scal(int n, T* A, T alpha);
+
+template<class T>
+__global__ void ptw_sum(int n, T* A, T* B);
 
 __global__ void der_fourier(int n, cuDoubleComplex* A, double ax, double bx, int nx);
 
@@ -32,8 +44,6 @@ __global__ void ptw_mult_row_cplx_fourier_2d(int N, int nx, int ny, cuDoubleComp
 __global__ void exact_sol_exp_2d(int N, int nx, int ny, cuDoubleComplex* A, double* dc_r, double ts, double* lims, double nxx); // Very similar, maybe can be put together
 
 __global__ void ptw_sum_complex(int n, cuDoubleComplex* A, cuDoubleComplex* B);
-
-__global__ void ptw_sum(int n, double* A, double* B);
 
 __global__ void ptw_sum_3mat(int n, double* A, double* B, double* C);
 

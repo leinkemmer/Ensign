@@ -4,35 +4,6 @@
 #include <lr/coefficients.hpp>
 #include <generic/kernels.hpp>
 
-#ifdef __CUDACC__
-
-array<cufftHandle,2> create_plans_2d(array<Index,2> dims_){
-  array<cufftHandle,2> out;
-
-  cufftPlan2d(&out[0],int(dims_[1]),int(dims_[0]),CUFFT_D2Z);
-  cufftPlan2d(&out[1],int(dims_[1]),int(dims_[0]),CUFFT_Z2D);
-
-  return out;
-}
-
-array<cufftHandle,2> create_plans_2d(array<Index,2> dims_, int howmany){
-  array<cufftHandle,2> out;
-  array<int,2> dims = {int(dims_[1]),int(dims_[0])};
-
-  cufftPlanMany(&out[0], 2, dims.begin(), NULL, 1, dims[1]*dims[0], NULL, 1, dims[0]*(dims[1]/2 + 1), CUFFT_D2Z, howmany);
-  cufftPlanMany(&out[1], 2, dims.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), NULL, 1, dims[1]*dims[0], CUFFT_Z2D, howmany);
-
-  return out;
-}
-
-void destroy_plans(array<cufftHandle,2>& plans){
-  cufftDestroy(plans[0]);
-  cufftDestroy(plans[1]);
-}
-
-#endif
-
-
 int main(){
 
   array<Index,2> N_xx = {64,64}; // Sizes in space

@@ -2,14 +2,20 @@
 
 #include <generic/common.hpp>
 #include <generic/storage.hpp>
+#include <generic/kernels.hpp>
 
 extern "C" {
   extern int dgees_(char*,char*,void*,int*,double*,int*, int*, double*, double*, double*, int*, double*, int*, bool*,int*);
 }
 
 #ifdef __CUDACC__
-template<class T>
-__global__ void ptw_mult_scal(int n, T* A, T alpha);
+array<cufftHandle,2> create_plans_1d(Index dims_);
+array<cufftHandle,2> create_plans_1d(Index dims_, int howmany);
+array<cufftHandle,2> create_plans_2d(array<Index,2> dims_);
+array<cufftHandle,2> create_plans_2d(array<Index,2> dims_, int howmany);
+array<cufftHandle,2> create_plans_3d(array<Index,3> dims_);
+array<cufftHandle,2> create_plans_3d(array<Index,3> dims_, int howmany);
+void destroy_plans(array<cufftHandle,2>& plans);
 #endif
 
 template<class T>

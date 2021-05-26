@@ -4,33 +4,6 @@
 #include <lr/coefficients.hpp>
 #include <generic/kernels.hpp>
 
-#ifdef __CUDACC__
-
-array<cufftHandle,2> create_plans_3d(array<Index,3> dims_){
-  array<cufftHandle,2> out;
-
-  cufftPlan3d(&out[0],int(dims_[2]),int(dims_[1]),int(dims_[0]),CUFFT_D2Z);
-  cufftPlan3d(&out[1],int(dims_[2]),int(dims_[1]),int(dims_[0]),CUFFT_Z2D);
-
-  return out;
-}
-
-array<cufftHandle,2> create_plans_3d(array<Index,3> dims_, int howmany){
-  array<cufftHandle,2> out;
-  array<int,3> dims = {int(dims_[2]),int(dims_[1]),int(dims_[0])};
-
-  cufftPlanMany(&out[0], 3, dims.begin(), NULL, 1, dims[2]*dims[1]*dims[0], NULL, 1, dims[0]*dims[1]*(dims[2]/2 + 1), CUFFT_D2Z, howmany);
-  cufftPlanMany(&out[1], 3, dims.begin(), NULL, 1, dims[0]*dims[1]*(dims[2]/2 + 1), NULL, 1, dims[2]*dims[1]*dims[0], CUFFT_Z2D, howmany);
-
-  return out;
-}
-
-void destroy_plans(array<cufftHandle,2>& plans){
-  cufftDestroy(plans[0]);
-  cufftDestroy(plans[1]);
-}
-#endif
-
 int main(){
   array<Index,3> N_xx = {16,16,16}; // Sizes in space
   array<Index,3> N_vv = {32,32,32}; // Sizes in velocity

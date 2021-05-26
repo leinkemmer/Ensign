@@ -2,47 +2,7 @@
 
 #include <generic/common.hpp>
 #include <generic/utility.hpp>
-
-#ifdef __CUDACC__
-  template<class T>
-  __global__ void ptw_sum_scal(int n, T* A, T alpha){
-    int idx = threadIdx.x + blockDim.x * blockIdx.x;
-
-    while(idx < n){
-      A[idx] += alpha;
-      idx += blockDim.x * gridDim.x;
-    }
-  }
-  template __global__ void ptw_sum_scal(int, double*, double);
-  template __global__ void ptw_sum_scal(int, float*, float);
-
-  template<class T>
-  __global__ void ptw_sum(int n, T* A, T* B){
-    int idx = threadIdx.x + blockDim.x * blockIdx.x;
-
-    while(idx < n){
-      A[idx] += B[idx];
-      idx += blockDim.x * gridDim.x;
-    }
-  }
-  template __global__ void ptw_sum(int, double*, double*);
-  template __global__ void ptw_sum(int, float*, float*);
-
-
-/*
-  template<class T>
-  __global__ void ptw_mult_scal(int n, T* A, T alpha){
-    int idx = threadIdx.x + blockDim.x * blockIdx.x;
-
-    while(idx < n){
-      A[idx] *= alpha;
-      idx += blockDim.x * gridDim.x;
-    }
-  }
-  template __global__ void ptw_mult_scal(int n, double*, double);
-  template __global__ void ptw_mult_scal(int n, float*, float);
-*/
-#endif
+#include <generic/kernels.hpp>
 
 template<class T, size_t d>
 struct multi_array {

@@ -1,35 +1,6 @@
 #include <generic/matrix.hpp>
 #include <generic/timer.hpp>
 
-#ifdef __CUDACC__
-
-  template<class T>
-  __global__ void fill_gpu(int n, T* v, T alpha){
-    int idx = threadIdx.x + blockDim.x * blockIdx.x;
-
-    while(idx < n){
-      v[idx] = alpha;
-      idx += blockDim.x * gridDim.x;
-    }
-  }
-  template __global__ void fill_gpu(int n, double*, double);
-  template __global__ void fill_gpu(int n, float*, float);
-
-  template<class T>
-  __global__ void ptw_mult_scal(int n, T* A, T alpha){
-    int idx = threadIdx.x + blockDim.x * blockIdx.x;
-
-    while(idx < n){
-      A[idx] *= alpha;
-      idx += blockDim.x * gridDim.x;
-    }
-  }
-  template __global__ void ptw_mult_scal(int, double*, double);
-  template __global__ void ptw_mult_scal(int, float*, float);
-
-#endif
-
-
 template<class T>
 void set_zero(multi_array<T,2>& a) {
   if(a.sl == stloc::host) {
@@ -587,7 +558,6 @@ void matvec_trans(const multi_array<float,2>& a, const multi_array<float,1>& b, 
 
 }
 
-
 array<fftw_plan,2> create_plans_1d(Index dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq){
   array<fftw_plan,2> out;
   int dims = int(dims_);
@@ -673,6 +643,72 @@ void schur(multi_array<double,2>& CC, multi_array<double,2>& TT, multi_array<dou
     dgees_(&jobvs,&sort,nullptr,&nn,D.begin(),&lda,&value,diag_r.begin(),diag_i.begin(),TT.begin(),&ldvs,work.begin(),&lwork,nullptr,&info);
   }
 }
+
+#ifdef __CUDACC__
+
+  array<cufftHandle,2> create_plans_1d(Index dims_){
+    array<cufftHandle,2> out;
+    int dims = int(dims_);
+    cufftPlan1d(&out[0], dims, CUFFT_D2Z,1);
+    cufftPlan1d(&out[1], dims, CUFFT_Z2D,1);
+
+    return out;
+  }
+
+  array<cufftHandle,2> create_plans_1d(Index dims_, int howmany){
+    array<cufftHandle,2> out;
+    int dims = int(dims_);
+
+    cufftPlanMany(&out[0], 1, &dims, NULL, 1, dims, NULL, 1, dims/2 + 1, CUFFT_D2Z, howmany);
+    cufftPlanMany(&out[1], 1, &dims, NULL, 1, dims/2 + 1, NULL, 1, dims, CUFFT_Z2D, howmany);
+
+    return out;
+  }
+
+  array<cufftHandle,2> create_plans_2d(array<Index,2> dims_){
+    array<cufftHandle,2> out;
+
+    cufftPlan2d(&out[0],int(dims_[1]),int(dims_[0]),CUFFT_D2Z);
+    cufftPlan2d(&out[1],int(dims_[1]),int(dims_[0]),CUFFT_Z2D);
+
+    return out;
+  }
+
+  array<cufftHandle,2> create_plans_2d(array<Index,2> dims_, int howmany){
+    array<cufftHandle,2> out;
+    array<int,2> dims = {int(dims_[1]),int(dims_[0])};
+
+    cufftPlanMany(&out[0], 2, dims.begin(), NULL, 1, dims[1]*dims[0], NULL, 1, dims[0]*(dims[1]/2 + 1), CUFFT_D2Z, howmany);
+    cufftPlanMany(&out[1], 2, dims.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), NULL, 1, dims[1]*dims[0], CUFFT_Z2D, howmany);
+
+    return out;
+  }
+
+  array<cufftHandle,2> create_plans_3d(array<Index,3> dims_){
+    array<cufftHandle,2> out;
+
+    cufftPlan3d(&out[0],int(dims_[2]),int(dims_[1]),int(dims_[0]),CUFFT_D2Z);
+    cufftPlan3d(&out[1],int(dims_[2]),int(dims_[1]),int(dims_[0]),CUFFT_Z2D);
+
+    return out;
+  }
+
+  array<cufftHandle,2> create_plans_3d(array<Index,3> dims_, int howmany){
+    array<cufftHandle,2> out;
+    array<int,3> dims = {int(dims_[2]),int(dims_[1]),int(dims_[0])};
+
+    cufftPlanMany(&out[0], 3, dims.begin(), NULL, 1, dims[2]*dims[1]*dims[0], NULL, 1, dims[0]*dims[1]*(dims[2]/2 + 1), CUFFT_D2Z, howmany);
+    cufftPlanMany(&out[1], 3, dims.begin(), NULL, 1, dims[0]*dims[1]*(dims[2]/2 + 1), NULL, 1, dims[2]*dims[1]*dims[0], CUFFT_Z2D, howmany);
+
+    return out;
+  }
+
+  void destroy_plans(array<cufftHandle,2>& plans){
+    cufftDestroy(plans[0]);
+    cufftDestroy(plans[1]);
+  }
+
+#endif
 
 //template<class T>
 //void matmul_transa(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c);
