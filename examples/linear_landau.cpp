@@ -2,10 +2,34 @@
 #include <generic/matrix.hpp>
 #include <generic/storage.hpp>
 #include <lr/coefficients.hpp>
+#include <generic/kernels.hpp>
 
-#include <random>
-#include <complex>
-#include <cstring>
+#ifdef __CUDACC__
+array<cufftHandle,2> create_plans_1d(Index dims_){
+  array<cufftHandle,2> out;
+  int dims = int(dims_);
+  cufftPlan1d(&out[0], dims, CUFFT_D2Z,1);
+  cufftPlan1d(&out[1], dims, CUFFT_Z2D,1);
+
+  return out;
+}
+
+
+array<cufftHandle,2> create_plans_1d(Index dims_, int howmany){
+  array<cufftHandle,2> out;
+  int dims = int(dims_);
+
+  cufftPlanMany(&out[0], 1, &dims, NULL, 1, dims, NULL, 1, dims/2 + 1, CUFFT_D2Z, howmany);
+  cufftPlanMany(&out[1], 1, &dims, NULL, 1, dims/2 + 1, NULL, 1, dims, CUFFT_Z2D, howmany);
+
+  return out;
+}
+
+void destroy_plans(array<cufftHandle,2>& plans){
+  cufftDestroy(plans[0]);
+  cufftDestroy(plans[1]);
+}
+#endif
 
 int main(){
 
@@ -17,7 +41,7 @@ int main(){
   double tstar = 100; // final time
   double tau = 0.00625; // time step splitting
 
-  int nsteps_ee = 10; // number of time steps for explicit euler
+  int nsteps_ee = 1; // number of time steps for explicit euler
 
   double ax = 0;
   double bx = 4.0*M_PI;
@@ -64,9 +88,6 @@ int main(){
   array<fftw_plan,2> plans_e = create_plans_1d(Nx, ef, efhat);
 
   // For FFT -- Pay attention we have to cast to int as Index seems not to work with fftw_many
-  int nx = int(Nx);
-  int nv = int(Nv);
-
   multi_array<complex<double>,2> Khat({Nx/2+1,r});
   multi_array<complex<double>,2> Lhat({Nv/2+1,r});
 
@@ -169,7 +190,7 @@ int main(){
   matvec(lr_sol.X,rho,ef);
 
   ef += 1.0;
-  
+
   fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
 
   efhat(0) = complex<double>(0.0,0.0);
@@ -191,7 +212,7 @@ int main(){
     wv2(j) = pow(v(j),2) * hv;
   }
 
-  coeff_one(lr_sol.V,wv2.begin(),int_v);
+  coeff_one(lr_sol.V,wv2,int_v);
 
   matvec(lr_sol.S,int_v,tmp_vec);
 
@@ -199,32 +220,143 @@ int main(){
     energy0 += (0.5*int_x(ii)*tmp_vec(ii));
   }
 
-  cout.precision(15);
+  cout.precision(5);
   cout << std::scientific;
 
-  ofstream el_energyf;
-  ofstream err_massf;
-  ofstream err_energyf;
+  //ofstream el_energyf;
+  //ofstream err_massf;
+  //ofstream err_energyf;
 
-  el_energyf.open("el_energy_1d.txt");
-  err_massf.open("err_mass_1d.txt");
-  err_energyf.open("err_energy_1d.txt");
+  //el_energyf.open("el_energy_1d.txt");
+  //err_massf.open("err_mass_1d.txt");
+  //err_energyf.open("err_energy_1d.txt");
 
-  el_energyf.precision(16);
-  err_massf.precision(16);
-  err_energyf.precision(16);
+  //el_energyf.precision(16);
+  //err_massf.precision(16);
+  //err_energyf.precision(16);
 
-  el_energyf << tstar << endl;
-  el_energyf << tau << endl;
+  //el_energyf << tstar << endl;
+  //el_energyf << tau << endl;
 
   multi_array<double,2> tmpX({Nx,r});
   multi_array<double,2> tmpV({Nv,r});
   multi_array<double,2> tmpS({r,r});
 
+  //// FOR GPU ////
+  #ifdef __CUDACC__
+  // To be substituted if we initialize in GPU
+
+  lr2<double> d_lr_sol(r,{Nx,Nv}, stloc::device);
+  d_lr_sol.X = lr_sol.X;
+  d_lr_sol.S = lr_sol.S;
+  d_lr_sol.V = lr_sol.V;
+
+  // Electric field
+  multi_array<double,1> d_rho({r},stloc::device);
+  multi_array<double,1> d_ef({Nx},stloc::device);
+  multi_array<cuDoubleComplex,1> d_efhat({Nx/2 + 1},stloc::device);
+
+  array<cufftHandle,2> plans_d_e = create_plans_1d(Nx);
+
+  // For FFT
+  multi_array<cuDoubleComplex,2> d_Khat({Nx/2+1,r},stloc::device);
+  multi_array<cuDoubleComplex,2> d_Lhat({Nv/2+1,r},stloc::device);
+
+  array<cufftHandle,2> plans_d_x = create_plans_1d(Nx, r);
+  array<cufftHandle,2> plans_d_v = create_plans_1d(Nv, r);
+
+  multi_array<cuDoubleComplex,2> d_Kehat({Nx/2+1,r},stloc::device);
+  multi_array<cuDoubleComplex,2> d_Mhattmp({Nx/2+1,r},stloc::device);
+
+  multi_array<cuDoubleComplex,2> d_Lvhat({Nv/2+1,r},stloc::device);
+  multi_array<cuDoubleComplex,2> d_Nhattmp({Nv/2+1,r},stloc::device);
+
+
+  // C coefficients
+  multi_array<double,2> d_C1({r,r},stloc::device);
+  multi_array<double,2> d_C2({r,r},stloc::device);
+  multi_array<cuDoubleComplex,2> d_C2c({r,r},stloc::device);
+
+  multi_array<double,1> d_wv({Nv},stloc::device);
+  d_wv = wv;
+
+  multi_array<double,2> d_dV({Nv,r},stloc::device);
+
+  // Schur
+  multi_array<double,2> C1_gpu({r,r});
+  multi_array<double,2> T_gpu({r,r});
+  multi_array<double,1> dc_r_gpu({r});
+
+  multi_array<double,1> d_dc_r({r},stloc::device);
+  multi_array<double,2> d_T({r,r},stloc::device);
+  multi_array<double,2> d_multmp({r,r},stloc::device);
+
+  multi_array<cuDoubleComplex,2> d_Mhat({Nx/2 + 1,r},stloc::device);
+
+  multi_array<cuDoubleComplex,2> d_Tc({r,r},stloc::device);
+
+  // D coefficients
+  multi_array<double,2> d_D1({r,r},stloc::device);
+  multi_array<double,2> d_D2({r,r},stloc::device);
+
+  multi_array<double,1> d_wx({Nx},stloc::device);
+  multi_array<double,2> d_dX({Nx,r},stloc::device);
+
+  multi_array<cuDoubleComplex,2> d_Nhat({Nv/2 + 1,r},stloc::device);
+
+  multi_array<double,2> D1_gpu({r,r});
+
+  multi_array<double,1> d_v({Nv},stloc::device);
+  d_v = v;
+
+  // For plots
+  double* d_el_energy;
+  cudaMalloc((void**)&d_el_energy,sizeof(double));
+  double d_el_energy_CPU;
+
+  multi_array<double,1> d_int_x({r},stloc::device);
+  multi_array<double,1> d_int_v({r},stloc::device);
+  multi_array<double,1> d_tmp_vec({r},stloc::device);
+
+  double* d_mass;
+  cudaMalloc((void**)&d_mass,sizeof(double));
+  double d_mass_CPU;
+  double err_mass_CPU;
+
+  multi_array<double,1> d_wv2({Nv},stloc::device);
+  d_wv2 = wv2;
+
+  double* d_energy;
+  cudaMalloc((void**)&d_energy,sizeof(double));
+  double d_energy_CPU;
+  double err_energy_CPU;
+
+  //ofstream el_energyGPUf;
+  //ofstream err_massGPUf;
+  //ofstream err_energyGPUf;
+
+  //el_energyGPUf.open("el_energy_gpu_1d.txt");
+  //err_massGPUf.open("err_mass_gpu_1d.txt");
+  //err_energyGPUf.open("err_energy_gpu_1d.txt");
+
+  //el_energyGPUf.precision(16);
+  //err_massGPUf.precision(16);
+  //err_energyGPUf.precision(16);
+
+  //el_energyGPUf << tstar << endl;
+  //el_energyGPUf << tau << endl;
+
+  // Temporary
+  multi_array<double,2> d_tmpX({Nx,r},stloc::device);
+  multi_array<double,2> d_tmpS({r,r},stloc::device);
+  multi_array<double,2> d_tmpV({Nv,r},stloc::device);
+  #endif
+
   for(Index i = 0; i < nsteps; i++){
 
     cout << "Time step " << i << " on " << nsteps << endl;
 
+    // CPU
     /* K step */
     tmpX = lr_sol.X;
 
@@ -232,9 +364,7 @@ int main(){
 
     // Electric field
 
-    coeff_one(lr_sol.V,hv,rho);
-
-    rho *= -1.0;
+    coeff_one(lr_sol.V,-hv,rho);
 
     matvec(lr_sol.X,rho,ef);
 
@@ -266,6 +396,7 @@ int main(){
     schur(C1, T, dc_r, lwork);
 
     T.to_cplx(Tc);
+
     C2.to_cplx(C2c);
 
     fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
@@ -279,6 +410,7 @@ int main(){
       fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Kehat.begin());
 
       matmul_transb(Kehat,C2c,Khat);
+
       matmul(Khat,Tc,Mhattmp);
 
       for(int k = 0; k < r; k++){
@@ -289,6 +421,7 @@ int main(){
           Mhat(j,k) += ts_ee*phi1_im(-ts_ee*lambdax*dc_r(k))*Mhattmp(j,k);
         }
       }
+
       matmul_transb(Mhat,Tc,Khat);
 
       Khat *= ncx;
@@ -300,6 +433,7 @@ int main(){
     gram_schmidt(lr_sol.X, lr_sol.S, ip_x);
 
     /* S step */
+
     for(Index ii = 0; ii < Nx; ii++){
       wx(ii) = hx*ef(ii);
     }
@@ -325,6 +459,7 @@ int main(){
       T -= multmp;
       T *= ts_ee;
       lr_sol.S += T;
+
     }
 
     /* L step */
@@ -348,6 +483,7 @@ int main(){
       fftw_execute_dft_r2c(plans_v[0],lr_sol.V.begin(),(fftw_complex*)Lvhat.begin());
 
       matmul_transb(Lvhat,C2c,Lhat);
+
       matmul(Lhat,Tc,Nhattmp);
 
       for(int k = 0; k < r; k++){
@@ -358,9 +494,11 @@ int main(){
           Nhat(j,k) += -ts_ee*phi1_im(ts_ee*lambdav*dc_r(k))*Nhattmp(j,k);
         }
       }
+
       matmul_transb(Nhat,Tc,Lhat);
 
       Lhat *= ncv;
+
       fftw_execute_dft_c2r(plans_v[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
 
     }
@@ -375,11 +513,11 @@ int main(){
       el_energy += 0.5*pow(ef(ii),2)*hx;
     }
 
-    cout << "Electric energy: " << el_energy << endl;
-    el_energyf << el_energy << endl;
+    //el_energyf << el_energy << endl;
 
     // Error mass
     coeff_one(lr_sol.X,hx,int_x);
+
     coeff_one(lr_sol.V,hv,int_v);
 
     matvec(lr_sol.S,int_v,tmp_vec);
@@ -391,10 +529,9 @@ int main(){
 
     err_mass = abs(mass0-mass);
 
-    cout << "Error in mass: " << err_mass << endl;
-    err_massf << err_mass << endl;
+    //err_massf << err_mass << endl;
 
-    coeff_one(lr_sol.V,wv2.begin(),int_v);
+    coeff_one(lr_sol.V,wv2,int_v);
 
     matvec(lr_sol.S,int_v,tmp_vec);
 
@@ -405,15 +542,215 @@ int main(){
 
     err_energy = abs(energy0-energy);
 
-    cout << "Error in energy: " << err_energy << endl;
-    err_energyf << err_energy << endl;
+    //err_energyf << err_energy << endl;
 
+    // GPU
+  #ifdef __CUDACC__
+    // K step
+
+    d_tmpX = d_lr_sol.X;
+
+    matmul(d_tmpX,d_lr_sol.S,d_lr_sol.X);
+
+    coeff_one(d_lr_sol.V,-hv,d_rho);
+
+    matvec(d_lr_sol.X,d_rho,d_ef);
+
+    d_ef += 1.0;
+
+    cufftExecD2Z(plans_d_e[0],d_ef.begin(),(cufftDoubleComplex*)d_efhat.begin());
+
+    der_fourier<<<2,2>>>(Nx/2+1, d_efhat.begin(), ax, bx, Nx); //128 threads blocks as needed
+
+    cufftExecZ2D(plans_d_e[1],(cufftDoubleComplex*)d_efhat.begin(),d_ef.begin());
+
+    coeff(d_lr_sol.V, d_lr_sol.V, d_wv.begin(), d_C1);
+
+    cufftExecD2Z(plans_d_v[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
+
+    ptw_mult_row_cplx_fourier<<<2,2>>>(d_Lhat.num_elements(), d_Lhat.shape()[0], Nv, d_Lhat.begin(), av, bv);
+
+    cufftExecZ2D(plans_d_v[1],(cufftDoubleComplex*)d_Lhat.begin(),d_dV.begin());
+
+    coeff(d_lr_sol.V, d_dV, hv, d_C2);
+
+    C1_gpu = d_C1;
+    schur(C1_gpu, T_gpu, dc_r_gpu, lwork);
+    d_T = T_gpu;
+    d_dc_r = dc_r_gpu;
+
+    cplx_conv<<<2,2>>>(d_T.num_elements(), d_T.begin(), d_Tc.begin());
+
+    cplx_conv<<<2,2>>>(d_C2.num_elements(), d_C2.begin(), d_C2c.begin());
+
+    cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
+
+    matmul(d_Khat,d_Tc,d_Mhat);
+
+    for(int kk = 0; kk < nsteps_ee; kk++){
+
+      ptw_mult_row_k<<<2,2>>>(d_lr_sol.X.num_elements(),d_lr_sol.X.shape()[0],d_lr_sol.X.begin(),d_ef.begin(),d_lr_sol.X.begin());
+
+      cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Kehat.begin());
+
+      matmul_transb(d_Kehat,d_C2c,d_Khat);
+
+      matmul(d_Khat,d_Tc,d_Mhattmp);
+
+      exp_euler_fourier<<<2,2>>>(d_Mhat.num_elements(), d_Mhat.shape()[0], d_Mhat.begin(), d_dc_r.begin(), ts_ee, d_Mhattmp.begin(), ax, bx);
+
+      matmul_transb(d_Mhat,d_Tc,d_Khat);
+
+      ptw_mult_cplx<<<2,2>>>(d_Khat.num_elements(),d_Khat.begin(),ncx);
+
+      cufftExecZ2D(plans_d_x[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin());
+
+    }
+
+    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, hx);
+
+    // S step
+
+    ptw_mult_scal<<<2,2>>>(d_ef.num_elements(), d_ef.begin(), hx, d_wx.begin());
+
+    coeff(d_lr_sol.X, d_lr_sol.X, d_wx.begin(), d_D1);
+
+    cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
+
+    ptw_mult_row_cplx_fourier<<<2,2>>>(d_Khat.num_elements(), d_Khat.shape()[0], Nx, d_Khat.begin(), ax, bx);
+
+    cufftExecZ2D(plans_d_x[1],(cufftDoubleComplex*)d_Khat.begin(),d_dX.begin());
+
+    coeff(d_lr_sol.X, d_dX, hx, d_D2);
+
+    // Explicit Euler
+    for(int j = 0; j< nsteps_ee; j++){
+      matmul_transb(d_lr_sol.S,d_C1,d_tmpS);
+      matmul(d_D2,d_tmpS,d_T);
+
+      matmul_transb(d_lr_sol.S,d_C2,d_tmpS);
+      matmul(d_D1,d_tmpS,d_multmp);
+
+      expl_euler<<<2,2>>>(d_D1.num_elements(), d_lr_sol.S.begin(), ts_ee, d_T.begin(), d_multmp.begin());
+    }
+
+    // L step
+    d_tmpV = d_lr_sol.V;
+
+    matmul_transb(d_tmpV,d_lr_sol.S,d_lr_sol.V);
+
+    D1_gpu = d_D1;
+    schur(D1_gpu, T_gpu, dc_r_gpu, lwork);
+    d_T = T_gpu;
+    d_dc_r = dc_r_gpu;
+
+    cplx_conv<<<2,2>>>(d_T.num_elements(), d_T.begin(), d_Tc.begin());
+
+    cplx_conv<<<2,2>>>(d_D2.num_elements(), d_D2.begin(), d_C2c.begin());
+
+    cufftExecD2Z(plans_d_v[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
+
+    matmul(d_Lhat,d_Tc,d_Nhat);
+
+    for(int kk = 0; kk < nsteps_ee; kk++){
+
+      ptw_mult_row_k<<<2,2>>>(d_lr_sol.V.num_elements(),d_lr_sol.V.shape()[0],d_lr_sol.V.begin(),d_v.begin(),d_lr_sol.V.begin());
+
+      cufftExecD2Z(plans_d_v[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lvhat.begin());
+
+      matmul_transb(d_Lvhat,d_C2c,d_Lhat);
+
+      matmul(d_Lhat,d_Tc,d_Nhattmp);
+
+      exp_euler_fourier<<<2,2>>>(d_Nhat.num_elements(), d_Nhat.shape()[0], d_Nhat.begin(), d_dc_r.begin(), -ts_ee, d_Nhattmp.begin(), av, bv);
+
+      matmul_transb(d_Nhat,d_Tc,d_Lhat);
+
+      ptw_mult_cplx<<<2,2>>>(d_Lhat.num_elements(),d_Lhat.begin(),ncv);
+
+      cufftExecZ2D(plans_d_v[1],(cufftDoubleComplex*)d_Lhat.begin(),d_lr_sol.V.begin());
+
+    }
+
+    gram_schmidt_gpu(d_lr_sol.V, d_lr_sol.S, hv);
+
+    transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
+
+    cublasHandle_t  handle;
+    cublasCreate (&handle);
+
+    cublasDdot (handle, Nx, d_ef.begin(), 1, d_ef.begin(), 1, d_el_energy);
+    scale_unique<<<1,1>>>(d_el_energy,0.5*hx); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
+
+    cudaMemcpy(&d_el_energy_CPU,d_el_energy,sizeof(double),cudaMemcpyDeviceToHost);
+
+    //el_energyGPUf << d_el_energy_CPU << endl;
+
+    // Error mass
+    coeff_one(d_lr_sol.X,hx,d_int_x);
+
+    coeff_one(d_lr_sol.V,hv,d_int_v);
+
+    matvec(d_lr_sol.S,d_int_v,d_tmp_vec);
+
+    cublasDdot (handle, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_mass);
+
+    cudaMemcpy(&d_mass_CPU,d_mass,sizeof(double),cudaMemcpyDeviceToHost);
+
+    err_mass_CPU = abs(mass0-d_mass_CPU);
+
+    //err_massGPUf << err_mass_CPU << endl;
+
+    coeff_one(d_lr_sol.V,d_wv2,d_int_v);
+
+    matvec(d_lr_sol.S,d_int_v,d_tmp_vec);
+
+    cublasDdot (handle, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_energy);
+    scale_unique<<<1,1>>>(d_energy,0.5); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
+
+    cudaMemcpy(&d_energy_CPU,d_energy,sizeof(double),cudaMemcpyDeviceToHost);
+
+    err_energy_CPU = abs(energy0-(d_energy_CPU+d_el_energy_CPU));
+
+    //err_energyGPUf << err_energy_CPU << endl;
+
+    cublasDestroy(handle);
+    #endif
+
+    cout << "Electric energy CPU: " << el_energy << endl;
+    #ifdef __CUDACC__
+    cout << "Electric energy GPU: " << d_el_energy_CPU << endl;
+    #endif
+
+    cout << "Error in mass CPU: " << err_mass << endl;
+    #ifdef __CUDACC__
+    cout << "Error in mass GPU: " << err_mass_CPU << endl;
+    #endif
+
+    cout << "Error in energy CPU: " << err_energy << endl;
+    #ifdef __CUDACC__
+    cout << "Error in energy GPU: " << err_energy_CPU << endl;
+    #endif
 
   }
 
-  el_energyf.close();
-  err_massf.close();
-  err_energyf.close();
+  destroy_plans(plans_e);
+  destroy_plans(plans_x);
+  destroy_plans(plans_v);
+
+  //el_energyf.close();
+  //err_massf.close();
+  //err_energyf.close();
+
+  #ifdef __CUDACC__
+  destroy_plans(plans_d_e);
+  destroy_plans(plans_d_x);
+  destroy_plans(plans_d_v);
+
+  //el_energyGPUf.close();
+  //err_massGPUf.close();
+  //err_energyGPUf.close();
+  #endif
 
   return 0;
 }

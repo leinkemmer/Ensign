@@ -2,10 +2,36 @@
 #include <generic/matrix.hpp>
 #include <generic/storage.hpp>
 #include <lr/coefficients.hpp>
+#include <generic/kernels.hpp>
 
-#include <random>
-#include <complex>
-#include <cstring>
+#ifdef __CUDACC__
+
+array<cufftHandle,2> create_plans_2d(array<Index,2> dims_){
+  array<cufftHandle,2> out;
+
+  cufftPlan2d(&out[0],int(dims_[1]),int(dims_[0]),CUFFT_D2Z);
+  cufftPlan2d(&out[1],int(dims_[1]),int(dims_[0]),CUFFT_Z2D);
+
+  return out;
+}
+
+array<cufftHandle,2> create_plans_2d(array<Index,2> dims_, int howmany){
+  array<cufftHandle,2> out;
+  array<int,2> dims = {int(dims_[1]),int(dims_[0])};
+
+  cufftPlanMany(&out[0], 2, dims.begin(), NULL, 1, dims[1]*dims[0], NULL, 1, dims[0]*(dims[1]/2 + 1), CUFFT_D2Z, howmany);
+  cufftPlanMany(&out[1], 2, dims.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), NULL, 1, dims[1]*dims[0], CUFFT_Z2D, howmany);
+
+  return out;
+}
+
+void destroy_plans(array<cufftHandle,2>& plans){
+  cufftDestroy(plans[0]);
+  cufftDestroy(plans[1]);
+}
+
+#endif
+
 
 int main(){
 
@@ -28,6 +54,8 @@ int main(){
   Index nsteps_ee = 1; // Number of time steps of exponential euler in internal splitting
 
   Index nsteps = tstar/tau;
+  //nsteps = 100;
+
 
   double ts_split = tau / nsteps_split;
   double ts_ee = ts_split / nsteps_ee;
@@ -247,8 +275,8 @@ int main(){
   }
   efhatx(0) = complex<double>(0.0,0.0);
   efhaty(0) = complex<double>(0.0,0.0);
-  efhatx((N_xx[0]/2)*(N_xx[0]/2+1)) = complex<double>(0.0,0.0);
-  efhaty((N_xx[0]/2)*(N_xx[0]/2+1)) = complex<double>(0.0,0.0);
+  efhatx((N_xx[1]/2)*(N_xx[0]/2+1)) = complex<double>(0.0,0.0);
+  efhaty((N_xx[1]/2)*(N_xx[0]/2+1)) = complex<double>(0.0,0.0);
 
   fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
   fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
@@ -266,8 +294,8 @@ int main(){
     we_w2(j) = pow(w(j),2) * h_vv[0] * h_vv[1];
   }
 
-  coeff_one(lr_sol.V,we_v2.begin(),int_v);
-  coeff_one(lr_sol.V,we_w2.begin(),int_v2);
+  coeff_one(lr_sol.V,we_v2,int_v);
+  coeff_one(lr_sol.V,we_w2,int_v2);
 
   int_v += int_v2;
 
@@ -280,33 +308,215 @@ int main(){
   cout.precision(15);
   cout << std::scientific;
 
-  ofstream el_energyf;
-  ofstream err_massf;
-  ofstream err_energyf;
+  //ofstream el_energyf;
+  //ofstream err_massf;
+  //ofstream err_energyf;
 
-  el_energyf.open("el_energy_2d.txt");
-  err_massf.open("err_mass_2d.txt");
-  err_energyf.open("err_energy_2d.txt");
+  //el_energyf.open("el_energy_2d.txt");
+  //err_massf.open("err_mass_2d.txt");
+  //err_energyf.open("err_energy_2d.txt");
 
-  el_energyf.precision(16);
-  err_massf.precision(16);
-  err_energyf.precision(16);
+  //el_energyf.precision(16);
+  //err_massf.precision(16);
+  //err_energyf.precision(16);
 
-  el_energyf << tstar << endl;
-  el_energyf << tau << endl;
+  //el_energyf << tstar << endl;
+  //el_energyf << tau << endl;
+
+  //// FOR GPU ////
+
+  #ifdef __CUDACC__
+  // To be substituted if we initialize in GPU
+
+  lr2<double> d_lr_sol(r,{dxx_mult,dvv_mult},stloc::device);
+  d_lr_sol.X = lr_sol.X;
+  d_lr_sol.V = lr_sol.V;
+  d_lr_sol.S = lr_sol.S;
+
+  // For Electric field
+
+  multi_array<double,1> d_rho({r},stloc::device);
+  multi_array<double,1> d_ef({dxx_mult},stloc::device);
+  multi_array<double,1> d_efx({dxx_mult},stloc::device);
+  multi_array<double,1> d_efy({dxx_mult},stloc::device);
+
+  multi_array<cuDoubleComplex,1> d_efhat({dxxh_mult},stloc::device);
+  multi_array<cuDoubleComplex,1> d_efhatx({dxxh_mult},stloc::device);
+  multi_array<cuDoubleComplex,1> d_efhaty({dxxh_mult},stloc::device);
+
+  array<cufftHandle,2> plans_d_e = create_plans_2d(N_xx);
+
+  // FFT stuff
+
+  double* d_lim_xx;
+  cudaMalloc((void**)&d_lim_xx,4*sizeof(double));
+  cudaMemcpy(d_lim_xx,lim_xx.begin(),4*sizeof(double),cudaMemcpyHostToDevice);
+
+  double* d_lim_vv;
+  cudaMalloc((void**)&d_lim_vv,4*sizeof(double));
+  cudaMemcpy(d_lim_vv,lim_vv.begin(),4*sizeof(double),cudaMemcpyHostToDevice);
+
+  multi_array<cuDoubleComplex,2> d_Khat({dxxh_mult,r},stloc::device);
+  array<cufftHandle,2> d_plans_xx = create_plans_2d(N_xx, r);
+
+  multi_array<cuDoubleComplex,2> d_Lhat({dvvh_mult,r},stloc::device);
+  array<cufftHandle,2> d_plans_vv = create_plans_2d(N_vv, r);
+
+  // C coefficients
+
+  multi_array<double,2> d_C1v({r,r},stloc::device);
+  multi_array<double,2> d_C1w({r,r}, stloc::device);
+
+  multi_array<double,2> d_C2v({r,r},stloc::device);
+  multi_array<double,2> d_C2w({r,r},stloc::device);
+
+  multi_array<cuDoubleComplex,2> d_C2vc({r,r},stloc::device);
+  multi_array<cuDoubleComplex,2> d_C2wc({r,r},stloc::device);
+
+  multi_array<double,1> d_we_v({dvv_mult},stloc::device);
+  d_we_v = we_v;
+
+  multi_array<double,1> d_we_w({dvv_mult},stloc::device);
+  d_we_w = we_w;
+
+  multi_array<double,2> d_dV_v({dvv_mult,r},stloc::device);
+  multi_array<double,2> d_dV_w({dvv_mult,r},stloc::device);
+
+  multi_array<cuDoubleComplex,2> d_dVhat_v({dvvh_mult,r},stloc::device);
+  multi_array<cuDoubleComplex,2> d_dVhat_w({dvvh_mult,r},stloc::device);
+
+
+  // D coefficients
+
+  multi_array<double,2> d_D1x({r,r},stloc::device);
+  multi_array<double,2> d_D1y({r,r},stloc::device);
+
+  multi_array<double,2> d_D2x({r,r},stloc::device);
+  multi_array<double,2> d_D2y({r,r},stloc::device);
+
+  multi_array<double,1> d_we_x({dxx_mult},stloc::device);
+  multi_array<double,1> d_we_y({dxx_mult},stloc::device);
+
+  multi_array<double,2> d_dX_x({dxx_mult,r},stloc::device);
+  multi_array<double,2> d_dX_y({dxx_mult,r},stloc::device);
+
+  multi_array<cuDoubleComplex,2> d_dXhat_x({dxxh_mult,r},stloc::device);
+  multi_array<cuDoubleComplex,2> d_dXhat_y({dxxh_mult,r},stloc::device);
+
+  multi_array<double,1> d_v({dvv_mult},stloc::device);
+  d_v = v;
+  multi_array<double,1> d_w({dvv_mult},stloc::device);
+  d_w = w;
+
+
+  // Schur decomposition
+
+  multi_array<double,2> C1v_gpu({r,r});
+  multi_array<double,2> Tv_gpu({r,r});
+  multi_array<double,1> dcv_r_gpu({r});
+  multi_array<double,2> C1w_gpu({r,r});
+  multi_array<double,2> Tw_gpu({r,r});
+  multi_array<double,1> dcw_r_gpu({r});
+
+  multi_array<double,2> D1x_gpu({r,r});
+  multi_array<double,2> D1y_gpu({r,r});
+
+  multi_array<double,1> d_dcv_r({r},stloc::device);
+  multi_array<double,2> d_Tv({r,r},stloc::device);
+  multi_array<double,1> d_dcw_r({r},stloc::device);
+  multi_array<double,2> d_Tw({r,r},stloc::device);
+
+  multi_array<cuDoubleComplex,2> d_Mhat({dxxh_mult,r},stloc::device);
+  multi_array<cuDoubleComplex,2> d_Nhat({dvvh_mult,r},stloc::device);
+
+  multi_array<cuDoubleComplex,2> d_Tvc({r,r},stloc::device);
+  multi_array<cuDoubleComplex,2> d_Twc({r,r},stloc::device);
+
+  // For K step
+
+  multi_array<double,2> d_Kex({dxx_mult,r},stloc::device);
+  multi_array<double,2> d_Key({dxx_mult,r},stloc::device);
+
+  multi_array<cuDoubleComplex,2> d_Kexhat({dxxh_mult,r},stloc::device);
+  multi_array<cuDoubleComplex,2> d_Keyhat({dxxh_mult,r},stloc::device);
+
+  // For L step
+
+  multi_array<double,2> d_Lv({dvv_mult,r},stloc::device);
+  multi_array<double,2> d_Lw({dvv_mult,r},stloc::device);
+
+  multi_array<cuDoubleComplex,2> d_Lvhat({dvvh_mult,r},stloc::device);
+  multi_array<cuDoubleComplex,2> d_Lwhat({dvvh_mult,r},stloc::device);
+
+  // Temporary to perform multiplications
+  multi_array<double,2> d_tmpX({dxx_mult,r},stloc::device);
+  multi_array<double,2> d_tmpS({r,r},stloc::device);
+  multi_array<double,2> d_tmpV({dvv_mult,r}, stloc::device);
+
+  multi_array<cuDoubleComplex,2> d_tmpXhat({dxxh_mult,r},stloc::device);
+  multi_array<cuDoubleComplex,2> d_tmpVhat({dvvh_mult,r},stloc::device);
+
+  // Quantities of interest
+
+  double* d_el_energy_x;
+  cudaMalloc((void**)&d_el_energy_x,sizeof(double));
+  double* d_el_energy_y;
+  cudaMalloc((void**)&d_el_energy_y,sizeof(double));
+
+  double d_el_energy_CPU;
+
+  multi_array<double,1> d_int_x({r},stloc::device);
+  multi_array<double,1> d_int_v({r},stloc::device);
+
+  double* d_mass;
+  cudaMalloc((void**)&d_mass,sizeof(double));
+  double d_mass_CPU;
+  double err_mass_CPU;
+
+  multi_array<double,1> d_we_v2({dvv_mult},stloc::device);
+  multi_array<double,1> d_we_w2({dvv_mult},stloc::device);
+  d_we_v2 = we_v2;
+  d_we_w2 = we_w2;
+
+  multi_array<double,1> d_int_v2({r},stloc::device);
+
+  double* d_energy;
+  cudaMalloc((void**)&d_energy,sizeof(double));
+  double d_energy_CPU;
+  double err_energy_CPU;
+
+  //ofstream el_energyGPUf;
+  //ofstream err_massGPUf;
+  //ofstream err_energyGPUf;
+
+  //el_energyGPUf.open("el_energy_gpu_2d.txt");
+  //err_massGPUf.open("err_mass_gpu_2d.txt");
+  //err_energyGPUf.open("err_energy_gpu_2d.txt");
+
+  //el_energyGPUf.precision(16);
+  //err_massGPUf.precision(16);
+  //err_energyGPUf.precision(16);
+
+  //el_energyGPUf << tstar << endl;
+  //el_energyGPUf << tau << endl;
+
+  #endif
 
   // Main cycle
   for(Index i = 0; i < nsteps; i++){
 
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
 
+    // CPU
+
     tmpX = lr_sol.X;
+
     matmul(tmpX,lr_sol.S,lr_sol.X);
 
     // Electric field
 
-    coeff_one(lr_sol.V,h_vv[0]*h_vv[1],rho);
-    rho *= -1.0;
+    coeff_one(lr_sol.V,-h_vv[0]*h_vv[1],rho);
+
     matvec(lr_sol.X,rho,ef);
 
     ef += 1.0;
@@ -326,15 +536,17 @@ int main(){
 
     efhatx(0) = complex<double>(0.0,0.0);
     efhaty(0) = complex<double>(0.0,0.0);
-    efhatx((N_xx[0]/2)*(N_xx[0]/2+1)) = complex<double>(0.0,0.0);
-    efhaty((N_xx[0]/2)*(N_xx[0]/2+1)) = complex<double>(0.0,0.0);
+    efhatx((N_xx[1]/2)*(N_xx[0]/2+1)) = complex<double>(0.0,0.0);
+    efhaty((N_xx[1]/2)*(N_xx[0]/2+1)) = complex<double>(0.0,0.0);
 
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
+
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
 
     // Main of K step
 
     coeff(lr_sol.V, lr_sol.V, we_v.begin(), C1v);
+
     coeff(lr_sol.V, lr_sol.V, we_w.begin(), C1w);
 
     fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)tmpVhat.begin());
@@ -342,13 +554,17 @@ int main(){
     ptw_mult_row(tmpVhat,lambdav_n.begin(),dVhat_v);
     ptw_mult_row(tmpVhat,lambdaw_n.begin(),dVhat_w);
 
+
     fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_v.begin(),dV_v.begin());
+
     fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_w.begin(),dV_w.begin());
 
     coeff(lr_sol.V, dV_v, h_vv[0]*h_vv[1], C2v);
+
     coeff(lr_sol.V, dV_w, h_vv[0]*h_vv[1], C2w);
 
     schur(C1v, Tv, dcv_r, lwork);
+
     schur(C1w, Tw, dcw_r, lwork);
 
     Tv.to_cplx(Tvc);
@@ -359,7 +575,9 @@ int main(){
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
       // Full step -- Exact solution
+
       fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
+
       matmul(Khat,Tvc,Mhat);
 
       for(int k = 0; k < r; k++){
@@ -371,12 +589,14 @@ int main(){
         }
       }
 
+
       matmul_transb(Mhat,Tvc,Khat);
-      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin()); // TODO: could use FFTW_PRESERVE_INPUT here
-      // NOT POSSIBLE FOR multidimensional transforms, see documentation
+
+      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
 
       // Full step -- Exponential Euler
       fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
+
       matmul(Khat,Twc,Mhat);
 
       for(Index jj = 0; jj < nsteps_ee; jj++){
@@ -385,12 +605,15 @@ int main(){
         ptw_mult_row(lr_sol.X,efy.begin(),Key);
 
         fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
+
         fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
 
         matmul_transb(Kexhat,C2vc,Khat);
+
         matmul_transb(Keyhat,C2wc,tmpXhat);
 
-        Khat += tmpXhat;
+        //Khat += tmpXhat;
+        Khat = Khat + tmpXhat; // Operator += to be adjusted
 
         matmul(Khat,Twc,tmpXhat);
 
@@ -406,9 +629,13 @@ int main(){
           }
         }
 
+
         matmul_transb(Mhat,Twc,Khat);
+
         Khat *= ncxx;
+
         fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
+
       }
     }
 
@@ -421,6 +648,7 @@ int main(){
       we_y(j) = efy(j) * h_xx[0] * h_xx[1];
     }
 
+
     coeff(lr_sol.X, lr_sol.X, we_x.begin(), D1x);
     coeff(lr_sol.X, lr_sol.X, we_y.begin(), D1y);
 
@@ -429,43 +657,52 @@ int main(){
     ptw_mult_row(tmpXhat,lambdax_n.begin(),dXhat_x);
     ptw_mult_row(tmpXhat,lambday_n.begin(),dXhat_y);
 
+
     fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_x.begin(),dX_x.begin());
+
     fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_y.begin(),dX_y.begin());
 
     coeff(lr_sol.X, dX_x, h_xx[0]*h_xx[1], D2x);
+
     coeff(lr_sol.X, dX_y, h_xx[0]*h_xx[1], D2y);
+
 
     // Explicit Euler
     for(Index jj = 0; jj< nsteps_split; jj++){
       matmul_transb(lr_sol.S,C1v,tmpS);
+
       matmul(D2x,tmpS,Tv);
 
       matmul_transb(lr_sol.S,C1w,tmpS);
+
       matmul(D2y,tmpS,Tw);
 
       Tv += Tw;
 
       matmul_transb(lr_sol.S,C2v,tmpS);
+
       matmul(D1x,tmpS,Tw);
 
       Tv -= Tw;
 
       matmul_transb(lr_sol.S,C2w,tmpS);
+
       matmul(D1y,tmpS,Tw);
 
       Tv -= Tw;
 
       Tv *= ts_split;
       lr_sol.S += Tv;
+
     }
 
     // L step - here we reuse some old variable names
-
     tmpV = lr_sol.V;
 
     matmul_transb(tmpV,lr_sol.S,lr_sol.V);
 
     schur(D1x, Tv, dcv_r, lwork);
+
     schur(D1y, Tw, dcw_r, lwork);
 
     Tv.to_cplx(Tvc);
@@ -477,6 +714,7 @@ int main(){
     for(Index ii = 0; ii < nsteps_split; ii++){
       // Full step -- Exact solution
       fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
+
       matmul(Lhat,Tvc,Nhat);
 
       for(int k = 0; k < r; k++){
@@ -489,26 +727,30 @@ int main(){
       }
 
       matmul_transb(Nhat,Tvc,Lhat);
+
       fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
 
       // Full step -- Exponential euler
       fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin()); // TODO: use FFTW_PRESERVE_INPUT
-      // NOT POSSIBLE FOR multidimensional transforms, see documentation
 
       matmul(Lhat,Twc,Nhat);
 
       for(Index jj = 0; jj < nsteps_ee; jj++){
 
         ptw_mult_row(lr_sol.V,v.begin(),Lv);
+
         ptw_mult_row(lr_sol.V,w.begin(),Lw);
 
         fftw_execute_dft_r2c(plans_vv[0],Lv.begin(),(fftw_complex*)Lvhat.begin());
+
         fftw_execute_dft_r2c(plans_vv[0],Lw.begin(),(fftw_complex*)Lwhat.begin());
 
         matmul_transb(Lvhat,C2vc,Lhat);
+
         matmul_transb(Lwhat,C2wc,tmpVhat);
 
-        Lhat += tmpVhat;
+        //Lhat += tmpVhat;
+        Lhat = Lhat + tmpVhat; // Operator += to be adjusted
 
         matmul(Lhat,Twc,tmpVhat);
 
@@ -523,11 +765,14 @@ int main(){
           }
         }
 
-        matmul_transb(Nhat,Twc,Lhat);
-        Lhat *= ncvv;
-        fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
-      }
 
+        matmul_transb(Nhat,Twc,Lhat);
+
+        Lhat *= ncvv;
+
+        fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
+
+      }
     }
 
     gram_schmidt(lr_sol.V, lr_sol.S, ip_vv);
@@ -539,11 +784,11 @@ int main(){
     for(Index ii = 0; ii < (dxx_mult); ii++){
       el_energy += 0.5*(pow(efx(ii),2)+pow(efy(ii),2))*h_xx[0]*h_xx[1];
     }
-    cout << "Electric energy: " << el_energy << endl;
-    el_energyf << el_energy << endl;
+    //el_energyf << el_energy << endl;
 
     // Error Mass
     coeff_one(lr_sol.X,h_xx[0]*h_xx[1],int_x);
+
     coeff_one(lr_sol.V,h_vv[0]*h_vv[1],int_v);
 
     matvec(lr_sol.S,int_v,rho);
@@ -555,11 +800,13 @@ int main(){
 
     err_mass = abs(mass0-mass);
 
-    cout << "Error in mass: " << err_mass << endl;
-    err_massf << err_mass << endl;
+    //err_massf << err_mass << endl;
 
-    coeff_one(lr_sol.V,we_v2.begin(),int_v);
-    coeff_one(lr_sol.V,we_w2.begin(),int_v2);
+    // Error energy
+
+    coeff_one(lr_sol.V,we_v2,int_v);
+
+    coeff_one(lr_sol.V,we_w2,int_v2);
 
     int_v += int_v2;
 
@@ -572,15 +819,319 @@ int main(){
 
     err_energy = abs(energy0-energy);
 
-    cout << "Error in energy: " << err_energy << endl;
-    err_energyf << err_energy << endl;
+  //  err_energyf << err_energy << endl;
 
+    #ifdef __CUDACC__
+    d_tmpX = d_lr_sol.X;
+
+    matmul(d_tmpX,d_lr_sol.S,d_lr_sol.X);
+
+    coeff_one(d_lr_sol.V,-h_vv[0]*h_vv[1],d_rho);
+
+    matvec(d_lr_sol.X,d_rho,d_ef);
+
+    d_ef += 1.0;
+
+    cufftExecD2Z(plans_d_e[0],d_ef.begin(),(cufftDoubleComplex*)d_efhat.begin());
+
+    der_fourier_2d<<<2,2>>>(dxxh_mult, N_xx[0]/2+1, N_xx[1], d_efhat.begin(), d_lim_xx, ncxx, d_efhatx.begin(),d_efhaty.begin());
+
+    cufftExecZ2D(plans_d_e[1],(cufftDoubleComplex*)d_efhatx.begin(),d_efx.begin());
+
+    cufftExecZ2D(plans_d_e[1],(cufftDoubleComplex*)d_efhaty.begin(),d_efy.begin());
+
+    coeff(d_lr_sol.V, d_lr_sol.V, d_we_v.begin(), d_C1v);
+
+    coeff(d_lr_sol.V, d_lr_sol.V, d_we_w.begin(), d_C1w);
+
+    cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_tmpVhat.begin());
+
+    ptw_mult_row_cplx_fourier_2d<<<2,2>>>(dvvh_mult*r, N_vv[0]/2+1, N_vv[1], d_tmpVhat.begin(), d_lim_vv, ncvv, d_dVhat_v.begin(), d_dVhat_w.begin()); // Very similar, maybe can be put together
+
+    cufftExecZ2D(d_plans_vv[1],(cufftDoubleComplex*)d_dVhat_v.begin(),d_dV_v.begin());
+
+    cufftExecZ2D(d_plans_vv[1],(cufftDoubleComplex*)d_dVhat_w.begin(),d_dV_w.begin());
+
+    coeff(d_lr_sol.V, d_dV_v, h_vv[0]*h_vv[1], d_C2v);
+
+    coeff(d_lr_sol.V, d_dV_w, h_vv[0]*h_vv[1], d_C2w);
+
+    C1v_gpu = d_C1v;
+    schur(C1v_gpu, Tv_gpu, dcv_r_gpu, lwork);
+    d_Tv = Tv_gpu;
+    d_dcv_r = dcv_r_gpu;
+
+    C1w_gpu = d_C1w;
+    schur(C1w_gpu, Tw_gpu, dcw_r_gpu, lwork);
+    d_Tw = Tw_gpu;
+    d_dcw_r = dcw_r_gpu;
+
+    cplx_conv<<<2,2>>>(d_Tv.num_elements(), d_Tv.begin(), d_Tvc.begin());
+
+    cplx_conv<<<2,2>>>(d_Tw.num_elements(), d_Tw.begin(), d_Twc.begin());
+
+    cplx_conv<<<2,2>>>(d_C2v.num_elements(), d_C2v.begin(), d_C2vc.begin());
+
+    cplx_conv<<<2,2>>>(d_C2w.num_elements(), d_C2w.begin(), d_C2wc.begin());
+
+    // Internal splitting
+    for(Index ii = 0; ii < nsteps_split; ii++){
+      // Full step -- Exact solution
+
+      cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
+
+      matmul(d_Khat,d_Tvc,d_Mhat);
+
+      exact_sol_exp_2d<<<2,2>>>(d_Mhat.num_elements(), N_xx[0]/2 + 1, N_xx[1], d_Mhat.begin(), d_dcv_r.begin(), ts_split, d_lim_xx, ncxx);
+
+      matmul_transb(d_Mhat,d_Tvc,d_Khat);
+
+      cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin());
+
+      // Full step -- Exponential Euler
+      //cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin()); // check if CUDA preserves input and eventually adapt. YES
+
+      ptw_mult_cplx<<<2,2>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
+
+      matmul(d_Khat,d_Twc,d_Mhat);
+
+      for(Index jj = 0; jj < nsteps_ee; jj++){
+
+        ptw_mult_row_k<<<2,2>>>(d_lr_sol.X.num_elements(),d_lr_sol.X.shape()[0],d_lr_sol.X.begin(),d_efx.begin(),d_Kex.begin());
+        ptw_mult_row_k<<<2,2>>>(d_lr_sol.X.num_elements(),d_lr_sol.X.shape()[0],d_lr_sol.X.begin(),d_efy.begin(),d_Key.begin());
+
+        cufftExecD2Z(d_plans_xx[0],d_Kex.begin(),(cufftDoubleComplex*)d_Kexhat.begin());
+
+        cufftExecD2Z(d_plans_xx[0],d_Key.begin(),(cufftDoubleComplex*)d_Keyhat.begin());
+
+        matmul_transb(d_Kexhat,d_C2vc,d_Khat);
+
+        matmul_transb(d_Keyhat,d_C2wc,d_tmpXhat);
+
+        ptw_sum_complex<<<2,2>>>(d_Khat.num_elements(), d_Khat.begin(), d_tmpXhat.begin());
+
+        matmul(d_Khat,d_Twc,d_tmpXhat);
+
+        exp_euler_fourier_2d<<<2,2>>>(d_Mhat.num_elements(), N_xx[0]/2 + 1, N_xx[1], d_Mhat.begin(),d_dcw_r.begin(),ts_ee, d_lim_xx, d_tmpXhat.begin());
+
+        matmul_transb(d_Mhat,d_Twc,d_Khat);
+
+        ptw_mult_cplx<<<2,2>>>(d_Khat.num_elements(), d_Khat.begin(), ncxx);
+
+        cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin());
+
+      }
+    }
+
+    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, h_xx[0]*h_xx[1]);
+
+    ptw_mult_scal<<<2,2>>>(d_efx.num_elements(), d_efx.begin(), h_xx[0] * h_xx[1], d_we_x.begin());
+    ptw_mult_scal<<<2,2>>>(d_efy.num_elements(), d_efy.begin(), h_xx[0] * h_xx[1], d_we_y.begin());
+
+    coeff(d_lr_sol.X, d_lr_sol.X, d_we_x.begin(), d_D1x);
+
+    coeff(d_lr_sol.X, d_lr_sol.X, d_we_y.begin(), d_D1y);
+
+    cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_tmpXhat.begin()); // check if CUDA preserves input and eventually adapt
+
+    ptw_mult_row_cplx_fourier_2d<<<2,2>>>(dxxh_mult*r, N_xx[0]/2+1, N_xx[1], d_tmpXhat.begin(), d_lim_xx, ncxx, d_dXhat_x.begin(), d_dXhat_y.begin()); // Very similar, maybe can be put together
+
+    cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_dXhat_x.begin(),d_dX_x.begin());
+
+    cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_dXhat_y.begin(),d_dX_y.begin());
+
+    coeff(d_lr_sol.X, d_dX_x, h_xx[0]*h_xx[1], d_D2x);
+
+    coeff(d_lr_sol.X, d_dX_y, h_xx[0]*h_xx[1], d_D2y);
+
+    // Explicit Euler
+    for(Index jj = 0; jj< nsteps_split; jj++){
+      matmul_transb(d_lr_sol.S,d_C1v,d_tmpS);
+
+      matmul(d_D2x,d_tmpS,d_Tv);
+
+      matmul_transb(d_lr_sol.S,d_C1w,d_tmpS);
+
+      matmul(d_D2y,d_tmpS,d_Tw);
+
+      ptw_sum<<<2,2>>>(d_Tv.num_elements(),d_Tv.begin(),d_Tw.begin());
+
+      matmul_transb(d_lr_sol.S,d_C2v,d_tmpS);
+
+      matmul(d_D1x,d_tmpS,d_Tw);
+
+      ptw_diff<<<2,2>>>(d_Tv.num_elements(),d_Tv.begin(),d_Tw.begin());
+
+      matmul_transb(d_lr_sol.S,d_C2w,d_tmpS);
+
+      matmul(d_D1y,d_tmpS,d_Tw);
+
+      expl_euler<<<2,2>>>(d_lr_sol.S.num_elements(), d_lr_sol.S.begin(), ts_split, d_Tv.begin(), d_Tw.begin());
+
+    }
+
+    d_tmpV = d_lr_sol.V;
+
+    matmul_transb(d_tmpV,d_lr_sol.S,d_lr_sol.V);
+
+    D1x_gpu = d_D1x;
+    schur(D1x_gpu, Tv_gpu, dcv_r_gpu, lwork);
+    d_Tv = Tv_gpu;
+    d_dcv_r = dcv_r_gpu;
+
+    D1y_gpu = d_D1y;
+    schur(D1y_gpu, Tw_gpu, dcw_r_gpu, lwork);
+    d_Tw = Tw_gpu;
+    d_dcw_r = dcw_r_gpu;
+
+    cplx_conv<<<2,2>>>(d_Tv.num_elements(), d_Tv.begin(), d_Tvc.begin());
+
+    cplx_conv<<<2,2>>>(d_Tw.num_elements(), d_Tw.begin(), d_Twc.begin());
+
+    cplx_conv<<<2,2>>>(d_D2x.num_elements(), d_D2x.begin(), d_C2vc.begin());
+
+    cplx_conv<<<2,2>>>(d_D2y.num_elements(), d_D2y.begin(), d_C2wc.begin());
+
+    // Internal splitting
+    for(Index ii = 0; ii < nsteps_split; ii++){
+      // Full step -- Exact solution
+      cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
+
+      matmul(d_Lhat,d_Tvc,d_Nhat);
+
+      exact_sol_exp_2d<<<2,2>>>(d_Nhat.num_elements(), N_vv[0]/2 + 1, N_vv[1], d_Nhat.begin(), d_dcv_r.begin(), -ts_split, d_lim_vv, ncvv);
+
+      matmul_transb(d_Nhat,d_Tvc,d_Lhat);
+
+      cufftExecZ2D(d_plans_vv[1],(cufftDoubleComplex*)d_Lhat.begin(),d_lr_sol.V.begin());
+
+      // Full step -- Exponential euler
+      //cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin()); // check if CUDA preserves input and eventually adapt
+      ptw_mult_cplx<<<2,2>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
+
+
+      matmul(d_Lhat,d_Twc,d_Nhat);
+
+      for(Index jj = 0; jj < nsteps_ee; jj++){
+
+        ptw_mult_row_k<<<2,2>>>(d_lr_sol.V.num_elements(),d_lr_sol.V.shape()[0],d_lr_sol.V.begin(),d_v.begin(),d_Lv.begin());
+
+        ptw_mult_row_k<<<2,2>>>(d_lr_sol.V.num_elements(),d_lr_sol.V.shape()[0],d_lr_sol.V.begin(),d_w.begin(),d_Lw.begin());
+
+        cufftExecD2Z(d_plans_vv[0],d_Lv.begin(),(cufftDoubleComplex*)d_Lvhat.begin()); // check if CUDA preserves input and eventually adapt
+
+        cufftExecD2Z(d_plans_vv[0],d_Lw.begin(),(cufftDoubleComplex*)d_Lwhat.begin()); // check if CUDA preserves input and eventually adapt
+
+        matmul_transb(d_Lvhat,d_C2vc,d_Lhat);
+
+        matmul_transb(d_Lwhat,d_C2wc,d_tmpVhat);
+
+        ptw_sum_complex<<<2,2>>>(d_Lhat.num_elements(), d_Lhat.begin(), d_tmpVhat.begin());
+
+        matmul(d_Lhat,d_Twc,d_tmpVhat);
+
+        exp_euler_fourier_2d<<<2,2>>>(d_Nhat.num_elements(), N_vv[0]/2 + 1, N_vv[1], d_Nhat.begin(),d_dcw_r.begin(),-ts_ee, d_lim_vv, d_tmpVhat.begin());
+
+        matmul_transb(d_Nhat,d_Twc,d_Lhat);
+
+        ptw_mult_cplx<<<2,2>>>(d_Lhat.num_elements(), d_Lhat.begin(), ncvv);
+
+        cufftExecZ2D(d_plans_vv[1],(cufftDoubleComplex*)d_Lhat.begin(),d_lr_sol.V.begin());
+
+      }
+    }
+
+    gram_schmidt_gpu(d_lr_sol.V, d_lr_sol.S, h_vv[0]*h_vv[1]);
+
+    transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
+
+    cublasHandle_t  handle;
+    cublasCreate (&handle);
+
+    // Electric energy
+
+    cublasDdot (handle, d_efx.num_elements(), d_efx.begin(), 1, d_efx.begin(), 1, d_el_energy_x);
+    cublasDdot (handle, d_efy.num_elements(), d_efy.begin(), 1, d_efy.begin(), 1, d_el_energy_y);
+
+    ptw_sum<<<1,1>>>(1,d_el_energy_x,d_el_energy_y); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
+    scale_unique<<<1,1>>>(d_el_energy_x,0.5*h_xx[0]*h_xx[1]); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
+
+    cudaMemcpy(&d_el_energy_CPU,d_el_energy_x,sizeof(double),cudaMemcpyDeviceToHost);
+
+    //el_energyGPUf << d_el_energy_CPU << endl;
+
+    // Error in mass
+
+    coeff_one(d_lr_sol.X,h_xx[0]*h_xx[1],d_int_x);
+
+    coeff_one(d_lr_sol.V,h_vv[0]*h_vv[1],d_int_v);
+
+    matvec(d_lr_sol.S,d_int_v,d_rho);
+
+    cublasDdot (handle, r, d_int_x.begin(), 1, d_rho.begin(), 1,d_mass);
+
+    cudaMemcpy(&d_mass_CPU,d_mass,sizeof(double),cudaMemcpyDeviceToHost);
+
+    err_mass_CPU = abs(mass0-d_mass_CPU);
+    //err_massGPUf << err_mass_CPU << endl;
+
+    // Error in energy
+    coeff_one(d_lr_sol.V,d_we_v2,d_int_v);
+
+    coeff_one(d_lr_sol.V,d_we_w2,d_int_v2);
+
+    ptw_sum<<<2,2>>>(d_int_v.num_elements(),d_int_v.begin(),d_int_v2.begin());
+
+
+    matvec(d_lr_sol.S,d_int_v,d_rho);
+
+
+    cublasDdot (handle, r, d_int_x.begin(), 1, d_rho.begin(), 1, d_energy);
+    scale_unique<<<1,1>>>(d_energy,0.5); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
+
+    cudaMemcpy(&d_energy_CPU,d_energy,sizeof(double),cudaMemcpyDeviceToHost);
+
+    err_energy_CPU = abs(energy0-(d_energy_CPU+d_el_energy_CPU));
+    //err_energyGPUf << err_energy_CPU << endl;
+
+    cublasDestroy(handle);
+
+    #endif
+
+    cout << "Electric energy: " << el_energy << endl;
+    #ifdef __CUDACC__
+    cout << "Electric energy GPU: " << d_el_energy_CPU << endl;
+    #endif
+
+    cout << "Error in mass: " << err_mass << endl;
+    #ifdef __CUDACC__
+    cout << "Error in mass GPU: " << err_mass_CPU << endl;
+    #endif
+
+    cout << "Error in energy: " << err_energy << endl;
+    #ifdef __CUDACC__
+    cout << "Error in energy GPU: " << err_energy_CPU << endl;
+    #endif
 
   }
 
-  el_energyf.close();
-  err_massf.close();
-  err_energyf.close();
+  destroy_plans(plans_e);
+  destroy_plans(plans_xx);
+  destroy_plans(plans_vv);
+
+  //el_energyf.close();
+  //err_massf.close();
+  //err_energyf.close();
+
+  #ifdef __CUDACC__
+  destroy_plans(plans_d_e);
+  destroy_plans(d_plans_xx);
+  destroy_plans(d_plans_vv);
+
+  //el_energyGPUf.close();
+  //err_massGPUf.close();
+  //err_energyGPUf.close();
+  #endif
 
   return 0;
 }

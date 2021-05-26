@@ -199,7 +199,7 @@ int main(){
     wv2(j) = pow(v(j),2) * hv;
   }
 
-  coeff_one(lr_sol.V,wv2.begin(),int_v);
+  coeff_one(lr_sol.V,wv2,int_v);
 
   matvec(lr_sol.S,int_v,tmp_vec);
 
@@ -411,7 +411,7 @@ int main(){
     cout << "Error in mass: " << err_mass << endl;
     err_massf << err_mass << endl;
 
-    coeff_one(lr_sol.V,wv2.begin(),int_v);
+    coeff_one(lr_sol.V,wv2,int_v);
 
     matvec(lr_sol.S,int_v,tmp_vec);
 
@@ -623,7 +623,7 @@ int main(){
         cout << "Error in mass: " << err_mass << endl;
         //err_massf << err_mass << endl;
 
-        coeff_one(lr_sol.V,wv2.begin(),int_v);
+        coeff_one(lr_sol.V,wv2,int_v);
 
         matvec(lr_sol.S,int_v,tmp_vec);
 

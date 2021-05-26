@@ -2,8 +2,7 @@
 
 #include <generic/common.hpp>
 #include <generic/storage.hpp>
-
-#include <functional>
+#include <generic/kernels.hpp>
 
 template<class T>
 struct lr2 {
@@ -11,22 +10,22 @@ struct lr2 {
   multi_array<T, 2> X;
   multi_array<T, 2> V;
 
-  lr2(stloc sl=stloc::host) {
-    multi_array<T,2> _S(sl);
+  lr2(stloc sl=stloc::host) : S(sl), X(sl), V(sl) {
+    /*multi_array<T,2> _S(sl);
     multi_array<T,2> _X(sl);
     multi_array<T,2> _V(sl);
     S = _S;
     X = _X;
-    V = _V;
+    V = _V;*/
   }
 
-  lr2(Index r, array<Index,2> N, stloc sl=stloc::host) {
-    multi_array<T,2> _S({r,r},sl);
+  lr2(Index r, array<Index,2> N, stloc sl=stloc::host): S({r,r},sl), X({N[0],r},sl), V({N[1],r},sl){
+    /*multi_array<T,2> _S({r,r},sl);
     multi_array<T,2> _X({N[0],r},sl);
     multi_array<T,2> _V({N[1],r},sl);
     S = _S;
     X = _X;
-    V = _V;
+    V = _V;*/
   }
 
   Index problem_size_X() {
@@ -62,6 +61,13 @@ template<class T>
 void gram_schmidt(multi_array<T,2>& Q, multi_array<T,2>& R,
   std::function<T(T*,T*)> inner_product);
 
+//void gram_schmidt_gpu(Index n, int r, double* Q, double* R, double w);
+#ifdef __CUDACC__
+  //void gram_schmidt_gpu(Index n, int r, double* Q, double* R, double w); //with constant weight for inner product
+  void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w);
+  void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double* w);
+  __global__ void scale_unique(double* x, double alpha);
+#endif
   /*
   template<class T>
   struct lr3 {

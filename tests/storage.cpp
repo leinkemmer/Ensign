@@ -54,5 +54,25 @@ TEST_CASE( "multi_array basic operations", "[multi_array]" ) {
         REQUIRE( bool(a_cpu1 == a_cpu2));
     }
 
+    SECTION("PTW OPERATIONS"){
+      multi_array<double,1> a_cpu({10});
+      multi_array<double,1> a({10},stloc::device);
+      multi_array<double,1> a2_cpu({10});
+
+      for(int i = 0; i < 10; i++){
+        a_cpu(i) = i;
+      }
+      a = a_cpu;
+
+      a += 2.0;
+      a2_cpu = a;
+
+      a_cpu += 2.0;
+
+      cout << a_cpu << endl;
+      cout << a2_cpu << endl;
+
+    }
+
   #endif
 }

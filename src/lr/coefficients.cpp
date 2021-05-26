@@ -1,9 +1,35 @@
 #include <lr/coefficients.hpp>
 
+#ifdef __CUDACC__
+template<class T>
+__global__ void ptw_mult_row_k(int nm, int n, T* A, T* v, T* B){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < nm){
+    B[idx] = A[idx] * v[idx % n];
+    idx += blockDim.x * gridDim.x;
+  }
+}
+template __global__ void ptw_mult_row_k(int, int, double*, double*, double*);
+template __global__ void ptw_mult_row_k(int, int, float*, float*, float*);
+
+#endif
+
 template<class T>
 void coeff(multi_array<T,2>& a, multi_array<T,2>& b, T w, multi_array<T,2>& out) {
   matmul_transa(a,b,out);
-  out *=  w;
+  if(a.sl == stloc::host){
+    out *=  w;
+  }else{
+    #ifdef __CUDACC__
+      ptw_mult_scal<<<2,2>>>(out.num_elements(), out.begin(), w);
+    #else
+      cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
+      << __LINE__ << endl;
+      exit(1);
+    #endif
+  }
+
 }
 template void coeff(multi_array<double,2>& a, multi_array<double,2>& b, double w, multi_array<double,2>& out);
 template void coeff(multi_array<float,2>& a, multi_array<float,2>& b, float w, multi_array<float,2>& out);
@@ -16,8 +42,19 @@ void coeff_T(multi_array<T,d1>& a, multi_array<T,d2>& b, T w, multi_array<T,d1+d
 */
 template<class T>
 void coeff(multi_array<T,2>& a, multi_array<T,2>& b, T* w, multi_array<T,2>& out) {
-  multi_array<T,2> tmp(b.shape());
-  ptw_mult_row(b,w,tmp);
+  multi_array<T,2> tmp(b.shape(),b.sl);
+  if(b.sl == stloc::host){
+    ptw_mult_row(b,w,tmp);
+  }else{
+    #ifdef __CUDACC__
+      ptw_mult_row_k<<<64,64>>>(b.num_elements(), b.shape()[0], b.begin(), w, tmp.begin());
+    #else
+      cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
+      << __LINE__ << endl;
+      exit(1);
+    #endif
+  }
+
   matmul_transa(a,tmp,out);
 }
 template void coeff(multi_array<double,2>& a, multi_array<double,2>& b, double* w, multi_array<double,2>& out);
@@ -31,16 +68,11 @@ void coeff_T(multi_array<T,d1>& a, multi_array<T,d2>& b, T* w, multi_array<T,d1+
 }
 */
 template<class T>
-void coeff_one(multi_array<T,2>& a, T* w, multi_array<T,1>& out) {
-  for(Index i = 0; i < a.shape()[1]; i++){
-    out(i) = T(0.0);
-    for(Index j = 0; j < a.shape()[0]; j++){
-      out(i) += a(j,i)*w[j];
-    }
-  }
+void coeff_one(multi_array<T,2>& a, multi_array<T,1>& w, multi_array<T,1>& out) {
+  matvec_trans(a,w,out);
 }
-template void coeff_one(multi_array<double,2>& a, double* w, multi_array<double,1>& out);
-template void coeff_one(multi_array<float,2>& a, float* w, multi_array<float,1>& out);
+template void coeff_one(multi_array<double,2>& a, multi_array<double,1>& w, multi_array<double,1>& out);
+template void coeff_one(multi_array<float,2>& a, multi_array<float,1>& w, multi_array<float,1>& out);
 /*
 template<class T, size_t d1>
 void coeff_one_T(multi_array<T,d1>& a, T* w, multi_array<T,1>& out) {
@@ -55,12 +87,9 @@ void coeff_one_T(multi_array<T,d1>& a, T* w, multi_array<T,1>& out) {
 
 template<class T>
 void coeff_one(multi_array<T,2>& a, T w, multi_array<T,1>& out) {
-  for(Index i = 0; i < a.shape()[1]; i++){
-    out(i) = T(0.0);
-    for(Index j = 0; j < a.shape()[0]; j++){
-      out(i) += a(j,i)*w;
-    }
-  }
+  multi_array<T,1> vec({a.shape()[0]}, a.sl);
+  set_const(vec,w);
+  matvec_trans(a,vec,out);
 }
 template void coeff_one(multi_array<double,2>& a, double w, multi_array<double,1>& out);
 template void coeff_one(multi_array<float,2>& a, float w, multi_array<float,1>& out);

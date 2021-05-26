@@ -3,8 +3,46 @@
 #include <generic/common.hpp>
 #include <generic/utility.hpp>
 
+#ifdef __CUDACC__
+  template<class T>
+  __global__ void ptw_sum_scal(int n, T* A, T alpha){
+    int idx = threadIdx.x + blockDim.x * blockIdx.x;
 
-enum class stloc { host, device };
+    while(idx < n){
+      A[idx] += alpha;
+      idx += blockDim.x * gridDim.x;
+    }
+  }
+  template __global__ void ptw_sum_scal(int, double*, double);
+  template __global__ void ptw_sum_scal(int, float*, float);
+
+  template<class T>
+  __global__ void ptw_sum(int n, T* A, T* B){
+    int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+    while(idx < n){
+      A[idx] += B[idx];
+      idx += blockDim.x * gridDim.x;
+    }
+  }
+  template __global__ void ptw_sum(int, double*, double*);
+  template __global__ void ptw_sum(int, float*, float*);
+
+
+/*
+  template<class T>
+  __global__ void ptw_mult_scal(int n, T* A, T alpha){
+    int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+    while(idx < n){
+      A[idx] *= alpha;
+      idx += blockDim.x * gridDim.x;
+    }
+  }
+  template __global__ void ptw_mult_scal(int n, double*, double);
+  template __global__ void ptw_mult_scal(int n, float*, float);
+*/
+#endif
 
 template<class T, size_t d>
 struct multi_array {
@@ -163,12 +201,28 @@ struct multi_array {
   }
 
   multi_array& operator+=(const multi_array& lhs) {
-    std::transform(begin(), end(), lhs.begin(), begin(), [](T& a, T& b){return a+b;} );
+    if((sl == stloc::host) && (lhs.sl == stloc::host)){
+      std::transform(begin(), end(), lhs.begin(), begin(), [](T& a, T& b){return a+b;} );
+    }else if ((sl == stloc::device) && (lhs.sl == stloc::device)){
+      #ifdef __CUDACC__
+        ptw_sum<<<2,2>>>(num_elements(),begin(),lhs.begin());
+      #endif
+    }else{
+      cout << "ERROR: either both on CPU or on GPU" << __FILE__ << ":"
+      << __LINE__ << endl;
+      exit(1);
+    }
     return *this;
   }
 
   multi_array& operator+=(const T scalar) {
-    std::transform(begin(), end(), begin(), [&scalar](T& a){return scalar+a;} );
+    if(sl == stloc::host){
+      std::transform(begin(), end(), begin(), [&scalar](T& a){return scalar+a;} );
+    }else{
+      #ifdef __CUDACC__
+        ptw_sum_scal<<<2,2>>>(num_elements(),begin(),scalar);
+      #endif
+    }
     return *this;
   }
 
@@ -178,7 +232,13 @@ struct multi_array {
   }
 
   multi_array& operator*=(const T scalar) {
-    std::transform(begin(), end(), begin(), [&scalar](T& a){return scalar*a;} );
+    if(sl == stloc::host){
+      std::transform(begin(), end(), begin(), [&scalar](T& a){return scalar*a;} );
+    }else{
+      #ifdef __CUDACC__
+        //ptw_mult_scal<<<2,2>>>(num_elements(),begin(),scalar); TO BE FIXED FOR COMPLEX NUMBERS
+      #endif
+    }
     return *this;
   }
 

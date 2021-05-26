@@ -11,10 +11,13 @@
 #include <complex>
 #include <cblas.h>
 #include <fftw3.h>
+#include <functional>
+#include <random>
 
 #ifdef __CUDACC__
 #include <cuda_runtime.h>
 #include "cublas_v2.h"
+#include <cufft.h>
 #endif
 
 using std::cout;
@@ -28,3 +31,13 @@ using std::abs;
 using std::complex;
 
 typedef ptrdiff_t Index;
+enum class stloc { host, device };
+
+namespace parameters{
+  const int n_threads = 128;
+};
+// parameters::n_threads
+
+// extern cublas
+//extern cublasHandle_t handle2;
+//cublasCreate (&handle2);

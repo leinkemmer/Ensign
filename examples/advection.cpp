@@ -18,7 +18,6 @@ int main(){
   Index Nv = 10; // NEEDS TO BE EVEN FOR FOURIER
 
   int r = 2; // rank desired
-  int n_b = 1; // number of actual basis functions
 
   double tstar = 0.1; // final time
   double tau = 0.01; // time step splitting

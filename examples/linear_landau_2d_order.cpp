@@ -276,8 +276,8 @@ int main(){
     we_w2(j) = pow(w(j),2) * h_vv[0] * h_vv[1];
   }
 
-  coeff_one(lr_sol.V,we_v2.begin(),int_v);
-  coeff_one(lr_sol.V,we_w2.begin(),int_v2);
+  coeff_one(lr_sol.V,we_v2,int_v);
+  coeff_one(lr_sol.V,we_w2,int_v2);
 
   int_v += int_v2;
 
@@ -409,7 +409,10 @@ int main(){
         matmul_transb(Kexhat,C2vc,Khat);
         matmul_transb(Keyhat,C2wc,tmpXhat);
 
-        Khat += tmpXhat;
+        //Khat += tmpXhat;
+
+        Khat = Khat + tmpXhat;
+
 
         matmul(Khat,Twc,tmpXhat);
 
@@ -527,7 +530,9 @@ int main(){
         matmul_transb(Lvhat,C2vc,Lhat);
         matmul_transb(Lwhat,C2wc,tmpVhat);
 
-        Lhat += tmpVhat;
+        //Lhat += tmpVhat;
+
+        Lhat = Lhat + tmpVhat;
 
         matmul(Lhat,Twc,tmpVhat);
 
@@ -577,8 +582,8 @@ int main(){
     cout << "Error in mass: " << err_mass << endl;
     err_massf << err_mass << endl;
 
-    coeff_one(lr_sol.V,we_v2.begin(),int_v);
-    coeff_one(lr_sol.V,we_w2.begin(),int_v2);
+    coeff_one(lr_sol.V,we_v2,int_v);
+    coeff_one(lr_sol.V,we_w2,int_v2);
 
     int_v += int_v2;
 
@@ -713,7 +718,8 @@ int main(){
           matmul_transb(Kexhat,C2vc,Khat);
           matmul_transb(Keyhat,C2wc,tmpXhat);
 
-          Khat += tmpXhat;
+          //Khat += tmpXhat;
+          Khat = Khat + tmpXhat;
 
           matmul(Khat,Twc,tmpXhat);
 
@@ -830,7 +836,8 @@ int main(){
           matmul_transb(Lvhat,C2vc,Lhat);
           matmul_transb(Lwhat,C2wc,tmpVhat);
 
-          Lhat += tmpVhat;
+          //Lhat += tmpVhat;
+          Lhat = Lhat + tmpVhat;
 
           matmul(Lhat,Twc,tmpVhat);
 
@@ -880,8 +887,8 @@ int main(){
       cout << "Error in mass: " << err_mass << endl;
       //err_massf << err_mass << endl;
 
-      coeff_one(lr_sol.V,we_v2.begin(),int_v);
-      coeff_one(lr_sol.V,we_w2.begin(),int_v2);
+      coeff_one(lr_sol.V,we_v2,int_v);
+      coeff_one(lr_sol.V,we_w2,int_v2);
 
       int_v += int_v2;
 
