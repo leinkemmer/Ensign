@@ -2,7 +2,17 @@
 #include <catch2/catch.hpp>
 #include <generic/matrix.hpp>
 
+#ifdef __CUDACC__
+  cublasHandle_t  handle;
+#endif
+
+
 TEST_CASE( "matrix basic operations", "[matrix]" ) {
+
+  #ifdef __CUDACC__
+    cublasCreate(&handle);
+  #endif
+
 
   SECTION("initializations (CPU)"){
     multi_array<double, 2> a({2,3});
@@ -623,6 +633,10 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
     cout << v_cpu << endl;
 
   }
+  #endif
+
+  #ifdef __CUDACC__
+    cublasDestroy(handle);
   #endif
 
 }

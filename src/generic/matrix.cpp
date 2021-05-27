@@ -52,7 +52,7 @@ void set_const(multi_array<T,1>& a,T alpha) {
     fill(a.begin(), a.end(), alpha);
   } else {
     #ifdef __CUDACC__
-      fill_gpu<<<2,2>>>(a.shape()[0],a.begin(),alpha);
+      fill_gpu<<<(a.shape()[0]+n_threads-1)/n_threads,n_threads>>>(a.shape()[0],a.begin(),alpha);
     #else
     cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
     << __LINE__ << endl;
@@ -117,8 +117,6 @@ void matmul(const multi_array<double,2>& a, const multi_array<double,2>& b, mult
       c.begin(), a.shape()[0]);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
       #ifdef __CUDACC__
-      cublasHandle_t  handle;
-      cublasCreate (&handle);
       double alpha = 1.0;
       double beta = 0.0;
 
@@ -128,7 +126,6 @@ void matmul(const multi_array<double,2>& a, const multi_array<double,2>& b, mult
         b.begin(),a.shape()[1],&beta,
         c.begin(), a.shape()[0]);
 
-      cublasDestroy(handle);
         #else
         cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
         << __LINE__ << endl;
@@ -157,8 +154,6 @@ void matmul(const multi_array<complex<double>,2>& a, const multi_array<complex<d
 #ifdef __CUDACC__
 template<>
 void matmul(const multi_array<cuDoubleComplex,2>& a, const multi_array<cuDoubleComplex,2>& b, multi_array<cuDoubleComplex,2>& c){
-  cublasHandle_t  handle;
-  cublasCreate (&handle);
 
   cuDoubleComplex one = make_cuDoubleComplex(1.0, 0.0);
   cuDoubleComplex zero = make_cuDoubleComplex(0.0, 0.0);
@@ -168,9 +163,6 @@ void matmul(const multi_array<cuDoubleComplex,2>& a, const multi_array<cuDoubleC
           &one,a.begin(),a.shape()[0],
           b.begin(),a.shape()[1],&zero,
           c.begin(), a.shape()[0]);
-
-  cublasDestroy(handle);
-
 
 }
 #endif
@@ -186,8 +178,6 @@ void matmul(const multi_array<float,2>& a, const multi_array<float,2>& b, multi_
       c.begin(), a.shape()[0]);
   }else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
     #ifdef __CUDACC__
-    cublasHandle_t  handle;
-    cublasCreate (&handle);
     float alpha = 1.0;
     float beta = 0.0;
 
@@ -196,8 +186,6 @@ void matmul(const multi_array<float,2>& a, const multi_array<float,2>& b, multi_
         &alpha,a.begin(),a.shape()[0],
         b.begin(),a.shape()[1],&beta,
         c.begin(), a.shape()[0]);
-
-    cublasDestroy(handle);
 
     #else
       cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
@@ -221,8 +209,6 @@ void matmul_transa(const multi_array<double,2>& a, const multi_array<double,2>& 
       c.begin(), a.shape()[1]);
   } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
     #ifdef __CUDACC__
-    cublasHandle_t  handle;
-    cublasCreate (&handle);
     double alpha = 1.0;
     double beta = 0.0;
 
@@ -231,8 +217,6 @@ void matmul_transa(const multi_array<double,2>& a, const multi_array<double,2>& 
       &alpha,a.begin(),a.shape()[0],
       b.begin(),a.shape()[0],&beta,
       c.begin(), a.shape()[1]);
-
-    cublasDestroy(handle);
 
     #else
       cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
@@ -255,8 +239,6 @@ void matmul_transa(const multi_array<float,2>& a, const multi_array<float,2>& b,
       c.begin(), a.shape()[1]);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
       #ifdef __CUDACC__
-      cublasHandle_t  handle;
-      cublasCreate (&handle);
       float alpha = 1.0;
       float beta = 0.0;
 
@@ -266,7 +248,6 @@ void matmul_transa(const multi_array<float,2>& a, const multi_array<float,2>& b,
         b.begin(),a.shape()[0],&beta,
         c.begin(), a.shape()[1]);
 
-      cublasDestroy(handle);
 
         #else
         cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
@@ -290,8 +271,6 @@ void matmul_transb(const multi_array<double,2>& a, const multi_array<double,2>& 
       c.begin(), a.shape()[0]);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
       #ifdef __CUDACC__
-      cublasHandle_t  handle;
-      cublasCreate (&handle);
       double alpha = 1.0;
       double beta = 0.0;
 
@@ -300,8 +279,6 @@ void matmul_transb(const multi_array<double,2>& a, const multi_array<double,2>& 
         &alpha,a.begin(),a.shape()[0],
         b.begin(),b.shape()[0],&beta,
         c.begin(), a.shape()[0]);
-
-      cublasDestroy(handle);
 
         #else
         cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
@@ -324,8 +301,6 @@ void matmul_transb(const multi_array<float,2>& a, const multi_array<float,2>& b,
       c.begin(), a.shape()[0]);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
       #ifdef __CUDACC__
-      cublasHandle_t  handle;
-      cublasCreate (&handle);
       float alpha = 1.0;
       float beta = 0.0;
 
@@ -334,8 +309,6 @@ void matmul_transb(const multi_array<float,2>& a, const multi_array<float,2>& b,
         &alpha,a.begin(),a.shape()[0],
         b.begin(),b.shape()[0],&beta,
         c.begin(), a.shape()[0]);
-
-      cublasDestroy(handle);
 
         #else
         cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
@@ -364,8 +337,6 @@ void matmul_transb(const multi_array<complex<double>,2>& a, const multi_array<co
 #ifdef __CUDACC__
 template<>
 void matmul_transb(const multi_array<cuDoubleComplex,2>& a, const multi_array<cuDoubleComplex,2>& b, multi_array<cuDoubleComplex,2>& c){
-        cublasHandle_t  handle;
-        cublasCreate (&handle);
         cuDoubleComplex one = make_cuDoubleComplex(1.0, 0.0);
         cuDoubleComplex zero = make_cuDoubleComplex(0.0, 0.0);
 
@@ -374,8 +345,6 @@ void matmul_transb(const multi_array<cuDoubleComplex,2>& a, const multi_array<cu
           &one,a.begin(),a.shape()[0],
           b.begin(),b.shape()[0],&zero,
           c.begin(), a.shape()[0]);
-
-        cublasDestroy(handle);
 
 }
 #endif
@@ -390,8 +359,6 @@ void matmul_transab(const multi_array<double,2>& a, const multi_array<double,2>&
       c.begin(), a.shape()[1]);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
       #ifdef __CUDACC__
-      cublasHandle_t  handle;
-      cublasCreate (&handle);
       double alpha = 1.0;
       double beta = 0.0;
 
@@ -400,8 +367,6 @@ void matmul_transab(const multi_array<double,2>& a, const multi_array<double,2>&
         &alpha,a.begin(),a.shape()[0],
         b.begin(),b.shape()[0],&beta,
         c.begin(), a.shape()[1]);
-
-      cublasDestroy(handle);
 
         #else
         cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
@@ -425,8 +390,6 @@ void matmul_transab(const multi_array<float,2>& a, const multi_array<float,2>& b
       c.begin(), a.shape()[1]);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
       #ifdef __CUDACC__
-      cublasHandle_t  handle;
-      cublasCreate (&handle);
       float alpha = 1.0;
       float beta = 0.0;
 
@@ -435,8 +398,6 @@ void matmul_transab(const multi_array<float,2>& a, const multi_array<float,2>& b
         &alpha,a.begin(),a.shape()[0],
         b.begin(),b.shape()[0],&beta,
         c.begin(), a.shape()[1]);
-
-      cublasDestroy(handle);
 
         #else
         cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
@@ -460,8 +421,6 @@ void matvec(const multi_array<double,2>& a, const multi_array<double,1>& b, mult
       c.begin(), 1);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
       #ifdef __CUDACC__
-      cublasHandle_t  handle;
-      cublasCreate (&handle);
       double alpha = 1.0;
       double beta = 0.0;
 
@@ -469,8 +428,6 @@ void matvec(const multi_array<double,2>& a, const multi_array<double,1>& b, mult
       &alpha, a.begin(), a.shape()[0],
       b.begin(), 1, &beta,
       c.begin(), 1);
-
-      cublasDestroy(handle);
 
       #else
       cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
@@ -496,8 +453,6 @@ void matvec_trans(const multi_array<double,2>& a, const multi_array<double,1>& b
       c.begin(), 1);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
       #ifdef __CUDACC__
-      cublasHandle_t  handle;
-      cublasCreate (&handle);
       double alpha = 1.0;
       double beta = 0.0;
 
@@ -505,8 +460,6 @@ void matvec_trans(const multi_array<double,2>& a, const multi_array<double,1>& b
       &alpha, a.begin(), a.shape()[0],
       b.begin(), 1, &beta,
       c.begin(), 1);
-
-      cublasDestroy(handle);
 
       #else
       cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
@@ -532,8 +485,6 @@ void matvec_trans(const multi_array<float,2>& a, const multi_array<float,1>& b, 
       c.begin(), 1);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
       #ifdef __CUDACC__
-      cublasHandle_t  handle;
-      cublasCreate (&handle);
       float alpha = 1.0;
       float beta = 0.0;
 
@@ -541,8 +492,6 @@ void matvec_trans(const multi_array<float,2>& a, const multi_array<float,1>& b, 
       &alpha, a.begin(), a.shape()[0],
       b.begin(), 1, &beta,
       c.begin(), 1);
-
-      cublasDestroy(handle);
 
       #else
       cout << "ERROR: compiled without GPU support" << __FILE__ << ":"

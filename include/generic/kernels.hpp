@@ -17,6 +17,16 @@ __global__ void ptw_sum_scal(int n, T* A, T alpha);
 template<class T>
 __global__ void ptw_sum(int n, T* A, T* B);
 
+__global__ void dmaxpy(int n, double* a, double* x, double* y);
+
+__global__ void scale_unique(double* x, double alpha);
+
+__global__ void scale_sqrt_unique(double* x, double alpha);
+
+__global__ void ptw_div_gs(int n, double* A, double* alpha);
+
+__global__ void ptw_mult(int n, double* A, double* B, double* C);
+
 __global__ void der_fourier(int n, cuDoubleComplex* A, double ax, double bx, int nx);
 
 __global__ void ptw_mult_row_cplx_fourier(int nm, int n, int nx, cuDoubleComplex* A, double ax, double bx);

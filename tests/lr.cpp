@@ -4,8 +4,16 @@
 #include <lr/lr.hpp>
 #include <generic/matrix.hpp>
 
+#ifdef __CUDACC__
+  cublasHandle_t  handle;
+#endif
 
 TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
+
+  #ifdef __CUDACC__
+    cublasCreate(&handle);
+  #endif
+
 
   SECTION("Gram-Schmidt"){
     multi_array<double,2> A({4,3});
@@ -107,5 +115,8 @@ TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
 
   }
 
+  #ifdef __CUDACC__
+    cublasDestroy(handle);
+  #endif
 
 }

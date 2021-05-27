@@ -3,7 +3,16 @@
 
 #include <generic/storage.hpp>
 
+#ifdef __CUDACC__
+  cublasHandle_t  handle;
+#endif
+
+
 TEST_CASE( "multi_array basic operations", "[multi_array]" ) {
+
+  #ifdef __CUDACC__
+    cublasCreate(&handle);
+  #endif
 
     multi_array<double, 2> a({10,11});
 
@@ -74,5 +83,9 @@ TEST_CASE( "multi_array basic operations", "[multi_array]" ) {
 
     }
 
+  #endif
+
+  #ifdef __CUDACC__
+    cublasDestroy(handle);
   #endif
 }

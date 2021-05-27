@@ -165,7 +165,7 @@ struct multi_array {
       std::transform(begin(), end(), lhs.begin(), begin(), [](T& a, T& b){return a+b;} );
     }else if ((sl == stloc::device) && (lhs.sl == stloc::device)){
       #ifdef __CUDACC__
-        ptw_sum<<<2,2>>>(num_elements(),begin(),lhs.begin());
+        ptw_sum<<<(num_elements()+n_threads-1)/n_threads,n_threads>>>(num_elements(),begin(),lhs.begin());
       #endif
     }else{
       cout << "ERROR: either both on CPU or on GPU" << __FILE__ << ":"
@@ -180,7 +180,7 @@ struct multi_array {
       std::transform(begin(), end(), begin(), [&scalar](T& a){return scalar+a;} );
     }else{
       #ifdef __CUDACC__
-        ptw_sum_scal<<<2,2>>>(num_elements(),begin(),scalar);
+        ptw_sum_scal<<<(num_elements()+n_threads-1)/n_threads,n_threads>>>(num_elements(),begin(),scalar);
       #endif
     }
     return *this;

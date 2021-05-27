@@ -3,11 +3,17 @@
 #include <generic/storage.hpp>
 #include <lr/coefficients.hpp>
 
-#include <random>
-#include <complex>
-#include <cstring>
+#ifdef __CUDACC__
+  cublasHandle_t  handle;
+#endif
+
 
 int main(){
+
+  #ifdef __CUDACC__
+    cublasCreate(&handle);
+  #endif
+
 
   ofstream time_error_1d;
   ofstream tau_span_1d;
@@ -668,5 +674,9 @@ int main(){
 
   time_error_1d.close();
   tau_span_1d.close();
+
+  #ifdef __CUDACC__
+    cublasDestroy(handle);
+  #endif
   return 0;
 }

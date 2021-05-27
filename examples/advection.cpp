@@ -8,11 +8,14 @@
 #include <fftw3.h>
 #include <cstring>
 
-extern "C" {
-extern int dgees_(char*,char*,void*,int*,double*,int*, int*, double*, double*, double*, int*, double*, int*, bool*,int*);
-}
+#ifdef __CUDACC__
+  cublasHandle_t  handle;
+#endif
 
 int main(){
+  #ifdef __CUDACC__
+    cublasCreate (&handle);
+  #endif
 
   Index Nx = 10; // NEEDS TO BE EVEN FOR FOURIER
   Index Nv = 10; // NEEDS TO BE EVEN FOR FOURIER
@@ -280,6 +283,10 @@ int main(){
   }
 
   cout << err << endl;
+
+  #ifdef __CUDACC__
+    cublasDestroy(handle);
+  #endif
 
   return 0;
 }

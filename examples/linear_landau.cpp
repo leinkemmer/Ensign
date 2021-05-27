@@ -4,6 +4,11 @@
 #include <lr/coefficients.hpp>
 #include <generic/kernels.hpp>
 
+#ifdef __CUDACC__
+  cublasHandle_t  handle;
+#endif
+
+
 int main(){
 
   Index Nx = 64; // NEEDS TO BE EVEN FOR FOURIER
@@ -217,6 +222,8 @@ int main(){
 
   //// FOR GPU ////
   #ifdef __CUDACC__
+  cublasCreate (&handle);
+
   // To be substituted if we initialize in GPU
 
   lr2<double> d_lr_sol(r,{Nx,Nv}, stloc::device);
@@ -533,7 +540,7 @@ int main(){
 
     cufftExecD2Z(plans_d_e[0],d_ef.begin(),(cufftDoubleComplex*)d_efhat.begin());
 
-    der_fourier<<<2,2>>>(Nx/2+1, d_efhat.begin(), ax, bx, Nx); //128 threads blocks as needed
+    der_fourier<<<(Nx/2+1+n_threads-1)/n_threads,n_threads>>>(Nx/2+1, d_efhat.begin(), ax, bx, Nx); //128 threads blocks as needed
 
     cufftExecZ2D(plans_d_e[1],(cufftDoubleComplex*)d_efhat.begin(),d_ef.begin());
 
@@ -541,7 +548,7 @@ int main(){
 
     cufftExecD2Z(plans_d_v[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
 
-    ptw_mult_row_cplx_fourier<<<2,2>>>(d_Lhat.num_elements(), d_Lhat.shape()[0], Nv, d_Lhat.begin(), av, bv);
+    ptw_mult_row_cplx_fourier<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.shape()[0], Nv, d_Lhat.begin(), av, bv);
 
     cufftExecZ2D(plans_d_v[1],(cufftDoubleComplex*)d_Lhat.begin(),d_dV.begin());
 
@@ -552,9 +559,9 @@ int main(){
     d_T = T_gpu;
     d_dc_r = dc_r_gpu;
 
-    cplx_conv<<<2,2>>>(d_T.num_elements(), d_T.begin(), d_Tc.begin());
+    cplx_conv<<<(d_T.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_T.num_elements(), d_T.begin(), d_Tc.begin());
 
-    cplx_conv<<<2,2>>>(d_C2.num_elements(), d_C2.begin(), d_C2c.begin());
+    cplx_conv<<<(d_C2.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_C2.num_elements(), d_C2.begin(), d_C2c.begin());
 
     cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
 
@@ -562,7 +569,7 @@ int main(){
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
-      ptw_mult_row_k<<<2,2>>>(d_lr_sol.X.num_elements(),d_lr_sol.X.shape()[0],d_lr_sol.X.begin(),d_ef.begin(),d_lr_sol.X.begin());
+      ptw_mult_row_k<<<(d_lr_sol.X.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_lr_sol.X.num_elements(),d_lr_sol.X.shape()[0],d_lr_sol.X.begin(),d_ef.begin(),d_lr_sol.X.begin());
 
       cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Kehat.begin());
 
@@ -570,11 +577,11 @@ int main(){
 
       matmul(d_Khat,d_Tc,d_Mhattmp);
 
-      exp_euler_fourier<<<2,2>>>(d_Mhat.num_elements(), d_Mhat.shape()[0], d_Mhat.begin(), d_dc_r.begin(), ts_ee, d_Mhattmp.begin(), ax, bx);
+      exp_euler_fourier<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), d_Mhat.shape()[0], d_Mhat.begin(), d_dc_r.begin(), ts_ee, d_Mhattmp.begin(), ax, bx);
 
       matmul_transb(d_Mhat,d_Tc,d_Khat);
 
-      ptw_mult_cplx<<<2,2>>>(d_Khat.num_elements(),d_Khat.begin(),ncx);
+      ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(),d_Khat.begin(),ncx);
 
       cufftExecZ2D(plans_d_x[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin());
 
@@ -584,13 +591,13 @@ int main(){
 
     // S step
 
-    ptw_mult_scal<<<2,2>>>(d_ef.num_elements(), d_ef.begin(), hx, d_wx.begin());
+    ptw_mult_scal<<<(d_ef.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_ef.num_elements(), d_ef.begin(), hx, d_wx.begin());
 
     coeff(d_lr_sol.X, d_lr_sol.X, d_wx.begin(), d_D1);
 
     cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
 
-    ptw_mult_row_cplx_fourier<<<2,2>>>(d_Khat.num_elements(), d_Khat.shape()[0], Nx, d_Khat.begin(), ax, bx);
+    ptw_mult_row_cplx_fourier<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.shape()[0], Nx, d_Khat.begin(), ax, bx);
 
     cufftExecZ2D(plans_d_x[1],(cufftDoubleComplex*)d_Khat.begin(),d_dX.begin());
 
@@ -604,7 +611,7 @@ int main(){
       matmul_transb(d_lr_sol.S,d_C2,d_tmpS);
       matmul(d_D1,d_tmpS,d_multmp);
 
-      expl_euler<<<2,2>>>(d_D1.num_elements(), d_lr_sol.S.begin(), ts_ee, d_T.begin(), d_multmp.begin());
+      expl_euler<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_lr_sol.S.begin(), ts_ee, d_T.begin(), d_multmp.begin());
     }
 
     // L step
@@ -617,9 +624,9 @@ int main(){
     d_T = T_gpu;
     d_dc_r = dc_r_gpu;
 
-    cplx_conv<<<2,2>>>(d_T.num_elements(), d_T.begin(), d_Tc.begin());
+    cplx_conv<<<(d_T.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_T.num_elements(), d_T.begin(), d_Tc.begin());
 
-    cplx_conv<<<2,2>>>(d_D2.num_elements(), d_D2.begin(), d_C2c.begin());
+    cplx_conv<<<(d_D2.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D2.num_elements(), d_D2.begin(), d_C2c.begin());
 
     cufftExecD2Z(plans_d_v[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
 
@@ -627,7 +634,7 @@ int main(){
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
-      ptw_mult_row_k<<<2,2>>>(d_lr_sol.V.num_elements(),d_lr_sol.V.shape()[0],d_lr_sol.V.begin(),d_v.begin(),d_lr_sol.V.begin());
+      ptw_mult_row_k<<<(d_lr_sol.V.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_lr_sol.V.num_elements(),d_lr_sol.V.shape()[0],d_lr_sol.V.begin(),d_v.begin(),d_lr_sol.V.begin());
 
       cufftExecD2Z(plans_d_v[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lvhat.begin());
 
@@ -635,11 +642,11 @@ int main(){
 
       matmul(d_Lhat,d_Tc,d_Nhattmp);
 
-      exp_euler_fourier<<<2,2>>>(d_Nhat.num_elements(), d_Nhat.shape()[0], d_Nhat.begin(), d_dc_r.begin(), -ts_ee, d_Nhattmp.begin(), av, bv);
+      exp_euler_fourier<<<(d_Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Nhat.num_elements(), d_Nhat.shape()[0], d_Nhat.begin(), d_dc_r.begin(), -ts_ee, d_Nhattmp.begin(), av, bv);
 
       matmul_transb(d_Nhat,d_Tc,d_Lhat);
 
-      ptw_mult_cplx<<<2,2>>>(d_Lhat.num_elements(),d_Lhat.begin(),ncv);
+      ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(),d_Lhat.begin(),ncv);
 
       cufftExecZ2D(plans_d_v[1],(cufftDoubleComplex*)d_Lhat.begin(),d_lr_sol.V.begin());
 
@@ -648,9 +655,6 @@ int main(){
     gram_schmidt_gpu(d_lr_sol.V, d_lr_sol.S, hv);
 
     transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
-
-    cublasHandle_t  handle;
-    cublasCreate (&handle);
 
     cublasDdot (handle, Nx, d_ef.begin(), 1, d_ef.begin(), 1, d_el_energy);
     scale_unique<<<1,1>>>(d_el_energy,0.5*hx); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
@@ -687,7 +691,6 @@ int main(){
 
     //err_energyGPUf << err_energy_CPU << endl;
 
-    cublasDestroy(handle);
     #endif
 
     cout << "Electric energy CPU: " << el_energy << endl;
@@ -716,6 +719,8 @@ int main(){
   //err_energyf.close();
 
   #ifdef __CUDACC__
+  cublasDestroy(handle);
+
   destroy_plans(plans_d_e);
   destroy_plans(plans_d_x);
   destroy_plans(plans_d_v);

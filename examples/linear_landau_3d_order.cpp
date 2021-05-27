@@ -4,11 +4,16 @@
 #include <lr/coefficients.hpp>
 //#include <generic/timer.hpp>
 
-#include <random>
-#include <complex>
-#include <cstring>
+#ifdef __CUDACC__
+  cublasHandle_t  handle;
+#endif
+
 
 int main(){
+
+  #ifdef __CUDACC__
+    cublasCreate(&handle);
+  #endif
 
   ofstream time_error_3d;
   ofstream tau_span_3d;
@@ -1320,6 +1325,10 @@ int main(){
 
     time_error_3d.close();
     tau_span_3d.close();
+
+    #ifdef __CUDACC__
+      cublasDestroy(handle);
+    #endif
 
   return 0;
 }

@@ -33,11 +33,7 @@ using std::complex;
 typedef ptrdiff_t Index;
 enum class stloc { host, device };
 
-namespace parameters{
+#ifdef __CUDACC__
   const int n_threads = 128;
-};
-// parameters::n_threads
-
-// extern cublas
-//extern cublasHandle_t handle2;
-//cublasCreate (&handle2);
+  extern cublasHandle_t  handle;
+#endif

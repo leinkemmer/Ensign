@@ -151,6 +151,44 @@ __global__ void ptw_mult_scal(int n, double* A, double alpha, double* B){
   }
 }
 
+__global__ void dmaxpy(int n, double* a, double* x, double* y){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    y[idx] = -(*a)*x[idx] + y[idx];
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+__global__ void scale_unique(double* x, double alpha){
+  *x *= alpha;
+}
+
+__global__ void scale_sqrt_unique(double* x, double alpha){
+  *x = sqrt(*x * alpha);
+}
+
+__global__ void ptw_div_gs(int n, double* A, double* alpha){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    if(abs(*alpha) > 1e-12){
+      A[idx] /= (*alpha);
+    }
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+__global__ void ptw_mult(int n, double* A, double* B, double* C){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    C[idx] = A[idx] * B[idx];
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+
 __global__ void expl_euler(int n, double* A, double t, double* M1, double* M2){
   int idx = threadIdx.x + blockDim.x * blockIdx.x;
 

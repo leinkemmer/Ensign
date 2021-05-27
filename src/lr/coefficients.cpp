@@ -7,7 +7,7 @@ void coeff(multi_array<T,2>& a, multi_array<T,2>& b, T w, multi_array<T,2>& out)
     out *=  w;
   }else{
     #ifdef __CUDACC__
-      ptw_mult_scal<<<2,2>>>(out.num_elements(), out.begin(), w);
+      ptw_mult_scal<<<(out.num_elements()+n_threads-1)/n_threads,n_threads>>>(out.num_elements(), out.begin(), w);
     #else
       cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
       << __LINE__ << endl;
@@ -32,7 +32,7 @@ void coeff(multi_array<T,2>& a, multi_array<T,2>& b, T* w, multi_array<T,2>& out
     ptw_mult_row(b,w,tmp);
   }else{
     #ifdef __CUDACC__
-      ptw_mult_row_k<<<64,64>>>(b.num_elements(), b.shape()[0], b.begin(), w, tmp.begin());
+      ptw_mult_row_k<<<(b.num_elements()+n_threads-1)/n_threads,n_threads>>>(b.num_elements(), b.shape()[0], b.begin(), w, tmp.begin());
     #else
       cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
       << __LINE__ << endl;

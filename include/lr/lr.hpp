@@ -54,8 +54,8 @@ std::function<T(T*,T*)> inner_product_from_const_weight(T w, Index N);
 //template<class T>
 //void ptw_diff(T* v1, Index n, T* v2);
 
-template<class T>
-void ptw_div(T* v, Index n, T scal);
+//template<class T>
+//void ptw_div(T* v, Index n, T scal);
 
 template<class T>
 void gram_schmidt(multi_array<T,2>& Q, multi_array<T,2>& R,
@@ -66,7 +66,6 @@ void gram_schmidt(multi_array<T,2>& Q, multi_array<T,2>& R,
   //void gram_schmidt_gpu(Index n, int r, double* Q, double* R, double w); //with constant weight for inner product
   void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w);
   void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double* w);
-  __global__ void scale_unique(double* x, double alpha);
 #endif
   /*
   template<class T>

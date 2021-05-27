@@ -4,6 +4,11 @@
 #include <lr/coefficients.hpp>
 #include <generic/kernels.hpp>
 
+#ifdef __CUDACC__
+  cublasHandle_t  handle;
+#endif
+
+
 int main(){
 
   array<Index,2> N_xx = {64,64}; // Sizes in space
@@ -297,6 +302,8 @@ int main(){
   //// FOR GPU ////
 
   #ifdef __CUDACC__
+  cublasCreate (&handle);
+
   // To be substituted if we initialize in GPU
 
   lr2<double> d_lr_sol(r,{dxx_mult,dvv_mult},stloc::device);
@@ -805,7 +812,7 @@ int main(){
 
     cufftExecD2Z(plans_d_e[0],d_ef.begin(),(cufftDoubleComplex*)d_efhat.begin());
 
-    der_fourier_2d<<<2,2>>>(dxxh_mult, N_xx[0]/2+1, N_xx[1], d_efhat.begin(), d_lim_xx, ncxx, d_efhatx.begin(),d_efhaty.begin());
+    der_fourier_2d<<<(dxxh_mult+n_threads-1)/n_threads,n_threads>>>(dxxh_mult, N_xx[0]/2+1, N_xx[1], d_efhat.begin(), d_lim_xx, ncxx, d_efhatx.begin(),d_efhaty.begin());
 
     cufftExecZ2D(plans_d_e[1],(cufftDoubleComplex*)d_efhatx.begin(),d_efx.begin());
 
@@ -817,7 +824,7 @@ int main(){
 
     cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_tmpVhat.begin());
 
-    ptw_mult_row_cplx_fourier_2d<<<2,2>>>(dvvh_mult*r, N_vv[0]/2+1, N_vv[1], d_tmpVhat.begin(), d_lim_vv, ncvv, d_dVhat_v.begin(), d_dVhat_w.begin()); // Very similar, maybe can be put together
+    ptw_mult_row_cplx_fourier_2d<<<(dvvh_mult*r+n_threads-1)/n_threads,n_threads>>>(dvvh_mult*r, N_vv[0]/2+1, N_vv[1], d_tmpVhat.begin(), d_lim_vv, ncvv, d_dVhat_v.begin(), d_dVhat_w.begin()); // Very similar, maybe can be put together
 
     cufftExecZ2D(d_plans_vv[1],(cufftDoubleComplex*)d_dVhat_v.begin(),d_dV_v.begin());
 
@@ -837,13 +844,13 @@ int main(){
     d_Tw = Tw_gpu;
     d_dcw_r = dcw_r_gpu;
 
-    cplx_conv<<<2,2>>>(d_Tv.num_elements(), d_Tv.begin(), d_Tvc.begin());
+    cplx_conv<<<(d_Tv.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Tv.num_elements(), d_Tv.begin(), d_Tvc.begin());
 
-    cplx_conv<<<2,2>>>(d_Tw.num_elements(), d_Tw.begin(), d_Twc.begin());
+    cplx_conv<<<(d_Tw.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Tw.num_elements(), d_Tw.begin(), d_Twc.begin());
 
-    cplx_conv<<<2,2>>>(d_C2v.num_elements(), d_C2v.begin(), d_C2vc.begin());
+    cplx_conv<<<(d_C2v.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_C2v.num_elements(), d_C2v.begin(), d_C2vc.begin());
 
-    cplx_conv<<<2,2>>>(d_C2w.num_elements(), d_C2w.begin(), d_C2wc.begin());
+    cplx_conv<<<(d_C2w.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_C2w.num_elements(), d_C2w.begin(), d_C2wc.begin());
 
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
@@ -853,7 +860,7 @@ int main(){
 
       matmul(d_Khat,d_Tvc,d_Mhat);
 
-      exact_sol_exp_2d<<<2,2>>>(d_Mhat.num_elements(), N_xx[0]/2 + 1, N_xx[1], d_Mhat.begin(), d_dcv_r.begin(), ts_split, d_lim_xx, ncxx);
+      exact_sol_exp_2d<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), N_xx[0]/2 + 1, N_xx[1], d_Mhat.begin(), d_dcv_r.begin(), ts_split, d_lim_xx, ncxx);
 
       matmul_transb(d_Mhat,d_Tvc,d_Khat);
 
@@ -862,14 +869,14 @@ int main(){
       // Full step -- Exponential Euler
       //cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin()); // check if CUDA preserves input and eventually adapt. YES
 
-      ptw_mult_cplx<<<2,2>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
+      ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
 
       matmul(d_Khat,d_Twc,d_Mhat);
 
       for(Index jj = 0; jj < nsteps_ee; jj++){
 
-        ptw_mult_row_k<<<2,2>>>(d_lr_sol.X.num_elements(),d_lr_sol.X.shape()[0],d_lr_sol.X.begin(),d_efx.begin(),d_Kex.begin());
-        ptw_mult_row_k<<<2,2>>>(d_lr_sol.X.num_elements(),d_lr_sol.X.shape()[0],d_lr_sol.X.begin(),d_efy.begin(),d_Key.begin());
+        ptw_mult_row_k<<<(d_lr_sol.X.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_lr_sol.X.num_elements(),d_lr_sol.X.shape()[0],d_lr_sol.X.begin(),d_efx.begin(),d_Kex.begin());
+        ptw_mult_row_k<<<(d_lr_sol.X.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_lr_sol.X.num_elements(),d_lr_sol.X.shape()[0],d_lr_sol.X.begin(),d_efy.begin(),d_Key.begin());
 
         cufftExecD2Z(d_plans_xx[0],d_Kex.begin(),(cufftDoubleComplex*)d_Kexhat.begin());
 
@@ -879,15 +886,15 @@ int main(){
 
         matmul_transb(d_Keyhat,d_C2wc,d_tmpXhat);
 
-        ptw_sum_complex<<<2,2>>>(d_Khat.num_elements(), d_Khat.begin(), d_tmpXhat.begin());
+        ptw_sum_complex<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), d_tmpXhat.begin());
 
         matmul(d_Khat,d_Twc,d_tmpXhat);
 
-        exp_euler_fourier_2d<<<2,2>>>(d_Mhat.num_elements(), N_xx[0]/2 + 1, N_xx[1], d_Mhat.begin(),d_dcw_r.begin(),ts_ee, d_lim_xx, d_tmpXhat.begin());
+        exp_euler_fourier_2d<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), N_xx[0]/2 + 1, N_xx[1], d_Mhat.begin(),d_dcw_r.begin(),ts_ee, d_lim_xx, d_tmpXhat.begin());
 
         matmul_transb(d_Mhat,d_Twc,d_Khat);
 
-        ptw_mult_cplx<<<2,2>>>(d_Khat.num_elements(), d_Khat.begin(), ncxx);
+        ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), ncxx);
 
         cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin());
 
@@ -896,8 +903,8 @@ int main(){
 
     gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, h_xx[0]*h_xx[1]);
 
-    ptw_mult_scal<<<2,2>>>(d_efx.num_elements(), d_efx.begin(), h_xx[0] * h_xx[1], d_we_x.begin());
-    ptw_mult_scal<<<2,2>>>(d_efy.num_elements(), d_efy.begin(), h_xx[0] * h_xx[1], d_we_y.begin());
+    ptw_mult_scal<<<(d_efx.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efx.num_elements(), d_efx.begin(), h_xx[0] * h_xx[1], d_we_x.begin());
+    ptw_mult_scal<<<(d_efy.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efy.num_elements(), d_efy.begin(), h_xx[0] * h_xx[1], d_we_y.begin());
 
     coeff(d_lr_sol.X, d_lr_sol.X, d_we_x.begin(), d_D1x);
 
@@ -905,7 +912,7 @@ int main(){
 
     cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_tmpXhat.begin()); // check if CUDA preserves input and eventually adapt
 
-    ptw_mult_row_cplx_fourier_2d<<<2,2>>>(dxxh_mult*r, N_xx[0]/2+1, N_xx[1], d_tmpXhat.begin(), d_lim_xx, ncxx, d_dXhat_x.begin(), d_dXhat_y.begin()); // Very similar, maybe can be put together
+    ptw_mult_row_cplx_fourier_2d<<<(dxxh_mult*r+n_threads-1)/n_threads,n_threads>>>(dxxh_mult*r, N_xx[0]/2+1, N_xx[1], d_tmpXhat.begin(), d_lim_xx, ncxx, d_dXhat_x.begin(), d_dXhat_y.begin()); // Very similar, maybe can be put together
 
     cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_dXhat_x.begin(),d_dX_x.begin());
 
@@ -925,19 +932,19 @@ int main(){
 
       matmul(d_D2y,d_tmpS,d_Tw);
 
-      ptw_sum<<<2,2>>>(d_Tv.num_elements(),d_Tv.begin(),d_Tw.begin());
+      ptw_sum<<<(d_Tv.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Tv.num_elements(),d_Tv.begin(),d_Tw.begin());
 
       matmul_transb(d_lr_sol.S,d_C2v,d_tmpS);
 
       matmul(d_D1x,d_tmpS,d_Tw);
 
-      ptw_diff<<<2,2>>>(d_Tv.num_elements(),d_Tv.begin(),d_Tw.begin());
+      ptw_diff<<<(d_Tv.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Tv.num_elements(),d_Tv.begin(),d_Tw.begin());
 
       matmul_transb(d_lr_sol.S,d_C2w,d_tmpS);
 
       matmul(d_D1y,d_tmpS,d_Tw);
 
-      expl_euler<<<2,2>>>(d_lr_sol.S.num_elements(), d_lr_sol.S.begin(), ts_split, d_Tv.begin(), d_Tw.begin());
+      expl_euler<<<(d_lr_sol.S.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_lr_sol.S.num_elements(), d_lr_sol.S.begin(), ts_split, d_Tv.begin(), d_Tw.begin());
 
     }
 
@@ -955,13 +962,13 @@ int main(){
     d_Tw = Tw_gpu;
     d_dcw_r = dcw_r_gpu;
 
-    cplx_conv<<<2,2>>>(d_Tv.num_elements(), d_Tv.begin(), d_Tvc.begin());
+    cplx_conv<<<(d_Tv.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Tv.num_elements(), d_Tv.begin(), d_Tvc.begin());
 
-    cplx_conv<<<2,2>>>(d_Tw.num_elements(), d_Tw.begin(), d_Twc.begin());
+    cplx_conv<<<(d_Tw.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Tw.num_elements(), d_Tw.begin(), d_Twc.begin());
 
-    cplx_conv<<<2,2>>>(d_D2x.num_elements(), d_D2x.begin(), d_C2vc.begin());
+    cplx_conv<<<(d_D2x.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D2x.num_elements(), d_D2x.begin(), d_C2vc.begin());
 
-    cplx_conv<<<2,2>>>(d_D2y.num_elements(), d_D2y.begin(), d_C2wc.begin());
+    cplx_conv<<<(d_D2y.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D2y.num_elements(), d_D2y.begin(), d_C2wc.begin());
 
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
@@ -970,7 +977,7 @@ int main(){
 
       matmul(d_Lhat,d_Tvc,d_Nhat);
 
-      exact_sol_exp_2d<<<2,2>>>(d_Nhat.num_elements(), N_vv[0]/2 + 1, N_vv[1], d_Nhat.begin(), d_dcv_r.begin(), -ts_split, d_lim_vv, ncvv);
+      exact_sol_exp_2d<<<(d_Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Nhat.num_elements(), N_vv[0]/2 + 1, N_vv[1], d_Nhat.begin(), d_dcv_r.begin(), -ts_split, d_lim_vv, ncvv);
 
       matmul_transb(d_Nhat,d_Tvc,d_Lhat);
 
@@ -978,16 +985,16 @@ int main(){
 
       // Full step -- Exponential euler
       //cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin()); // check if CUDA preserves input and eventually adapt
-      ptw_mult_cplx<<<2,2>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
+      ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
 
 
       matmul(d_Lhat,d_Twc,d_Nhat);
 
       for(Index jj = 0; jj < nsteps_ee; jj++){
 
-        ptw_mult_row_k<<<2,2>>>(d_lr_sol.V.num_elements(),d_lr_sol.V.shape()[0],d_lr_sol.V.begin(),d_v.begin(),d_Lv.begin());
+        ptw_mult_row_k<<<(d_lr_sol.V.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_lr_sol.V.num_elements(),d_lr_sol.V.shape()[0],d_lr_sol.V.begin(),d_v.begin(),d_Lv.begin());
 
-        ptw_mult_row_k<<<2,2>>>(d_lr_sol.V.num_elements(),d_lr_sol.V.shape()[0],d_lr_sol.V.begin(),d_w.begin(),d_Lw.begin());
+        ptw_mult_row_k<<<(d_lr_sol.V.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_lr_sol.V.num_elements(),d_lr_sol.V.shape()[0],d_lr_sol.V.begin(),d_w.begin(),d_Lw.begin());
 
         cufftExecD2Z(d_plans_vv[0],d_Lv.begin(),(cufftDoubleComplex*)d_Lvhat.begin()); // check if CUDA preserves input and eventually adapt
 
@@ -997,15 +1004,15 @@ int main(){
 
         matmul_transb(d_Lwhat,d_C2wc,d_tmpVhat);
 
-        ptw_sum_complex<<<2,2>>>(d_Lhat.num_elements(), d_Lhat.begin(), d_tmpVhat.begin());
+        ptw_sum_complex<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), d_tmpVhat.begin());
 
         matmul(d_Lhat,d_Twc,d_tmpVhat);
 
-        exp_euler_fourier_2d<<<2,2>>>(d_Nhat.num_elements(), N_vv[0]/2 + 1, N_vv[1], d_Nhat.begin(),d_dcw_r.begin(),-ts_ee, d_lim_vv, d_tmpVhat.begin());
+        exp_euler_fourier_2d<<<(d_Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Nhat.num_elements(), N_vv[0]/2 + 1, N_vv[1], d_Nhat.begin(),d_dcw_r.begin(),-ts_ee, d_lim_vv, d_tmpVhat.begin());
 
         matmul_transb(d_Nhat,d_Twc,d_Lhat);
 
-        ptw_mult_cplx<<<2,2>>>(d_Lhat.num_elements(), d_Lhat.begin(), ncvv);
+        ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), ncvv);
 
         cufftExecZ2D(d_plans_vv[1],(cufftDoubleComplex*)d_Lhat.begin(),d_lr_sol.V.begin());
 
@@ -1015,9 +1022,6 @@ int main(){
     gram_schmidt_gpu(d_lr_sol.V, d_lr_sol.S, h_vv[0]*h_vv[1]);
 
     transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
-
-    cublasHandle_t  handle;
-    cublasCreate (&handle);
 
     // Electric energy
 
@@ -1051,7 +1055,7 @@ int main(){
 
     coeff_one(d_lr_sol.V,d_we_w2,d_int_v2);
 
-    ptw_sum<<<2,2>>>(d_int_v.num_elements(),d_int_v.begin(),d_int_v2.begin());
+    ptw_sum<<<(d_int_v.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_int_v.num_elements(),d_int_v.begin(),d_int_v2.begin());
 
 
     matvec(d_lr_sol.S,d_int_v,d_rho);
@@ -1064,8 +1068,6 @@ int main(){
 
     err_energy_CPU = abs(energy0-(d_energy_CPU+d_el_energy_CPU));
     //err_energyGPUf << err_energy_CPU << endl;
-
-    cublasDestroy(handle);
 
     #endif
 
@@ -1095,6 +1097,8 @@ int main(){
   //err_energyf.close();
 
   #ifdef __CUDACC__
+  cublasDestroy(handle);
+
   destroy_plans(plans_d_e);
   destroy_plans(d_plans_xx);
   destroy_plans(d_plans_vv);

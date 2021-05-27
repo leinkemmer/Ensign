@@ -1,5 +1,6 @@
 if(${CUDA_ENABLED})
     cuda_add_executable(storage storage.cu ../src/generic/utility.cu ../src/generic/kernels.cu)
+    cuda_add_cublas_to_target(storage)
 else()
     add_executable(storage storage.cpp ../src/generic/utility.cpp)
 endif()

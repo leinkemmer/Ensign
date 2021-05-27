@@ -6,8 +6,16 @@
 
 #include <lr/coefficients.hpp>
 
+#ifdef __CUDACC__
+  cublasHandle_t  handle;
+#endif
 
 TEST_CASE( "coefficients", "[coefficients]" ) {
+
+  #ifdef __CUDACC__
+    cublasCreate(&handle);
+  #endif
+
   SECTION("In CPU"){
     multi_array<double,2> a({2,3}), b({2,3}), out({3,3}), out2({3,3});
 
@@ -85,6 +93,10 @@ TEST_CASE( "coefficients", "[coefficients]" ) {
     REQUIRE(bool(R3 == out3));
     REQUIRE(bool(R3f == out3f));
   }
+
+  #ifdef __CUDACC__
+    cublasDestroy(handle);
+  #endif
 
 }
 ;
