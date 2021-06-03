@@ -6,6 +6,7 @@
 
 #ifdef __CUDACC__
   cublasHandle_t  handle;
+  cublasHandle_t handle_dot;
 #endif
 
 
@@ -31,6 +32,7 @@ int main(){
   double kappa = 0.5;
 
   Index nsteps = tstar/tau;
+  nsteps = 1;
 
   double ts_ee = tau / nsteps_ee;
 
@@ -125,8 +127,14 @@ int main(){
   multi_array<complex<double>,2> Nhat({Nv/2 + 1,r});
   multi_array<complex<double>,2> Tc({r,r});
 
-  int lwork = -1;
+  #ifdef __MKL__
+    MKL_INT lwork = -1;
+  #else
+    int lwork = -1;
+  #endif
+    
   schur(T, T, dc_r, lwork);
+
 
   // For D coefficients
 
@@ -223,7 +231,8 @@ int main(){
   //// FOR GPU ////
   #ifdef __CUDACC__
   cublasCreate (&handle);
-
+  cublasCreate (&handle_dot);
+  cublasSetPointerMode(handle_dot, CUBLAS_POINTER_MODE_DEVICE);
   // To be substituted if we initialize in GPU
 
   lr2<double> d_lr_sol(r,{Nx,Nv}, stloc::device);
@@ -236,7 +245,7 @@ int main(){
   multi_array<double,1> d_ef({Nx},stloc::device);
   multi_array<cuDoubleComplex,1> d_efhat({Nx/2 + 1},stloc::device);
 
-  array<cufftHandle,2> plans_d_e = create_plans_1d(Nx);
+  array<cufftHandle,2> plans_d_e = create_plans_1d(Nx,1);
 
   // For FFT
   multi_array<cuDoubleComplex,2> d_Khat({Nx/2+1,r},stloc::device);
@@ -587,7 +596,9 @@ int main(){
 
     }
 
+
     gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, hx);
+
 
     // S step
 
@@ -656,7 +667,8 @@ int main(){
 
     transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
 
-    cublasDdot (handle, Nx, d_ef.begin(), 1, d_ef.begin(), 1, d_el_energy);
+    cublasDdot (handle_dot, Nx, d_ef.begin(), 1, d_ef.begin(), 1, d_el_energy);
+    cudaDeviceSynchronize();
     scale_unique<<<1,1>>>(d_el_energy,0.5*hx); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
 
     cudaMemcpy(&d_el_energy_CPU,d_el_energy,sizeof(double),cudaMemcpyDeviceToHost);
@@ -670,8 +682,8 @@ int main(){
 
     matvec(d_lr_sol.S,d_int_v,d_tmp_vec);
 
-    cublasDdot (handle, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_mass);
-
+    cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_mass);
+    cudaDeviceSynchronize();
     cudaMemcpy(&d_mass_CPU,d_mass,sizeof(double),cudaMemcpyDeviceToHost);
 
     err_mass_CPU = abs(mass0-d_mass_CPU);
@@ -682,7 +694,8 @@ int main(){
 
     matvec(d_lr_sol.S,d_int_v,d_tmp_vec);
 
-    cublasDdot (handle, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_energy);
+    cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_energy);
+    cudaDeviceSynchronize();
     scale_unique<<<1,1>>>(d_energy,0.5); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
 
     cudaMemcpy(&d_energy_CPU,d_energy,sizeof(double),cudaMemcpyDeviceToHost);
@@ -720,6 +733,7 @@ int main(){
 
   #ifdef __CUDACC__
   cublasDestroy(handle);
+  cublasDestroy(handle_dot);
 
   destroy_plans(plans_d_e);
   destroy_plans(plans_d_x);

@@ -10,6 +10,7 @@
 
 #ifdef __CUDACC__
   cublasHandle_t  handle;
+  cublasHandle_t handle_dot;
 #endif
 
 int main(){
@@ -144,19 +145,33 @@ int main(){
   multi_array<complex<double>,2> Mhat({Nx/2 + 1,r});
   multi_array<complex<double>,2> Tc({r,r});
 
-  int value = 0;
-  char jobvs = 'V';
-  char sort = 'N';
-  int nn = r;
-  int lda = r;
-  int ldvs = r;
-  int info;
-  int lwork = -1;
-  double work_opt;
+  #ifdef __MKL__
+    MKL_INT value = 0;
+    char jobvs = 'V';
+    char sort = 'N';
+    MKL_INT nn = r;
+    MKL_INT lda = r;
+    MKL_INT ldvs = r;
+    MKL_INT info;
+    MKL_INT lwork = -1;
+    double work_opt;
 
-  // Dumb call to obtain optimal value to work
-  dgees_(&jobvs,&sort,nullptr,&nn,T.begin(),&lda,&value,dc_r.data(),dc_i.data(),T.begin(),&ldvs,&work_opt,&lwork,nullptr,&info);
+    // Dumb call to obtain optimal value to work
+    dgees_(&jobvs,&sort,nullptr,&nn,T.begin(),&lda,&value,dc_r.data(),dc_i.data(),T.begin(),&ldvs,&work_opt,&lwork,nullptr,&info);
+  #else
+    int value = 0;
+    char jobvs = 'V';
+    char sort = 'N';
+    int nn = r;
+    int lda = r;
+    int ldvs = r;
+    int info;
+    int lwork = -1;
+    double work_opt;
 
+    // Dumb call to obtain optimal value to work
+    dgees_(&jobvs,&sort,nullptr,&nn,T.begin(),&lda,&value,dc_r.data(),dc_i.data(),T.begin(),&ldvs,&work_opt,&lwork,nullptr,&info);
+  #endif
   lwork = int(work_opt);
   vector<double> work;
   work.reserve(lwork);
@@ -184,8 +199,11 @@ int main(){
 
     multi_array<double,2> D_C(C); // needed because dgees overwrites input, and I need C later on
 
+    #ifdef __MKL__
+    dgees_(&jobvs,&sort,nullptr,&nn,D_C.begin(),&lda,&value,dc_r.data(),dc_i.data(),T.begin(),&ldvs,work.data(),(MKL_INT*)&lwork,nullptr,&info);
+    #else
     dgees_(&jobvs,&sort,nullptr,&nn,D_C.begin(),&lda,&value,dc_r.data(),dc_i.data(),T.begin(),&ldvs,work.data(),&lwork,nullptr,&info);
-
+    #endif
     // Forced casting as we need two complex matrices
     for(int j = 0; j < r; j++){
       for(int k = 0; k < r; k++){

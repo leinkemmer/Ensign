@@ -6,6 +6,7 @@
 
 #ifdef __CUDACC__
   cublasHandle_t  handle;
+  cublasHandle_t handle_dot;
 #endif
 
 
@@ -30,7 +31,7 @@ int main(){
   Index nsteps_ee = 1; // Number of time steps of exponential euler in internal splitting
 
   Index nsteps = tstar/tau;
-  //nsteps = 100;
+  nsteps = 5;
 
 
   double ts_split = tau / nsteps_split;
@@ -179,7 +180,12 @@ int main(){
   multi_array<complex<double>,2> Tvc({r,r});
   multi_array<complex<double>,2> Twc({r,r});
 
-  int lwork = -1;
+  #ifdef __MKL__
+    MKL_INT lwork = -1;
+  #else
+    int lwork = -1;
+  #endif
+
   schur(Tv, Tv, dcv_r, lwork); // dumb call to obtain optimal value to work
 
   // For K step
@@ -303,6 +309,8 @@ int main(){
 
   #ifdef __CUDACC__
   cublasCreate (&handle);
+  cublasCreate (&handle_dot);
+  cublasSetPointerMode(handle_dot, CUBLAS_POINTER_MODE_DEVICE);
 
   // To be substituted if we initialize in GPU
 
@@ -322,7 +330,7 @@ int main(){
   multi_array<cuDoubleComplex,1> d_efhatx({dxxh_mult},stloc::device);
   multi_array<cuDoubleComplex,1> d_efhaty({dxxh_mult},stloc::device);
 
-  array<cufftHandle,2> plans_d_e = create_plans_2d(N_xx);
+  array<cufftHandle,2> plans_d_e = create_plans_2d(N_xx, 1);
 
   // FFT stuff
 
@@ -1025,9 +1033,9 @@ int main(){
 
     // Electric energy
 
-    cublasDdot (handle, d_efx.num_elements(), d_efx.begin(), 1, d_efx.begin(), 1, d_el_energy_x);
-    cublasDdot (handle, d_efy.num_elements(), d_efy.begin(), 1, d_efy.begin(), 1, d_el_energy_y);
-
+    cublasDdot (handle_dot, d_efx.num_elements(), d_efx.begin(), 1, d_efx.begin(), 1, d_el_energy_x);
+    cublasDdot (handle_dot, d_efy.num_elements(), d_efy.begin(), 1, d_efy.begin(), 1, d_el_energy_y);
+    cudaDeviceSynchronize(); // as handle_dot is asynchronous
     ptw_sum<<<1,1>>>(1,d_el_energy_x,d_el_energy_y); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
     scale_unique<<<1,1>>>(d_el_energy_x,0.5*h_xx[0]*h_xx[1]); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
 
@@ -1043,7 +1051,8 @@ int main(){
 
     matvec(d_lr_sol.S,d_int_v,d_rho);
 
-    cublasDdot (handle, r, d_int_x.begin(), 1, d_rho.begin(), 1,d_mass);
+    cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_rho.begin(), 1,d_mass);
+    cudaDeviceSynchronize();
 
     cudaMemcpy(&d_mass_CPU,d_mass,sizeof(double),cudaMemcpyDeviceToHost);
 
@@ -1061,8 +1070,9 @@ int main(){
     matvec(d_lr_sol.S,d_int_v,d_rho);
 
 
-    cublasDdot (handle, r, d_int_x.begin(), 1, d_rho.begin(), 1, d_energy);
-    scale_unique<<<1,1>>>(d_energy,0.5); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
+    cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_rho.begin(), 1, d_energy);
+    cudaDeviceSynchronize();
+     scale_unique<<<1,1>>>(d_energy,0.5); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
 
     cudaMemcpy(&d_energy_CPU,d_energy,sizeof(double),cudaMemcpyDeviceToHost);
 
@@ -1098,6 +1108,7 @@ int main(){
 
   #ifdef __CUDACC__
   cublasDestroy(handle);
+  cublasDestroy(handle_dot);
 
   destroy_plans(plans_d_e);
   destroy_plans(d_plans_xx);

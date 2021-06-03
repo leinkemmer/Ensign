@@ -5,6 +5,7 @@
 
 #ifdef __CUDACC__
   cublasHandle_t  handle;
+  cublasHandle_t handle_dot;
 #endif
 
 int main(){
@@ -187,7 +188,11 @@ int main(){
   multi_array<complex<double>,2> Tvc({r,r});
   multi_array<complex<double>,2> Twc({r,r});
 
-  int lwork = -1;
+  #ifdef __MKL__
+    MKL_INT lwork = -1;
+  #else
+    int lwork = -1;
+  #endif
   schur(Tv, Tv, dcv_r, lwork); // dumb call to obtain optimal value to work
 
   // For K step

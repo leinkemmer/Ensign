@@ -6,6 +6,7 @@
 
 #ifdef __CUDACC__
   cublasHandle_t  handle;
+  cublasHandle_t handle_dot;
 #endif
 
 TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {

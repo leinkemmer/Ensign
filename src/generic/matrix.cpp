@@ -64,6 +64,23 @@ template void set_const(multi_array<double,1>&, double);
 template void set_const(multi_array<float,1>&, float);
 
 template<class T>
+void set_const2(multi_array<T,2>& a,T alpha) {
+  if(a.sl == stloc::host) {
+    fill(a.begin(), a.end(), alpha);
+  } else {
+    #ifdef __CUDACC__
+      fill_gpu<<<(a.num_elements()+n_threads-1)/n_threads,n_threads>>>(a.num_elements(),a.begin(),alpha);
+    #else
+    cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
+    << __LINE__ << endl;
+    exit(1);
+    #endif
+  }
+}
+template void set_const2(multi_array<double,2>&, double);
+template void set_const2(multi_array<float,2>&, float);
+
+template<class T>
 void ptw_mult_row(multi_array<T,2>& a, T* w, multi_array<T,2>& out){
   if(a.sl == stloc::host){
     Index N = a.shape()[0];
@@ -572,6 +589,28 @@ void destroy_plans(array<fftw_plan,2>& plans){
   fftw_destroy_plan(plans[1]);
 }
 
+#ifdef __MKL__
+  void schur(multi_array<double,2>& CC, multi_array<double,2>& TT, multi_array<double,1>& diag_r, MKL_INT& lwork){
+    MKL_INT value = 0;
+    char jobvs = 'V';
+    char sort = 'N';
+    MKL_INT nn = CC.shape()[0];
+    MKL_INT lda = CC.shape()[0];
+    MKL_INT ldvs = CC.shape()[0];
+    MKL_INT info;
+    double work_opt;
+    multi_array<double,1> diag_i({nn});
+    multi_array<double,2> D(CC);
+
+    if(lwork == -1){ // Dumb call to obtain optimal value to work
+    dgees_(&jobvs,&sort,nullptr,&nn,D.begin(),&lda,&value,diag_r.begin(),diag_i.begin(),TT.begin(),&ldvs,&work_opt,&lwork,nullptr,&info);
+      lwork = int(work_opt);
+    }else{
+      multi_array<double,1> work({lwork});
+      dgees_(&jobvs,&sort,nullptr,&nn,D.begin(),&lda,&value,diag_r.begin(),diag_i.begin(),TT.begin(),&ldvs,work.begin(),&lwork,nullptr,&info);
+    }
+  }
+#else
 void schur(multi_array<double,2>& CC, multi_array<double,2>& TT, multi_array<double,1>& diag_r, int& lwork){
   int value = 0;
   char jobvs = 'V';
@@ -592,9 +631,10 @@ void schur(multi_array<double,2>& CC, multi_array<double,2>& TT, multi_array<dou
     dgees_(&jobvs,&sort,nullptr,&nn,D.begin(),&lda,&value,diag_r.begin(),diag_i.begin(),TT.begin(),&ldvs,work.begin(),&lwork,nullptr,&info);
   }
 }
+#endif
 
 #ifdef __CUDACC__
-
+/*
   array<cufftHandle,2> create_plans_1d(Index dims_){
     array<cufftHandle,2> out;
     int dims = int(dims_);
@@ -603,7 +643,7 @@ void schur(multi_array<double,2>& CC, multi_array<double,2>& TT, multi_array<dou
 
     return out;
   }
-
+*/
   array<cufftHandle,2> create_plans_1d(Index dims_, int howmany){
     array<cufftHandle,2> out;
     int dims = int(dims_);
@@ -613,7 +653,7 @@ void schur(multi_array<double,2>& CC, multi_array<double,2>& TT, multi_array<dou
 
     return out;
   }
-
+/*
   array<cufftHandle,2> create_plans_2d(array<Index,2> dims_){
     array<cufftHandle,2> out;
 
@@ -622,7 +662,7 @@ void schur(multi_array<double,2>& CC, multi_array<double,2>& TT, multi_array<dou
 
     return out;
   }
-
+*/
   array<cufftHandle,2> create_plans_2d(array<Index,2> dims_, int howmany){
     array<cufftHandle,2> out;
     array<int,2> dims = {int(dims_[1]),int(dims_[0])};
@@ -632,7 +672,7 @@ void schur(multi_array<double,2>& CC, multi_array<double,2>& TT, multi_array<dou
 
     return out;
   }
-
+/*
   array<cufftHandle,2> create_plans_3d(array<Index,3> dims_){
     array<cufftHandle,2> out;
 
@@ -641,7 +681,7 @@ void schur(multi_array<double,2>& CC, multi_array<double,2>& TT, multi_array<dou
 
     return out;
   }
-
+*/
   array<cufftHandle,2> create_plans_3d(array<Index,3> dims_, int howmany){
     array<cufftHandle,2> out;
     array<int,3> dims = {int(dims_[2]),int(dims_[1]),int(dims_[0])};

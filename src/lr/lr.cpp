@@ -55,12 +55,15 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
 
   for(Index j=0;j<r;j++) {
     for(Index k=0;k<j;k++) {
-      cublasDdot (handle, n, &Q(0,j), 1, &Q(0,k), 1,&R(k,j));
+      cublasDdot (handle_dot, n, &Q(0,j), 1, &Q(0,k), 1,&R(k,j));
+      cudaDeviceSynchronize();
       scale_unique<<<1,1>>>(&R(k,j),w); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
       dmaxpy<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &R(k,j), &Q(0,k), &Q(0,j));
       scale_unique<<<1,1>>>(&R(j,k),0.0);
     }
-      cublasDdot (handle, n, &Q(0,j), 1, &Q(0,j), 1, &R(j,j));
+     
+      cublasDdot (handle_dot, n, &Q(0,j), 1, &Q(0,j), 1, &R(j,j));
+      cudaDeviceSynchronize();
       scale_sqrt_unique<<<1,1>>>(&R(j,j),w);
       ptw_div_gs<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j), &R(j,j));
   }
@@ -76,12 +79,14 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
   for(Index j=0;j<r;j++) {
     for(Index k=0;k<j;k++) {
       ptw_mult<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j),w,tmp.begin());
-      cublasDdot (handle, n, tmp.begin(), 1, &Q(0,k), 1,&R(k,j));
+      cublasDdot (handle_dot, n, tmp.begin(), 1, &Q(0,k), 1,&R(k,j));
+      cudaDeviceSynchronize();
       dmaxpy<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &R(k,j), &Q(0,k), &Q(0,j));
       scale_unique<<<1,1>>>(&R(j,k),0.0);
     }
       ptw_mult<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j),w,tmp.begin());
-      cublasDdot (handle, n, &Q(0,j), 1, tmp.begin(), 1,&R(j,j));
+      cublasDdot (handle_dot, n, &Q(0,j), 1, tmp.begin(), 1,&R(j,j));
+      cudaDeviceSynchronize();
       ptw_div_gs<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j), &R(j,j));
 
   }

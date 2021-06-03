@@ -5,6 +5,7 @@
 
 #ifdef __CUDACC__
   cublasHandle_t  handle;
+  cublasHandle_t handle_dot;
 #endif
 
 
@@ -137,7 +138,12 @@ int main(){
   multi_array<complex<double>,2> Nhat({Nv/2 + 1,r});
   multi_array<complex<double>,2> Tc({r,r});
 
-  int lwork = -1;
+  #ifdef __MKL__
+    MKL_INT lwork = -1;
+  #else
+    int lwork = -1;
+  #endif
+  
   schur(T, T, dc_r, lwork);
 
   // For D coefficients

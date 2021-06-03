@@ -4,16 +4,18 @@
 #include <generic/storage.hpp>
 #include <generic/kernels.hpp>
 
+#ifndef __MKL__
 extern "C" {
   extern int dgees_(char*,char*,void*,int*,double*,int*, int*, double*, double*, double*, int*, double*, int*, bool*,int*);
 }
+#endif
 
 #ifdef __CUDACC__
-array<cufftHandle,2> create_plans_1d(Index dims_);
+//array<cufftHandle,2> create_plans_1d(Index dims_);
 array<cufftHandle,2> create_plans_1d(Index dims_, int howmany);
-array<cufftHandle,2> create_plans_2d(array<Index,2> dims_);
+//array<cufftHandle,2> create_plans_2d(array<Index,2> dims_);
 array<cufftHandle,2> create_plans_2d(array<Index,2> dims_, int howmany);
-array<cufftHandle,2> create_plans_3d(array<Index,3> dims_);
+//array<cufftHandle,2> create_plans_3d(array<Index,3> dims_);
 array<cufftHandle,2> create_plans_3d(array<Index,3> dims_, int howmany);
 void destroy_plans(array<cufftHandle,2>& plans);
 #endif
@@ -26,6 +28,9 @@ void set_identity(multi_array<T,2>& a);
 
 template<class T>
 void set_const(multi_array<T,1>& a, T alpha);
+
+template<class T>
+void set_const2(multi_array<T,2>& a, T alpha);
 
 template<class T>
 void ptw_mult_row(multi_array<T,2>& a, T* w, multi_array<T,2>& out);
@@ -66,7 +71,10 @@ array<fftw_plan,2> create_plans_3d(array<Index,3> dims_, multi_array<double,1>& 
 
 void destroy_plans(array<fftw_plan,2>& plans);
 
+#ifdef __MKL__
+void schur(multi_array<double,2>& CC, multi_array<double,2>& TT, multi_array<double,1>& diag_r, MKL_INT& lwork);
+#else
 void schur(multi_array<double,2>& CC, multi_array<double,2>& TT, multi_array<double,1>& diag_r, int& lwork);
-
+#endif
 //template<class T>
 //void transpose(const multi_array<T,2>& a, multi_array<T,2>& b);

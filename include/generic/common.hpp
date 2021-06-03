@@ -9,7 +9,11 @@
 #include <algorithm>
 #include <assert.h>
 #include <complex>
-#include <cblas.h>
+#ifdef __MKL__
+  #include <mkl.h>
+#else
+  #include <cblas.h>
+#endif
 #include <fftw3.h>
 #include <functional>
 #include <random>
@@ -36,4 +40,5 @@ enum class stloc { host, device };
 #ifdef __CUDACC__
   const int n_threads = 128;
   extern cublasHandle_t  handle;
+  extern cublasHandle_t handle_dot;
 #endif

@@ -3,16 +3,21 @@
 #include <generic/storage.hpp>
 #include <lr/coefficients.hpp>
 #include <generic/kernels.hpp>
+#include <generic/timer.hpp>
+
 
 #ifdef __CUDACC__
-  cublasHandle_t  handle;
+ cublasHandle_t  handle;
+ cublasHandle_t handle_dot;
 #endif
 
 
 int main(){
-  array<Index,3> N_xx = {16,16,16}; // Sizes in space
-  array<Index,3> N_vv = {32,32,32}; // Sizes in velocity
-  int r = 10; // rank desired
+  gt::start("Initialization CPU");
+
+  array<Index,3> N_xx = {128,128,128}; // Sizes in space
+  array<Index,3> N_vv = {128,128,128}; // Sizes in velocity
+  int r = 20; // rank desired
 
   double tstar = 20; // final time
   double tau = 0.00625; // time step splitting
@@ -29,6 +34,7 @@ int main(){
   Index nsteps_ee = 1; // Number of time steps of exponential euler in internal splitting
 
   Index nsteps = tstar/tau;
+  nsteps = 1;
 
   double ts_split = tau / nsteps_split;
   double ts_ee = ts_split / nsteps_ee;
@@ -220,7 +226,11 @@ int main(){
   multi_array<complex<double>,2> Twc({r,r});
   multi_array<complex<double>,2> Tuc({r,r});
 
-  int lwork = -1;
+  #ifdef __MKL__
+    MKL_INT lwork = -1;
+  #else
+    int lwork = -1;
+  #endif
   schur(Tv, Tv, dcv_r, lwork); // dumb call to obtain optimal value to work
 
   // For K step
@@ -273,9 +283,11 @@ int main(){
   multi_array<double,2> Ssolinit(lr_sol.S);
   multi_array<double,2> Vsolinit(lr_sol.V);
 
+  gt::stop("Initialization CPU");
   cout.precision(15);
   cout << std::scientific;
 
+  gt::start("Init QOI CPU");
   // Initial mass
   coeff_one(lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],int_x);
   coeff_one(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],int_v);
@@ -349,7 +361,7 @@ int main(){
   for(int ii = 0; ii < r; ii++){
     energy0 += 0.5*(int_x(ii)*rho(ii));
   }
-
+  gt::stop("Init QOI CPU");
   //ofstream el_energyf;
   //ofstream err_massf;
   //ofstream err_energyf;
@@ -366,29 +378,55 @@ int main(){
   //el_energyf << tau << endl;
 
   #ifdef __CUDACC__
-  cublasCreate(&handle);
+  gt::start("Initialization GPU");
 
+  gt::start("Initialization GPU - Handles");
+  cublasCreate(&handle);
+  cublasCreate(&handle_dot);
+  cublasSetPointerMode(handle_dot, CUBLAS_POINTER_MODE_DEVICE);
+  cudaDeviceSynchronize();
+  gt::stop("Initialization GPU - Handles");
   // To be substituted if we initialize in GPU
 
+  //gt::start("Initialization GPU - Data transfer");
   lr2<double> d_lr_sol(r,{dxx_mult,dvv_mult},stloc::device);
   d_lr_sol.X = lr_sol.X;
   d_lr_sol.V = lr_sol.V;
   d_lr_sol.S = lr_sol.S;
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - Data transfer");
+
+
+  //gt::start("Initialization GPU - EF");
+  //gt::start("Init GPU - EF - dec real");
   // For Electric field
   multi_array<double,1> d_rho({r},stloc::device);
   multi_array<double,1> d_ef({dxx_mult},stloc::device);
   multi_array<double,1> d_efx({dxx_mult},stloc::device);
   multi_array<double,1> d_efy({dxx_mult},stloc::device);
   multi_array<double,1> d_efz({dxx_mult},stloc::device);
+  //cudaDeviceSynchronize();
+  //gt::stop("Init GPU - EF - dec real");
 
+  //gt::start("Init GPU - EF - dec fft");
   multi_array<cuDoubleComplex,1> d_efhat({dxxh_mult},stloc::device);
   multi_array<cuDoubleComplex,1> d_efhatx({dxxh_mult},stloc::device);
   multi_array<cuDoubleComplex,1> d_efhaty({dxxh_mult},stloc::device);
   multi_array<cuDoubleComplex,1> d_efhatz({dxxh_mult},stloc::device);
+  //cudaDeviceSynchronize();
+  //gt::stop("Init GPU - EF - dec fft");
 
-  array<cufftHandle,2> plans_d_e = create_plans_3d(N_xx);
+  //gt::start("Init GPU - EF - plan");
+  array<cufftHandle,2> plans_d_e = create_plans_3d(N_xx,1);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Init GPU - EF - plan");
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - EF");
+
+
+  //gt::start("Initialization GPU - FFT");
   // FFT stuff
   double* d_lim_xx;
   cudaMalloc((void**)&d_lim_xx,6*sizeof(double));
@@ -404,6 +442,11 @@ int main(){
   multi_array<cuDoubleComplex,2> d_Lhat({dvvh_mult,r},stloc::device);
   array<cufftHandle,2> d_plans_vv = create_plans_3d(N_vv, r);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - FFT");
+
+
+  //gt::start("Initialization GPU - C");
   // C coefficients
   multi_array<double,2> d_C1v({r,r},stloc::device);
   multi_array<double,2> d_C1w({r,r}, stloc::device);
@@ -434,6 +477,11 @@ int main(){
   multi_array<cuDoubleComplex,2> d_dVhat_w({dvvh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_dVhat_u({dvvh_mult,r},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - C");
+
+
+  //gt::start("Initialization GPU - D");
   // D coefficients
 
   multi_array<double,2> d_D1x({r,r}, stloc::device);
@@ -463,6 +511,11 @@ int main(){
   multi_array<double,1> d_u({dvv_mult},stloc::device);
   d_u = u;
 
+  //cudaDeviceSynchronize();
+//  gt::stop("Initialization GPU - D");
+
+
+  //gt::start("Initialization GPU - Schur");
   // Schur decomposition
 
   multi_array<double,2> C1v_gpu({r,r});
@@ -493,8 +546,11 @@ int main(){
   multi_array<cuDoubleComplex,2> d_Twc({r,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_Tuc({r,r},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - Schur");
   // For K step
 
+  //gt::start("Initialization GPU - K");
   multi_array<double,2> d_Kex({dxx_mult,r},stloc::device);
   multi_array<double,2> d_Key({dxx_mult,r},stloc::device);
   multi_array<double,2> d_Kez({dxx_mult,r},stloc::device);
@@ -503,8 +559,11 @@ int main(){
   multi_array<cuDoubleComplex,2> d_Keyhat({dxxh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_Kezhat({dxxh_mult,r},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - K");
   // For L step
 
+  //gt::start("Initialization GPU - L");
   multi_array<double,2> d_Lv({dvv_mult,r},stloc::device);
   multi_array<double,2> d_Lw({dvv_mult,r},stloc::device);
   multi_array<double,2> d_Lu({dvv_mult,r},stloc::device);
@@ -513,7 +572,12 @@ int main(){
   multi_array<cuDoubleComplex,2> d_Lwhat({dvvh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_Luhat({dvvh_mult,r},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - L");
+
   // Temporary to perform multiplications
+
+  //gt::start("Initialization GPU - tmp");
   multi_array<double,2> d_tmpX({dxx_mult,r},stloc::device);
   multi_array<double,2> d_tmpS({r,r}, stloc::device);
   multi_array<double,2> d_tmpV({dvv_mult,r}, stloc::device);
@@ -521,8 +585,13 @@ int main(){
   multi_array<cuDoubleComplex,2> d_tmpXhat({dxxh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_tmpVhat({dvvh_mult,r},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - tmp");
+
+  gt::stop("Initialization GPU");
   // Quantities of interest
 
+  //gt::start("Init QOI GPU");
   double* d_el_energy_x;
   cudaMalloc((void**)&d_el_energy_x,sizeof(double));
   double* d_el_energy_y;
@@ -555,6 +624,9 @@ int main(){
   double d_energy_CPU;
   double err_energy_CPU;
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Init QOI GPU");
+
   //ofstream el_energyGPUf;
   //ofstream err_massGPUf;
   //ofstream err_energyGPUf;
@@ -570,26 +642,79 @@ int main(){
   //el_energyGPUf << tstar << endl;
   //el_energyGPUf << tau << endl;
 
+
   #endif
 
   for(Index i = 0; i < nsteps; i++){
 
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
 
+    gt::start("Main loop CPU");
+
     tmpX = lr_sol.X;
 
     matmul(tmpX,lr_sol.S,lr_sol.X);
 
+    gt::start("Electric Field CPU");
     // Electric field
-
+/*
+    gt::start("Electric Field CPU - coeff");
     coeff_one(lr_sol.V,-h_vv[0]*h_vv[1]*h_vv[2],rho);
 
+    gt::stop("Electric Field CPU - coeff");
+*/
+  gt::start("Electric Field CPU - coeff2");
+
+    multi_array<double,1> cvec({lr_sol.V.shape()[0]});
+
+    set_const(cvec,-h_vv[0]*h_vv[1]*h_vv[2]);
+
+    gt::start("Electric Field CPU - coeff2 - matvecT");
+    matvec_trans(lr_sol.V,cvec,rho);
+    gt::stop("Electric Field CPU - coeff2 - matvecT");
+
+    gt::stop("Electric Field CPU - coeff2");
+
+    gt::start("CC Matvect with matvect");
+    for(int idd = 0; idd < 50; idd++){
+        matvec_trans(lr_sol.V,cvec,rho);
+    }
+    gt::stop("CC Matvect with matvect");
+
+    multi_array<double,2> cvec2({lr_sol.V.shape()[0],1});
+    multi_array<double,2> crho2({r,1});
+
+    set_const2(cvec2,-h_vv[0]*h_vv[1]*h_vv[2]);
+
+    gt::start("CC Matvect with matmat");
+    for(int idd = 0; idd < 50; idd++){
+        matmul_transa(lr_sol.V,cvec2,crho2);
+    }
+    gt::stop("CC Matvect with matmat");
+
+    multi_array<double,1> ctmp11({lr_sol.V.shape()[0]});
+    gt::start("CC Matvec with matvec");
+    for(int idd = 0; idd < 50; idd++){
+        matvec(lr_sol.V,rho,ctmp11);
+    }
+    gt::stop("CC Matvec with matvec");
+
+    multi_array<double,2> ctmp22({lr_sol.V.shape()[0],1});
+    gt::start("CC Matvec with matmat");
+    for(int idd = 0; idd < 50; idd++){
+        matmul(lr_sol.V,crho2,ctmp22);
+    }
+    gt::stop("CC Matvec with matmat");
+
+    gt::start("Electric Field CPU - matvec");
     matvec(lr_sol.X,rho,ef);
 
+    gt::stop("Electric Field CPU - matvec");
     ef += 1.0;
 
     fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
 
+    gt::start("Electric Field CPU - ptw");
     for(Index k = 0; k < N_xx[2]; k++){
       if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
       for(Index j = 0; j < N_xx[1]; j++){
@@ -615,14 +740,18 @@ int main(){
       }
     }
 
+    gt::stop("Electric Field CPU - ptw");
 
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatz.begin(),efz.begin());
 
 
+
+    gt::stop("Electric Field CPU");
     // Main of K step
 
+    gt::start("C coeff CPU");
     coeff(lr_sol.V, lr_sol.V, we_v.begin(), C1v);
 
     coeff(lr_sol.V, lr_sol.V, we_w.begin(), C1w);
@@ -645,11 +774,14 @@ int main(){
     coeff(lr_sol.V, dV_w, h_vv[0]*h_vv[1]*h_vv[2], C2w);
     coeff(lr_sol.V, dV_u, h_vv[0]*h_vv[1]*h_vv[2], C2u);
 
+    gt::stop("C coeff CPU");
 
+    gt::start("K step CPU");
+
+    gt::start("Schur K CPU");
     schur(C1v, Tv, dcv_r, lwork);
     schur(C1w, Tw, dcw_r, lwork);
     schur(C1u, Tu, dcu_r, lwork);
-
 
     Tv.to_cplx(Tvc);
     Tw.to_cplx(Twc);
@@ -658,10 +790,13 @@ int main(){
     C2w.to_cplx(C2wc);
     C2u.to_cplx(C2uc);
 
+    gt::stop("Schur K CPU");
 
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
       // Full step -- Exact solution
+
+      gt::start("First split K CPU");
       fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
       matmul(Khat,Tvc,Mhat);
@@ -681,7 +816,10 @@ int main(){
 
       matmul_transb(Mhat,Tvc,Khat);
 
+      gt::stop("First split K CPU");
       // Full step -- Exact solution
+
+      gt::start("Second split K CPU");
       matmul(Khat,Twc,Mhat);
 
       for(int rr = 0; rr < r; rr++){
@@ -701,8 +839,10 @@ int main(){
 
       fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
 
+      gt::stop("Second split K CPU");
       // Full step -- Exponential Euler
 
+      gt::start("Third split K CPU");
       fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
       matmul(Khat,Tuc,Mhat);
@@ -728,6 +868,7 @@ int main(){
         //Khat += tmpXhat;
         Khat = Khat + tmpXhat;
 
+        gt::start("EE Third split K CPU");
         matmul(Khat,Tuc,tmpXhat);
 
         for(int rr = 0; rr < r; rr++){
@@ -753,14 +894,20 @@ int main(){
 
         fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
 
+        gt::stop("EE Third split K CPU");
       }
 
+      gt::stop("Third split K CPU");
     }
 
+    gt::start("Gram Schmidt K CPU");
     gram_schmidt(lr_sol.X, lr_sol.S, ip_xx);
+    gt::stop("Gram Schmidt K CPU");
 
+    gt::stop("K step CPU");
     // S Step
 
+    gt::start("D coeff CPU");
     for(Index j = 0; j < (dxx_mult); j++){
       we_x(j) = efx(j) * h_xx[0] * h_xx[1] * h_xx[2];
       we_y(j) = efy(j) * h_xx[0] * h_xx[1] * h_xx[2];
@@ -789,7 +936,9 @@ int main(){
     coeff(lr_sol.X, dX_y, h_xx[0]*h_xx[1]*h_xx[2], D2y);
     coeff(lr_sol.X, dX_z, h_xx[0]*h_xx[1]*h_xx[2], D2z);
 
+    gt::stop("D coeff CPU");
 
+    gt::start("S step CPU");
     // Explicit Euler
     for(Index jj = 0; jj< nsteps_split; jj++){
       matmul_transb(lr_sol.S,C1v,tmpS);
@@ -832,12 +981,16 @@ int main(){
 
     }
 
+    gt::stop("S step CPU");
     // L step - here we reuse some old variable names
 
     tmpV = lr_sol.V;
 
     matmul_transb(tmpV,lr_sol.S,lr_sol.V);
 
+    gt::start("L step CPU");
+
+    gt::start("Schur L CPU");
     schur(D1x, Tv, dcv_r, lwork);
     schur(D1y, Tw, dcw_r, lwork);
     schur(D1z, Tu, dcu_r, lwork);
@@ -850,10 +1003,11 @@ int main(){
     D2y.to_cplx(C2wc);
     D2z.to_cplx(C2uc);
 
-
+    gt::stop("Schur L CPU");
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
 
+      gt::start("First split L CPU");
       // Full step -- Exact solution
       fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
 
@@ -875,6 +1029,9 @@ int main(){
 
       matmul_transb(Nhat,Tvc,Lhat);
 
+      gt::stop("First split L CPU");
+
+      gt::start("Second split L CPU");
       matmul(Lhat,Twc,Nhat);
 
       for(int rr = 0; rr < r; rr++){
@@ -895,6 +1052,9 @@ int main(){
 
       fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
 
+      gt::stop("Second split L CPU");
+
+      gt::start("Third split L CPU");
       // Full step -- Exponential euler
       fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
 
@@ -947,12 +1107,25 @@ int main(){
 
       }
 
+      gt::stop("Third split L CPU");
+
     }
+
+    gt::start("Gram Schmidt L CPU");
     gram_schmidt(lr_sol.V, lr_sol.S, ip_vv);
 
+    gt::stop("Gram Schmidt L CPU");
 
+
+    gt::start("Transpose S CPU");
     transpose_inplace(lr_sol.S);
+    gt::stop("Transpose S CPU");
 
+    gt::stop("L step CPU");
+
+    gt::stop("Main loop CPU");
+
+    gt::start("Quantities CPU");
     // Electric energy
     el_energy = 0.0;
     for(Index ii = 0; ii < (dxx_mult); ii++){
@@ -998,18 +1171,80 @@ int main(){
 
   //  err_energyf << err_energy << endl;
 
+    gt::stop("Quantities CPU");
     #ifdef __CUDACC__
 
     // K step
+
+    gt::start("Main loop GPU");
 
     d_tmpX = d_lr_sol.X;
 
     matmul(d_tmpX,d_lr_sol.S,d_lr_sol.X);
 
+    gt::start("Electric Field GPU");
+ /*
+    gt::start("Electric Field GPU - coeff");
     coeff_one(d_lr_sol.V,-h_vv[0]*h_vv[1]*h_vv[2],d_rho);
+    cudaDeviceSynchronize();
+    gt::stop("Electric Field GPU - coeff");
+*/
+    gt::start("Electric Field GPU - coeff2");
 
+    multi_array<double,1> vec({d_lr_sol.V.shape()[0]}, stloc::device);
+    cudaDeviceSynchronize();
+
+    set_const(vec,-h_vv[0]*h_vv[1]*h_vv[2]);
+    cudaDeviceSynchronize();
+
+    gt::start("Electric Field GPU - coeff2 - matvecT");
+    matvec_trans(d_lr_sol.V,vec,d_rho);
+    cudaDeviceSynchronize();
+    gt::stop("Electric Field GPU - coeff2 - matvecT");
+
+    gt::stop("Electric Field GPU - coeff2");
+
+    gt::start("Matvect with matvect");
+    for(int idd = 0; idd < 50; idd++){
+    	matvec_trans(d_lr_sol.V,vec,d_rho);
+        cudaDeviceSynchronize();
+    }
+    gt::stop("Matvect with matvect");
+
+    multi_array<double,2> vec2({d_lr_sol.V.shape()[0],1}, stloc::device);
+    multi_array<double,2> rho2({r,1},stloc::device);
+
+    set_const2(vec2,-h_vv[0]*h_vv[1]*h_vv[2]);
+
+    gt::start("Matvect with matmat");
+    for(int idd = 0; idd < 50; idd++){
+        matmul_transa(d_lr_sol.V,vec2,rho2);
+        cudaDeviceSynchronize();
+    }
+    gt::stop("Matvect with matmat");
+
+    multi_array<double,1> tmp11({d_lr_sol.V.shape()[0]},stloc::device);
+    gt::start("Matvec with matvec");
+    for(int idd = 0; idd < 50; idd++){
+        matvec(d_lr_sol.V,d_rho,tmp11);
+        cudaDeviceSynchronize();
+    }
+    gt::stop("Matvec with matvec");
+
+    multi_array<double,2> tmp22({d_lr_sol.V.shape()[0],1},stloc::device);
+    gt::start("Matvec with matmat");
+    for(int idd = 0; idd < 50; idd++){
+        matmul(d_lr_sol.V,rho2,tmp22);
+        cudaDeviceSynchronize();
+    }
+    gt::stop("Matvec with matmat");
+
+    gt::start("Electric Field GPU - matvec");
     matvec(d_lr_sol.X,d_rho,d_ef);
+    cudaDeviceSynchronize();
+    gt::stop("Electric Field GPU - matvec");
 
+    gt::start("Electric Field GPU - FFT");
     d_ef += 1.0;
 
     cufftExecD2Z(plans_d_e[0],d_ef.begin(),(cufftDoubleComplex*)d_efhat.begin());
@@ -1020,6 +1255,12 @@ int main(){
     cufftExecZ2D(plans_d_e[1],(cufftDoubleComplex*)d_efhaty.begin(),d_efy.begin());
     cufftExecZ2D(plans_d_e[1],(cufftDoubleComplex*)d_efhatz.begin(),d_efz.begin());
 
+    cudaDeviceSynchronize();
+    gt::stop("Electric Field GPU - FFT");
+
+    gt::stop("Electric Field GPU");
+
+    gt::start("C coeff GPU");
     coeff(d_lr_sol.V, d_lr_sol.V, d_we_v.begin(), d_C1v);
 
     coeff(d_lr_sol.V, d_lr_sol.V, d_we_w.begin(), d_C1w);
@@ -1038,18 +1279,33 @@ int main(){
     coeff(d_lr_sol.V, d_dV_w, h_vv[0]*h_vv[1]*h_vv[2], d_C2w);
     coeff(d_lr_sol.V, d_dV_u, h_vv[0]*h_vv[1]*h_vv[2], d_C2u);
 
+    cudaDeviceSynchronize();
+    gt::stop("C coeff GPU");
+
+
+    gt::start("K step GPU");
+
+
+    gt::start("Schur K GPU");
+
     C1v_gpu = d_C1v;
+
     schur(C1v_gpu, Tv_gpu, dcv_r_gpu, lwork);
+
     d_Tv = Tv_gpu;
     d_dcv_r = dcv_r_gpu;
 
     C1w_gpu = d_C1w;
+
     schur(C1w_gpu, Tw_gpu, dcw_r_gpu, lwork);
+
     d_Tw = Tw_gpu;
     d_dcw_r = dcw_r_gpu;
 
     C1u_gpu = d_C1u;
+
     schur(C1u_gpu, Tu_gpu, dcu_r_gpu, lwork);
+
     d_Tu = Tu_gpu;
     d_dcu_r = dcu_r_gpu;
 
@@ -1061,9 +1317,13 @@ int main(){
     cplx_conv<<<(d_C2w.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_C2w.num_elements(), d_C2w.begin(), d_C2wc.begin());
     cplx_conv<<<(d_C2u.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_C2u.num_elements(), d_C2u.begin(), d_C2uc.begin());
 
+    cudaDeviceSynchronize();
+    gt::stop("Schur K GPU");
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
       // Full step -- Exact solution
+
+      gt::start("First split K GPU");
       cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
 
       matmul(d_Khat,d_Tvc,d_Mhat);
@@ -1072,7 +1332,11 @@ int main(){
 
       matmul_transb(d_Mhat,d_Tvc,d_Khat);
 
+      cudaDeviceSynchronize();
+      gt::stop("First split K GPU");
       // Full step -- Exact solution
+
+      gt::start("Second split K GPU");
       matmul(d_Khat,d_Twc,d_Mhat);
 
       exact_sol_exp_3d_b<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), N_xx[0]/2 + 1, N_xx[1], N_xx[2], d_Mhat.begin(), d_dcw_r.begin(), ts_split, d_lim_xx, ncxx);
@@ -1080,9 +1344,11 @@ int main(){
       matmul_transb(d_Mhat,d_Twc,d_Khat);
 
       cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin()); // in gpu remember to divide so we avoid the last fft
-
+      cudaDeviceSynchronize();
+      gt::stop("Second split K GPU");
       // Full step -- Exponential Euler
 
+      gt::start("Third split K GPU");
       //cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
       ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
 
@@ -1119,13 +1385,19 @@ int main(){
         cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin());
 
       }
-
+      cudaDeviceSynchronize();
+      gt::stop("Third split K GPU");
     }
 
+    gt::start("Gram Schmidt K GPU");
     gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, h_xx[0]*h_xx[1]*h_xx[2]);
+    cudaDeviceSynchronize();
+    gt::stop("Gram Schmidt K GPU");
 
+    gt::stop("K step GPU");
     // S step
 
+    gt::start("D coeff GPU");
     ptw_mult_scal<<<(d_efx.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efx.num_elements(), d_efx.begin(), h_xx[0] * h_xx[1] * h_xx[2], d_we_x.begin());
     ptw_mult_scal<<<(d_efy.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efy.num_elements(), d_efy.begin(), h_xx[0] * h_xx[1] * h_xx[2], d_we_y.begin());
     ptw_mult_scal<<<(d_efz.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efz.num_elements(), d_efz.begin(), h_xx[0] * h_xx[1] * h_xx[2], d_we_z.begin());
@@ -1146,6 +1418,10 @@ int main(){
     coeff(d_lr_sol.X, d_dX_y, h_xx[0]*h_xx[1]*h_xx[2], d_D2y);
     coeff(d_lr_sol.X, d_dX_z, h_xx[0]*h_xx[1]*h_xx[2], d_D2z);
 
+    cudaDeviceSynchronize();
+    gt::stop("D coeff GPU");
+
+    gt::start("S step GPU");
     // Explicit Euler
     for(Index jj = 0; jj< nsteps_split; jj++){
       matmul_transb(d_lr_sol.S,d_C1v,d_tmpS);
@@ -1182,25 +1458,36 @@ int main(){
       expl_euler<<<(d_lr_sol.S.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_lr_sol.S.num_elements(), d_lr_sol.S.begin(), ts_split, d_Tv.begin(), d_Tw.begin());
 
     }
-
+    cudaDeviceSynchronize();
+    gt::stop("S step GPU");
     // L step
 
     d_tmpV = d_lr_sol.V;
 
     matmul_transb(d_tmpV,d_lr_sol.S,d_lr_sol.V);
 
+    gt::start("L step GPU");
+
+    gt::start("Schur L GPU");
+
     D1x_gpu = d_D1x;
+
     schur(D1x_gpu, Tv_gpu, dcv_r_gpu, lwork);
+
     d_Tv = Tv_gpu;
     d_dcv_r = dcv_r_gpu;
 
     D1y_gpu = d_D1y;
+
     schur(D1y_gpu, Tw_gpu, dcw_r_gpu, lwork);
+
     d_Tw = Tw_gpu;
     d_dcw_r = dcw_r_gpu;
 
     D1z_gpu = d_D1z;
+
     schur(D1z_gpu, Tu_gpu, dcu_r_gpu, lwork);
+
     d_Tu = Tu_gpu;
     d_dcu_r = dcu_r_gpu;
 
@@ -1212,9 +1499,12 @@ int main(){
     cplx_conv<<<(d_D2y.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D2y.num_elements(), d_D2y.begin(), d_C2wc.begin());
     cplx_conv<<<(d_D2z.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D2z.num_elements(), d_D2z.begin(), d_C2uc.begin());
 
+    cudaDeviceSynchronize();
+    gt::stop("Schur L GPU");
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
 
+      gt::start("First split L GPU");
       // Full step -- Exact solution
       cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
 
@@ -1224,6 +1514,11 @@ int main(){
 
       matmul_transb(d_Nhat,d_Tvc,d_Lhat);
 
+      cudaDeviceSynchronize();
+      gt::stop("First split L GPU");
+
+
+      gt::start("Second split L GPU");
       matmul(d_Lhat,d_Twc,d_Nhat);
 
       exact_sol_exp_3d_b<<<(d_Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Nhat.num_elements(), N_vv[0]/2 + 1, N_vv[1], N_vv[2], d_Nhat.begin(), d_dcw_r.begin(), -ts_split, d_lim_vv, ncvv);
@@ -1232,6 +1527,10 @@ int main(){
 
       cufftExecZ2D(d_plans_vv[1],(cufftDoubleComplex*)d_Lhat.begin(),d_lr_sol.V.begin());
 
+      cudaDeviceSynchronize();
+      gt::stop("Second split L GPU");
+
+      gt::start("Third split L GPU");
       // Full step -- Exponential euler
       //cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin()); // REMEMBER TO ADAPT
       ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
@@ -1269,18 +1568,33 @@ int main(){
         cufftExecZ2D(d_plans_vv[1],(cufftDoubleComplex*)d_Lhat.begin(),d_lr_sol.V.begin());
 
       }
-
+      cudaDeviceSynchronize();
+      gt::stop("Third split L GPU");
     }
+
+    gt::start("Gram Schmidt L GPU");
     gram_schmidt_gpu(d_lr_sol.V, d_lr_sol.S, h_vv[0]*h_vv[1]*h_vv[2]);
+    cudaDeviceSynchronize();
+    gt::stop("Gram Schmidt L GPU");
 
+    gt::start("Transpose S GPU");
     transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
+    cudaDeviceSynchronize();
 
-    // Electric energy
+    gt::stop("Transpose S GPU");
 
-    cublasDdot (handle, d_efx.num_elements(), d_efx.begin(), 1, d_efx.begin(), 1, d_el_energy_x);
-    cublasDdot (handle, d_efy.num_elements(), d_efy.begin(), 1, d_efy.begin(), 1, d_el_energy_y);
-    cublasDdot (handle, d_efz.num_elements(), d_efz.begin(), 1, d_efz.begin(), 1, d_el_energy_z);
+    gt::stop("L step GPU");
 
+    gt::stop("Main loop GPU");
+
+    gt::start("Quantities GPU");
+   // Electric energy
+
+    gt::start("Quantities GPU - El en");
+    cublasDdot (handle_dot, d_efx.num_elements(), d_efx.begin(), 1, d_efx.begin(), 1, d_el_energy_x);
+    cublasDdot (handle_dot, d_efy.num_elements(), d_efy.begin(), 1, d_efy.begin(), 1, d_el_energy_y);
+    cublasDdot (handle_dot, d_efz.num_elements(), d_efz.begin(), 1, d_efz.begin(), 1, d_el_energy_z);
+    cudaDeviceSynchronize();
     ptw_sum<<<1,1>>>(1,d_el_energy_x,d_el_energy_y);
     ptw_sum<<<1,1>>>(1,d_el_energy_x,d_el_energy_z);
 
@@ -1289,40 +1603,57 @@ int main(){
     cudaMemcpy(&d_el_energy_CPU,d_el_energy_x,sizeof(double),cudaMemcpyDeviceToHost);
 
     //el_energyGPUf << d_el_energy_CPU << endl;
+    cudaDeviceSynchronize();
+    gt::stop("Quantities GPU - El en");
 
+    gt::start("Quantities GPU - mass");
     // Error mass
 
+    gt::start("Quantities GPU - mass - coeff");
     coeff_one(d_lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],d_int_x);
     coeff_one(d_lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],d_int_v);
 
+    cudaDeviceSynchronize();
+    gt::stop("Quantities GPU - mass - coeff");
     matvec(d_lr_sol.S,d_int_v,d_rho);
 
-    cublasDdot (handle, r, d_int_x.begin(), 1, d_rho.begin(), 1,d_mass);
+    cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_rho.begin(), 1,d_mass);
+    cudaDeviceSynchronize();
 
     cudaMemcpy(&d_mass_CPU,d_mass,sizeof(double),cudaMemcpyDeviceToHost);
 
     err_mass_CPU = abs(mass0-d_mass_CPU);
 
     //err_massGPUf << err_mass_CPU << endl;
+    cudaDeviceSynchronize();
+    gt::stop("Quantities GPU - mass");
 
+    gt::start("Quantities GPU - energy");
     // Error energy
 
+    gt::start("Quantities GPU - energy - coeff");
     coeff_one(d_lr_sol.V,d_we_v2,d_int_v);
     coeff_one(d_lr_sol.V,d_we_w2,d_int_v2);
     coeff_one(d_lr_sol.V,d_we_u2,d_int_v3);
 
+    cudaDeviceSynchronize();
+
+    gt::stop("Quantities GPU - energy - coeff");
     ptw_sum_3mat<<<(d_int_v.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_int_v.num_elements(),d_int_v.begin(),d_int_v2.begin(),d_int_v3.begin());
 
     matvec(d_lr_sol.S,d_int_v,d_rho);
 
-    cublasDdot (handle, r, d_int_x.begin(), 1, d_rho.begin(), 1, d_energy);
+    cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_rho.begin(), 1, d_energy);
+    cudaDeviceSynchronize();
     scale_unique<<<1,1>>>(d_energy,0.5); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
     cudaMemcpy(&d_energy_CPU,d_energy,sizeof(double),cudaMemcpyDeviceToHost);
 
     err_energy_CPU = abs(energy0-(d_energy_CPU+d_el_energy_CPU));
 
     //err_energyGPUf << err_energy_CPU << endl;
-
+    cudaDeviceSynchronize();
+    gt::stop("Quantities GPU - energy");
+    gt::stop("Quantities GPU");
     #endif
 
     cout << "Electric energy: " << el_energy << endl;
@@ -1353,6 +1684,7 @@ int main(){
 
   #ifdef __CUDACC__
   cublasDestroy(handle);
+  cublasDestroy(handle_dot);
 
   destroy_plans(plans_d_e);
   destroy_plans(d_plans_xx);
@@ -1362,6 +1694,8 @@ int main(){
   //err_massGPUf.close();
   //err_energyGPUf.close();
   #endif
+
+  cout << gt::sorted_output() << endl;
 
   return 0;
 }
