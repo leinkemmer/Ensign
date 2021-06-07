@@ -21,6 +21,11 @@ if(${CUDA_ENABLED})
   cuda_add_cublas_to_target(linear_landau_3d_order)
   cuda_add_cufft_to_target(linear_landau_3d_order)
 
+  cuda_add_executable(linear_landau_3d_ls linear_landau_3d_ls.cu ../src/lr/lr.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/timer.cu ../src/generic/kernels.cu)
+  cuda_add_cublas_to_target(linear_landau_3d_ls)
+  cuda_add_cufft_to_target(linear_landau_3d_ls)
+
+
 else()
   add_executable(advection advection.cpp ../src/lr/lr.cpp ../src/lr/coefficients.cpp ../src/generic/utility.cpp ../src/generic/matrix.cpp ../src/generic/timer.cpp)
   add_executable(linear_landau linear_landau.cpp ../src/lr/lr.cpp ../src/lr/coefficients.cpp ../src/generic/utility.cpp ../src/generic/matrix.cpp ../src/generic/timer.cpp)
@@ -29,6 +34,8 @@ else()
   add_executable(linear_landau_order linear_landau_order.cpp ../src/lr/lr.cpp ../src/lr/coefficients.cpp ../src/generic/utility.cpp ../src/generic/matrix.cpp ../src/generic/timer.cpp)
   add_executable(linear_landau_2d_order linear_landau_2d_order.cpp ../src/lr/lr.cpp ../src/lr/coefficients.cpp ../src/generic/utility.cpp ../src/generic/matrix.cpp ../src/generic/timer.cpp)
   add_executable(linear_landau_3d_order linear_landau_3d_order.cpp ../src/lr/lr.cpp ../src/lr/coefficients.cpp ../src/generic/utility.cpp ../src/generic/matrix.cpp ../src/generic/timer.cpp)
+
+  add_executable(linear_landau_3d_ls linear_landau_3d_ls.cpp ../src/lr/lr.cpp ../src/lr/coefficients.cpp ../src/generic/utility.cpp ../src/generic/matrix.cpp ../src/generic/timer.cpp)
 endif()
 
 if(${FFTW_SERVER})
@@ -39,6 +46,8 @@ if(${FFTW_SERVER})
   target_link_libraries(linear_landau_order ${FFTW_LIBRARIES})
   target_link_libraries(linear_landau_2d_order ${FFTW_LIBRARIES})
   target_link_libraries(linear_landau_3d_order ${FFTW_LIBRARIES})
+
+  target_link_libraries(linear_landau_3d_ls ${FFTW_LIBRARIES})
 else()
   target_link_libraries(advection fftw3)
   target_link_libraries(linear_landau fftw3)
@@ -47,6 +56,8 @@ else()
   target_link_libraries(linear_landau_order fftw3)
   target_link_libraries(linear_landau_2d_order fftw3)
   target_link_libraries(linear_landau_3d_order fftw3)
+
+  target_link_libraries(linear_landau_3d_ls fftw3)
 endif()
 
 if(${MKL_ENABLED})
@@ -57,6 +68,8 @@ if(${MKL_ENABLED})
   target_link_libraries(linear_landau_order ${MKL_LIBRARIES})
   target_link_libraries(linear_landau_2d_order ${MKL_LIBRARIES})
   target_link_libraries(linear_landau_3d_order ${MKL_LIBRARIES})
+
+  target_link_libraries(linear_landau_3d_ls ${MKL_LIBRARIES})
 else()
 
   include(FindBLAS)
@@ -78,6 +91,9 @@ else()
     target_compile_options(linear_landau_3d_order PRIVATE ${BLAS_LINKER_FLAGS})
     target_link_libraries(linear_landau_3d_order ${BLAS_LIBRARIES})
 
+    target_compile_options(linear_landau_3d_ls PRIVATE ${BLAS_LINKER_FLAGS})
+    target_link_libraries(linear_landau_3d_ls ${BLAS_LIBRARIES})
+
     target_compile_options(advection PRIVATE ${LAPACK_LINKER_FLAGS})
     target_link_libraries(advection ${LAPACK_LIBRARIES})
     target_compile_options(linear_landau PRIVATE ${LAPACK_LINKER_FLAGS})
@@ -92,6 +108,9 @@ else()
     target_link_libraries(linear_landau_2d_order ${LAPACK_LIBRARIES})
     target_compile_options(linear_landau_3d_order PRIVATE ${LAPACK_LINKER_FLAGS})
     target_link_libraries(linear_landau_3d_order ${LAPACK_LIBRARIES})
+
+    target_compile_options(linear_landau_3d_ls PRIVATE ${LAPACK_LINKER_FLAGS})
+    target_link_libraries(linear_landau_3d_ls ${LAPACK_LIBRARIES})
   endif()
 
 endif()

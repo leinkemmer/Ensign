@@ -42,3 +42,5 @@ enum class stloc { host, device };
   extern cublasHandle_t  handle;
   extern cublasHandle_t handle_dot;
 #endif
+
+extern double tot_gpu_mem;
