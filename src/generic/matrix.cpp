@@ -25,6 +25,9 @@ template<class T>
 void set_identity(multi_array<T,2>& a){
   if(a.sl == stloc::host){
     set_zero(a);
+    #ifdef __OPENMP__
+    #pragma omp parallel for
+    #endif
     for(Index i = 0; i<a.shape()[0]; i++){
       a(i,i) = T(1.0);
     }
@@ -32,6 +35,9 @@ void set_identity(multi_array<T,2>& a){
     #ifdef __CUDACC__
     multi_array<T,2> _a(a.shape());
     set_zero(_a);
+    #ifdef __OPENMP__
+    #pragma omp parallel for
+    #endif
     for(Index i = 0; i<_a.shape()[0]; i++){
       _a(i,i) = T(1.0);
     }
@@ -84,12 +90,22 @@ template<class T>
 void ptw_mult_row(multi_array<T,2>& a, T* w, multi_array<T,2>& out){
   if(a.sl == stloc::host){
     Index N = a.shape()[0];
+    #ifdef __OPENMP__
+    #pragma omp parallel for collapse(2)
+    for(int r = 0; r < a.shape()[1]; r++){
+      for(Index i = 0; i < a.shape()[0]; i++){
+        T* ptr = a.extract({r});
+        out(i,r) = ptr[i]*w[i];
+      }
+    }
+    #else
     for(int r = 0; r < a.shape()[1]; r++){
       T* ptr = a.extract({r});
       for(Index i = 0; i < a.shape()[0]; i++){
         out(i,r) = ptr[i]*w[i];
       }
     }
+    #endif
   }else{
     #ifdef __CUDACC__
     //ptw_mult_row_k<<<2,2>>>(a.num_elements(), a.shape()[1], a.begin(), w); TO DO MANAGE COMPLEX NUMBERS

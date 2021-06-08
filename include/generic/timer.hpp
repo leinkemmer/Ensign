@@ -3,9 +3,9 @@
 #include <string>
 #include <time.h>
 
-//#ifdef _OPENMP
+#ifdef __OPENMP__
 #include <omp.h>
-//#endif
+#endif
 
 /// This timer class measures the elapsed time between two events. Timers can be
 /// started and stopped repeatedly. The total time as well as the average time

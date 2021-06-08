@@ -17,7 +17,7 @@ double tot_gpu_mem = 0.0;
 int main(){
   gt::start("Initialization CPU");
 
-  array<Index,3> N_xx = {64,64,64}; // Sizes in space
+  array<Index,3> N_xx = {128,128,128}; // Sizes in space
   array<Index,3> N_vv = {128,128,128}; // Sizes in velocity
   int r = 10; // rank desired
 
@@ -31,15 +31,39 @@ int main(){
   double kappa1 = 0.5;
   double kappa2 = 0.5;
   double kappa3 = 0.5;
-
   Index nsteps_split = 1; // Number of time steps internal splitting
   Index nsteps_ee = 1; // Number of time steps of exponential euler in internal splitting
 
   Index nsteps = tstar/tau;
-  nsteps = 1;
+  nsteps = 10;
 
   double ts_split = tau / nsteps_split;
   double ts_ee = ts_split / nsteps_ee;
+
+/*
+  #pragma omp parallel
+  {
+    if(omp_get_thread_num()==0){
+       cout << "Number of threads: " << omp_get_num_threads() << endl;
+    }
+  }
+*/
+  #ifdef __OPENMP__
+  omp_set_num_threads(n_threads_omp);
+  #endif
+
+/*
+  cout << "SET NUMBER OF THREADS" << endl;
+
+  #pragma omp parallel
+  {
+    if(omp_get_thread_num()==0){
+       cout << "Number of threads: " << omp_get_num_threads() << endl;
+    }
+  }
+
+  exit(1);
+*/
 
   array<double,3> h_xx, h_vv;
   int jj = 0;
@@ -59,12 +83,16 @@ int main(){
 
   multi_array<double,1> xx({dxx_mult});
 
+  #ifdef __OPENMP__
+  #pragma omp parallel for collapse(3)
+  #endif
   for(Index k = 0; k < N_xx[2]; k++){
     for(Index j = 0; j < N_xx[1]; j++){
       for(Index i = 0; i < N_xx[0]; i++){
         double x = lim_xx[0] + i*h_xx[0];
         double y = lim_xx[2] + j*h_xx[1];
         double z = lim_xx[4] + k*h_xx[2];
+        //printf("i = %d, j= %d, k= %d, threadId = %d \n", i, j, k, omp_get_thread_num());
 
         xx(i+j*N_xx[0] + k*(N_xx[0]*N_xx[1])) = 1.0 + alpha*cos(kappa1*x) + alpha*cos(kappa2*y) + alpha*cos(kappa3*z);
       }
@@ -78,6 +106,9 @@ int main(){
 
   multi_array<double,1> vv({dvv_mult});
 
+  #ifdef __OPENMP__
+  #pragma omp parallel for collapse(3)
+  #endif
   for(Index k = 0; k < N_vv[2]; k++){
     for(Index j = 0; j < N_vv[1]; j++){
       for(Index i = 0; i < N_vv[0]; i++){
@@ -120,11 +151,14 @@ int main(){
   Index mult_j;
   Index mult_k;
 
+  #ifdef __OPENMP__
+  #pragma omp parallel for collapse(3)
   for(Index k = 0; k < N_xx[2]; k++){
-    if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
     for(Index j = 0; j < N_xx[1]; j++){
-      if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
       for(Index i = 0; i < (N_xx[0]/2+1); i++){
+        if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+        if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+
         Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
 
         lambdax_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i)*ncxx;
@@ -133,6 +167,22 @@ int main(){
       }
     }
   }
+  #else
+    for(Index k = 0; k < N_xx[2]; k++){
+      if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+      for(Index j = 0; j < N_xx[1]; j++){
+        if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+        for(Index i = 0; i < (N_xx[0]/2+1); i++){
+
+          Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+          lambdax_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i)*ncxx;
+          lambday_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j)*ncxx;
+          lambdaz_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k)*ncxx;
+        }
+      }
+    }
+  #endif
 
   multi_array<complex<double>,1> lambdav_n({dvvh_mult});
   multi_array<complex<double>,1> lambdaw_n({dvvh_mult});
@@ -140,6 +190,22 @@ int main(){
 
   double ncvv = 1.0 / (dvv_mult);
 
+  #ifdef __OPENMP__
+  #pragma omp parallel for collapse(3)
+  for(Index k = 0; k < N_vv[2]; k++){
+    for(Index j = 0; j < N_vv[1]; j++){
+      for(Index i = 0; i < (N_vv[0]/2+1); i++){
+        if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+        if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
+        Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+        lambdav_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i)*ncvv;
+        lambdaw_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j)*ncvv;
+        lambdau_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k)*ncvv;
+      }
+    }
+  }
+  #else
   for(Index k = 0; k < N_vv[2]; k++){
     if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
     for(Index j = 0; j < N_vv[1]; j++){
@@ -153,6 +219,7 @@ int main(){
       }
     }
   }
+  #endif
 
   multi_array<complex<double>,2> Khat({dxxh_mult,r});
   array<fftw_plan,2> plans_xx = create_plans_3d(N_xx, lr_sol.X, Khat);
@@ -177,6 +244,9 @@ int main(){
   multi_array<double,1> we_w({dvv_mult});
   multi_array<double,1> we_u({dvv_mult});
 
+  #ifdef __OPENMP__
+  #pragma omp parallel for
+  #endif
   for(Index j = 0; j < (dvv_mult); j++){
     we_v(j) = v(j) * h_vv[0] * h_vv[1] * h_vv[2];
     we_w(j) = w(j) * h_vv[0] * h_vv[1] * h_vv[2];
@@ -306,6 +376,28 @@ int main(){
   matvec(lr_sol.X,rho,ef);
   ef += 1.0;
   fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
+
+  #ifdef __OPENMP__
+  #pragma omp parallel for collapse(3)
+  for(Index k = 0; k < N_xx[2]; k++){
+    for(Index j = 0; j < N_xx[1]; j++){
+      for(Index i = 0; i < (N_xx[0]/2+1); i++){
+        if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+        if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+
+        complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+        complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+        complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+        Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+        efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
+        efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
+        efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
+      }
+    }
+  }
+  #else
   for(Index k = 0; k < N_xx[2]; k++){
     if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
     for(Index j = 0; j < N_xx[1]; j++){
@@ -323,6 +415,11 @@ int main(){
       }
     }
   }
+  #endif
+
+  #ifdef __OPENMP__
+  #pragma omp parallel for collapse(2)
+  #endif
   for(Index k = 0; k < (N_xx[2]/2 + 1); k += (N_xx[2]/2)){
     for(Index j = 0; j < (N_xx[1]/2 + 1); j += (N_xx[1]/2)){
       efhatx(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
@@ -343,6 +440,9 @@ int main(){
   multi_array<double,1> we_w2({dvv_mult});
   multi_array<double,1> we_u2({dvv_mult});
 
+  #ifdef __OPENMP__
+  #pragma omp parallel for
+  #endif
   for(Index j = 0; j < (dvv_mult); j++){
     we_v2(j) = pow(v(j),2) * h_vv[0] * h_vv[1] * h_vv[2];
     we_w2(j) = pow(w(j),2) * h_vv[0] * h_vv[1] * h_vv[2];
@@ -637,12 +737,12 @@ int main(){
 
   cudaDeviceSynchronize();
   gt::stop("Initialization GPU");
-
+/*
   cout << "Tot GPU mem alloc: " << tot_gpu_mem << " GB" << endl;
 
   cout << "INTERRUPTED!" << endl;
   exit(1);
-
+*/
   //ofstream el_energyGPUf;
   //ofstream err_massGPUf;
   //ofstream err_energyGPUf;
@@ -660,7 +760,6 @@ int main(){
 
   #endif
 
-  nsteps = 0;
   for(Index i = 0; i < nsteps; i++){
 
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
@@ -688,6 +787,26 @@ int main(){
     fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
 
     gt::start("Electric Field CPU - ptw");
+    #ifdef __OPENMP__
+    #pragma omp parallel for collapse(3)
+    for(Index k = 0; k < N_xx[2]; k++){
+      for(Index j = 0; j < N_xx[1]; j++){
+        for(Index i = 0; i < (N_xx[0]/2+1); i++){
+          if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+          if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+          complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+          complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+          complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+          Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+          efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
+          efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
+          efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
+        }
+      }
+    }
+    #else
     for(Index k = 0; k < N_xx[2]; k++){
       if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
       for(Index j = 0; j < N_xx[1]; j++){
@@ -705,6 +824,11 @@ int main(){
         }
       }
     }
+    #endif
+
+    #ifdef __OPENMP__
+    #pragma omp parallel for collapse(2)
+    #endif
     for(Index k = 0; k < (N_xx[2]/2 + 1); k += (N_xx[2]/2)){
       for(Index j = 0; j < (N_xx[1]/2 + 1); j += (N_xx[1]/2)){
         efhatx(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
@@ -772,6 +896,9 @@ int main(){
 
       matmul(Khat,Tvc,Mhat);
 
+      #ifdef __OPENMP__
+      #pragma omp parallel for collapse(4)
+      #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
           for(Index j = 0; j < N_xx[1]; j++){
@@ -793,6 +920,21 @@ int main(){
       gt::start("Second split K CPU");
       matmul(Khat,Twc,Mhat);
 
+      #ifdef __OPENMP__
+      #pragma omp parallel for collapse(4)
+      for(int rr = 0; rr < r; rr++){
+        for(Index k = 0; k < N_xx[2]; k++){
+          for(Index j = 0; j < N_xx[1]; j++){
+            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+              Mhat(idx,rr) *= exp(-ts_split*lambday*dcw_r(rr))*ncxx;
+            }
+          }
+        }
+      }
+      #else
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
           for(Index j = 0; j < N_xx[1]; j++){
@@ -805,6 +947,7 @@ int main(){
           }
         }
       }
+      #endif
 
       matmul_transb(Mhat,Twc,Khat);
 
@@ -842,6 +985,25 @@ int main(){
         //gt::start("EE Third split K CPU");
         matmul(Khat,Tuc,tmpXhat);
 
+        #ifdef __OPENMP__
+        #pragma omp parallel for collapse(4)
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_xx[2]; k++){
+            for(Index j = 0; j < N_xx[1]; j++){
+              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+
+                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                Mhat(idx,rr) *= exp(-ts_ee*lambdaz*dcu_r(rr));
+                Mhat(idx,rr) += ts_ee*phi1_im(-ts_ee*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
+              }
+            }
+          }
+        }
+        #else
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_xx[2]; k++){
             if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
@@ -857,6 +1019,7 @@ int main(){
             }
           }
         }
+        #endif
 
         matmul_transb(Mhat,Tuc,Khat);
 
@@ -879,6 +1042,9 @@ int main(){
     // S Step
 
     gt::start("D coeff CPU");
+    #ifdef __OPENMP__
+    #pragma omp parallel for
+    #endif
     for(Index j = 0; j < (dxx_mult); j++){
       we_x(j) = efx(j) * h_xx[0] * h_xx[1] * h_xx[2];
       we_y(j) = efy(j) * h_xx[0] * h_xx[1] * h_xx[2];
@@ -984,6 +1150,9 @@ int main(){
 
       matmul(Lhat,Tvc,Nhat);
 
+      #ifdef __OPENMP__
+      #pragma omp parallel for collapse(4)
+      #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_vv[2]; k++){
           for(Index j = 0; j < N_vv[1]; j++){
@@ -1005,6 +1174,22 @@ int main(){
       gt::start("Second split L CPU");
       matmul(Lhat,Twc,Nhat);
 
+      #ifdef __OPENMP__
+      #pragma omp parallel for collapse(4)
+      for(int rr = 0; rr < r; rr++){
+        for(Index k = 0; k < N_vv[2]; k++){
+          for(Index j = 0; j < N_vv[1]; j++){
+            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+              if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
+              complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
+              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+              Nhat(idx,rr) *= exp(ts_split*lambdaw*dcw_r(rr))*ncvv;
+            }
+          }
+        }
+      }
+      #else
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_vv[2]; k++){
           for(Index j = 0; j < N_vv[1]; j++){
@@ -1018,6 +1203,7 @@ int main(){
           }
         }
       }
+      #endif
 
       matmul_transb(Nhat,Twc,Lhat);
 
@@ -1055,6 +1241,24 @@ int main(){
 
         matmul(Lhat,Tuc,tmpVhat);
 
+        #ifdef __OPENMP__
+        #pragma omp parallel for collapse(4)
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_vv[2]; k++){
+            for(Index j = 0; j < N_vv[1]; j++){
+              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+
+                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                Nhat(idx,rr) *= exp(ts_ee*lambdau*dcu_r(rr));
+                Nhat(idx,rr) -= ts_ee*phi1_im(ts_ee*lambdau*dcu_r(rr))*tmpVhat(idx,rr);
+              }
+            }
+          }
+        }
+        #else
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_vv[2]; k++){
             if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
@@ -1069,6 +1273,7 @@ int main(){
             }
           }
         }
+        #endif
 
         matmul_transb(Nhat,Tuc,Lhat);
 
@@ -1271,8 +1476,8 @@ int main(){
       // Full step -- Exponential Euler
 
       gt::start("Third split K GPU");
-      cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
-      //ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
+      //cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
+      ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
 
 
       matmul(d_Khat,d_Tuc,d_Mhat);
@@ -1454,8 +1659,8 @@ int main(){
 
       gt::start("Third split L GPU");
       // Full step -- Exponential euler
-      cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin()); // REMEMBER TO ADAPT
-      //ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
+      //cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin()); // REMEMBER TO ADAPT
+      ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
 
       matmul(d_Lhat,d_Tuc,d_Nhat);
 
@@ -1618,7 +1823,7 @@ int main(){
   //err_energyGPUf.close();
   #endif
 
-  //cout << gt::sorted_output() << endl;
+  cout << gt::sorted_output() << endl;
 
   return 0;
 }

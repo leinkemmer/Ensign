@@ -13,10 +13,6 @@
 #include <string.h>
 #include <time.h>
 
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-
 timer::timer() {
     counter = 0;
     elapsed = 0.0;
@@ -79,9 +75,9 @@ namespace gt {
     std::map<std::string,timer> timers;
 
     bool is_master() {
-        #ifdef _OPENMP
-        //if(omp_get_thread_num() != 0)
-        //    return false;
+        #ifdef __OPENMP__
+        if(omp_get_thread_num() != 0)
+            return false;
         #endif
 
         return true;

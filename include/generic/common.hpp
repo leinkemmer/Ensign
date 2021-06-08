@@ -24,6 +24,10 @@
 #include <cufft.h>
 #endif
 
+#ifdef __OPENMP__
+#include <omp.h>
+#endif
+
 using std::cout;
 using std::endl;
 using std::ofstream;
@@ -41,6 +45,10 @@ enum class stloc { host, device };
   const int n_threads = 128;
   extern cublasHandle_t  handle;
   extern cublasHandle_t handle_dot;
+#endif
+
+#ifdef __OPENMP__
+  const int n_threads_omp = 6;
 #endif
 
 extern double tot_gpu_mem;
