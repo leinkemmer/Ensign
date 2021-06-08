@@ -6,6 +6,9 @@ template<class T>
 std::function<T(T*,T*)> inner_product_from_weight(T* w, Index N) {
   return [w,N](T* a, T*b) {
     T result=T(0.0);
+    #ifdef __OPENMP__
+    #pragma omp parallel for reduction(+:result)
+    #endif
     for(Index i=0;i<N;i++)
     result += w[i]*a[i]*b[i];
     return result;
@@ -19,6 +22,9 @@ template<class T>
 std::function<T(T*,T*)> inner_product_from_const_weight(T w, Index N) {
   return [w,N](T* a, T*b) {
     T result=T(0.0);
+    #ifdef __OPENMP__
+    #pragma omp parallel for reduction(+:result)
+    #endif
     for(Index i=0;i<N;i++){
       result += a[i]*b[i];
     }
@@ -61,7 +67,7 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
       dmaxpy<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &R(k,j), &Q(0,k), &Q(0,j));
       scale_unique<<<1,1>>>(&R(j,k),0.0);
     }
-     
+
       cublasDdot (handle_dot, n, &Q(0,j), 1, &Q(0,j), 1, &R(j,j));
       cudaDeviceSynchronize();
       scale_sqrt_unique<<<1,1>>>(&R(j,j),w);
@@ -90,7 +96,7 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
       ptw_div_gs<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j), &R(j,j));
 
   }
-  
+
 };
 
 #endif

@@ -17,8 +17,8 @@ double tot_gpu_mem = 0.0;
 int main(){
   gt::start("Initialization CPU");
 
-  array<Index,3> N_xx = {128,128,128}; // Sizes in space
-  array<Index,3> N_vv = {128,128,128}; // Sizes in velocity
+  array<Index,3> N_xx = {16,16,16}; // Sizes in space
+  array<Index,3> N_vv = {32,32,32}; // Sizes in velocity
   int r = 10; // rank desired
 
   double tstar = 20; // final time
@@ -40,20 +40,8 @@ int main(){
   double ts_split = tau / nsteps_split;
   double ts_ee = ts_split / nsteps_ee;
 
-/*
-  #pragma omp parallel
-  {
-    if(omp_get_thread_num()==0){
-       cout << "Number of threads: " << omp_get_num_threads() << endl;
-    }
-  }
-*/
   #ifdef __OPENMP__
   omp_set_num_threads(n_threads_omp);
-  #endif
-
-/*
-  cout << "SET NUMBER OF THREADS" << endl;
 
   #pragma omp parallel
   {
@@ -61,9 +49,7 @@ int main(){
        cout << "Number of threads: " << omp_get_num_threads() << endl;
     }
   }
-
-  exit(1);
-*/
+  #endif
 
   array<double,3> h_xx, h_vv;
   int jj = 0;
@@ -84,7 +70,8 @@ int main(){
   multi_array<double,1> xx({dxx_mult});
 
   #ifdef __OPENMP__
-  #pragma omp parallel for collapse(3)
+  //#pragma omp parallel for collapse(3)
+  #pragma omp parallel for
   #endif
   for(Index k = 0; k < N_xx[2]; k++){
     for(Index j = 0; j < N_xx[1]; j++){
@@ -107,7 +94,8 @@ int main(){
   multi_array<double,1> vv({dvv_mult});
 
   #ifdef __OPENMP__
-  #pragma omp parallel for collapse(3)
+  //#pragma omp parallel for collapse(3)
+  #pragma omp parallel for
   #endif
   for(Index k = 0; k < N_vv[2]; k++){
     for(Index j = 0; j < N_vv[1]; j++){
@@ -152,7 +140,8 @@ int main(){
   Index mult_k;
 
   #ifdef __OPENMP__
-  #pragma omp parallel for collapse(3)
+  //#pragma omp parallel for collapse(3)
+  #pragma omp parallel for
   for(Index k = 0; k < N_xx[2]; k++){
     for(Index j = 0; j < N_xx[1]; j++){
       for(Index i = 0; i < (N_xx[0]/2+1); i++){
@@ -191,7 +180,8 @@ int main(){
   double ncvv = 1.0 / (dvv_mult);
 
   #ifdef __OPENMP__
-  #pragma omp parallel for collapse(3)
+  //#pragma omp parallel for collapse(3)
+  #pragma omp parallel for
   for(Index k = 0; k < N_vv[2]; k++){
     for(Index j = 0; j < N_vv[1]; j++){
       for(Index i = 0; i < (N_vv[0]/2+1); i++){
@@ -378,7 +368,8 @@ int main(){
   fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
 
   #ifdef __OPENMP__
-  #pragma omp parallel for collapse(3)
+  //#pragma omp parallel for collapse(3)
+  #pragma omp parallel for
   for(Index k = 0; k < N_xx[2]; k++){
     for(Index j = 0; j < N_xx[1]; j++){
       for(Index i = 0; i < (N_xx[0]/2+1); i++){
@@ -418,7 +409,8 @@ int main(){
   #endif
 
   #ifdef __OPENMP__
-  #pragma omp parallel for collapse(2)
+  //#pragma omp parallel for collapse(2)
+  #pragma omp parallel for
   #endif
   for(Index k = 0; k < (N_xx[2]/2 + 1); k += (N_xx[2]/2)){
     for(Index j = 0; j < (N_xx[1]/2 + 1); j += (N_xx[1]/2)){
@@ -432,6 +424,9 @@ int main(){
   fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatz.begin(),efz.begin());
 
   energy0 = 0.0;
+  #ifdef __OPENMP__
+  #pragma omp parallel for reduction(+:energy0)
+  #endif
   for(Index ii = 0; ii < (dxx_mult); ii++){
     energy0 += 0.5*(pow(efx(ii),2)+pow(efy(ii),2)+pow(efz(ii),2))*h_xx[0]*h_xx[1]*h_xx[2];
   }
@@ -788,7 +783,8 @@ int main(){
 
     gt::start("Electric Field CPU - ptw");
     #ifdef __OPENMP__
-    #pragma omp parallel for collapse(3)
+    //#pragma omp parallel for collapse(3)
+    #pragma omp parallel for
     for(Index k = 0; k < N_xx[2]; k++){
       for(Index j = 0; j < N_xx[1]; j++){
         for(Index i = 0; i < (N_xx[0]/2+1); i++){
@@ -827,7 +823,8 @@ int main(){
     #endif
 
     #ifdef __OPENMP__
-    #pragma omp parallel for collapse(2)
+    //#pragma omp parallel for collapse(2)
+    #pragma omp parallel for
     #endif
     for(Index k = 0; k < (N_xx[2]/2 + 1); k += (N_xx[2]/2)){
       for(Index j = 0; j < (N_xx[1]/2 + 1); j += (N_xx[1]/2)){
@@ -897,7 +894,8 @@ int main(){
       matmul(Khat,Tvc,Mhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(4)
+      //#pragma omp parallel for collapse(4)
+      #pragma omp parallel for collapse(2)
       #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
@@ -921,7 +919,8 @@ int main(){
       matmul(Khat,Twc,Mhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(4)
+      //#pragma omp parallel for collapse(4)
+      #pragma omp parallel for collapse(2)
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
           for(Index j = 0; j < N_xx[1]; j++){
@@ -986,7 +985,8 @@ int main(){
         matmul(Khat,Tuc,tmpXhat);
 
         #ifdef __OPENMP__
-        #pragma omp parallel for collapse(4)
+        //#pragma omp parallel for collapse(4)
+        #pragma omp parallel for collapse(2)
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_xx[2]; k++){
             for(Index j = 0; j < N_xx[1]; j++){
@@ -1151,7 +1151,8 @@ int main(){
       matmul(Lhat,Tvc,Nhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(4)
+      //#pragma omp parallel for collapse(4)
+      #pragma omp parallel for collapse(2)
       #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_vv[2]; k++){
@@ -1175,7 +1176,8 @@ int main(){
       matmul(Lhat,Twc,Nhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(4)
+      //#pragma omp parallel for collapse(4)
+      #pragma omp parallel for collapse(2)
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_vv[2]; k++){
           for(Index j = 0; j < N_vv[1]; j++){
@@ -1242,7 +1244,8 @@ int main(){
         matmul(Lhat,Tuc,tmpVhat);
 
         #ifdef __OPENMP__
-        #pragma omp parallel for collapse(4)
+        //#pragma omp parallel for collapse(4)
+        #pragma omp parallel for collapse(2)
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_vv[2]; k++){
             for(Index j = 0; j < N_vv[1]; j++){
@@ -1304,6 +1307,9 @@ int main(){
     gt::start("Quantities CPU");
     // Electric energy
     el_energy = 0.0;
+    #ifdef __OPENMP__
+    #pragma omp parallel for reduction(+:el_energy)
+    #endif
     for(Index ii = 0; ii < (dxx_mult); ii++){
       el_energy += 0.5*(pow(efx(ii),2)+pow(efy(ii),2)+pow(efz(ii),2))*h_xx[0]*h_xx[1]*h_xx[2];
     }
