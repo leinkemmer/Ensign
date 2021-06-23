@@ -48,7 +48,5 @@ enum class stloc { host, device };
 #endif
 
 #ifdef __OPENMP__
-  const int n_threads_omp = 6;
+  const int n_threads_omp = 32;
 #endif
-
-extern double tot_gpu_mem;

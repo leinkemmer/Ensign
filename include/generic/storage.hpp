@@ -161,6 +161,7 @@ struct multi_array {
   }
 
   multi_array& operator+=(const multi_array& lhs) {
+    /*
     if((sl == stloc::host) && (lhs.sl == stloc::host)){
       std::transform(begin(), end(), lhs.begin(), begin(), [](T& a, T& b){return a+b;} );
     }else if ((sl == stloc::device) && (lhs.sl == stloc::device)){
@@ -172,6 +173,8 @@ struct multi_array {
       << __LINE__ << endl;
       exit(1);
     }
+    */
+    std::transform(begin(), end(), lhs.begin(), begin(), [](T& a, T& b){return a+b;} );
     return *this;
   }
 
@@ -187,6 +190,19 @@ struct multi_array {
   }
 
   multi_array& operator-=(const multi_array& lhs) {
+    /*
+    if((sl == stloc::host) && (lhs.sl == stloc::host)){
+      std::transform(begin(), end(), lhs.begin(), begin(), [](T& a, T& b){return a-b;} );
+    }else if ((sl == stloc::device) && (lhs.sl == stloc::device)){
+      #ifdef __CUDACC__
+        ptw_diff<<<(num_elements()+n_threads-1)/n_threads,n_threads>>>(num_elements(),begin(),lhs.begin());
+      #endif
+    }else{
+      cout << "ERROR: either both on CPU or on GPU" << __FILE__ << ":"
+      << __LINE__ << endl;
+      exit(1);
+    }
+    */
     std::transform(begin(), end(), lhs.begin(), begin(), [](T& a, T& b){return a-b;} );
     return *this;
   }

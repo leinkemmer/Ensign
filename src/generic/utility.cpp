@@ -2,7 +2,6 @@
 
 #ifdef __CUDACC__
 void* gpu_malloc(size_t size) {
-    tot_gpu_mem += size/1e9;
     //cout << "gpu_malloc: " << size/1e9 << " GB" << endl;
     void *p;
     if(cudaMalloc(&p, size) == cudaErrorMemoryAllocation) {

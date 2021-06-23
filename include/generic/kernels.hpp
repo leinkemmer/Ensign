@@ -37,13 +37,21 @@ __device__ cuDoubleComplex expim(double z);
 
 __device__ cuDoubleComplex phi1im(double z);
 
+__device__ cuDoubleComplex phi2im(double z);
+
 __global__ void exp_euler_fourier(int nm, int n, cuDoubleComplex* A, double* dc_r, double ts, cuDoubleComplex* T, double ax, double bx);
+
+__global__ void second_ord_stage_fourier(int nm, int n, cuDoubleComplex* A, double* dc_r, double ts, cuDoubleComplex* T, cuDoubleComplex* U, double ax, double bx);
 
 __global__ void ptw_mult_cplx(int n, cuDoubleComplex* A, double alpha);
 
 __global__ void ptw_mult_scal(int n, double* A, double alpha, double* B);
 
 __global__ void expl_euler(int n, double* A, double t, double* M1, double* M2);
+
+__global__ void rk4(int n, double* A, double t, double* M1, double* M2, double* M3);
+
+__global__ void rk4_finalcomb(int n, double* A, double t, double* M1, double* M2, double* M3, double* M4, double* M5);
 
 __global__ void transpose_inplace(int n, double* A);
 
@@ -57,9 +65,12 @@ __global__ void ptw_sum_complex(int n, cuDoubleComplex* A, cuDoubleComplex* B);
 
 __global__ void ptw_sum_3mat(int n, double* A, double* B, double* C);
 
-__global__ void ptw_diff(int n, double* A, double* B);
+template<class T>
+__global__ void ptw_diff(int n, T* A, T* B);
 
 __global__ void exp_euler_fourier_2d(int N, int nx, int ny, cuDoubleComplex* A, double* dc_r, double ts, double* lims, cuDoubleComplex* T); // Very similar, maybe can be put together
+
+__global__ void second_ord_stage_fourier_2d(int N, int nx, int ny, cuDoubleComplex* A, double* dc_r, double ts, double* lims, cuDoubleComplex* T, cuDoubleComplex* U); // Very similar, maybe can be put together
 
 __global__ void der_fourier_3d(int N, int nx, int ny, int nz, cuDoubleComplex* A, double* lims, double nxx, cuDoubleComplex* B, cuDoubleComplex* C, cuDoubleComplex* D);
 
@@ -69,6 +80,12 @@ __global__ void exact_sol_exp_3d_a(int N, int nx, int ny, int nz, cuDoubleComple
 
 __global__ void exact_sol_exp_3d_b(int N, int nx, int ny, int nz, cuDoubleComplex* A, double* dc_r, double ts, double* lims, double nxx); // Very similar, maybe can be put together
 
+__global__ void exact_sol_exp_3d_c(int N, int nx, int ny, int nz, cuDoubleComplex* A, double* dc_r, double ts, double* lims); // Very similar, maybe can be put together
+
+__global__ void exact_sol_exp_3d_d(int N, int nx, int ny, int nz, cuDoubleComplex* A, double* dc_r, double ts, double* lims, double nxx);
+
 __global__ void exp_euler_fourier_3d(int N, int nx, int ny, int nz, cuDoubleComplex* A, double* dc_r, double ts, double* lims, cuDoubleComplex* T);
+
+__global__ void second_ord_stage_fourier_3d(int N, int nx, int ny, int nz, cuDoubleComplex* A, double* dc_r, double ts, double* lims, cuDoubleComplex* T, cuDoubleComplex* U);
 
 #endif

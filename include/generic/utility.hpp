@@ -41,9 +41,18 @@ T phi1(T a) {
 template<class T>
 T phi1_im(T a) { // use it only for purely imaginary
   if(abs(a.imag()) < 1e-7){
-    return complex<double>(1.0+a.imag(),0.0);
+    return complex<double>(1.0+a.imag(),a.imag());
   }else{
     return complex<double>(sin(a.imag())/a.imag(),2*pow(sin(a.imag()/2.0),2)/a.imag());
+  }
+}
+
+template<class T>
+T phi2_im(T a) { // use it only for purely imaginary
+  if(abs(a.imag()) < 1e-7){
+    return complex<double>(0.5+a.imag(),a.imag());
+  }else{
+    return complex<double>(2*pow(sin(a.imag()/2.0),2)/pow(a.imag(),2),(a.imag()-sin(a.imag()))/pow(a.imag(),2));
   }
 }
 

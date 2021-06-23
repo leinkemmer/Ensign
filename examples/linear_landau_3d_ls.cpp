@@ -18,7 +18,7 @@ int main(){
   gt::start("Initialization CPU");
 
   array<Index,3> N_xx = {64,64,64}; // Sizes in space
-  array<Index,3> N_vv = {256,128,128}; // Sizes in velocity
+  array<Index,3> N_vv = {256,256,256}; // Sizes in velocity
   int r = 10; // rank desired
 
   double tstar = 20; // final time
@@ -36,7 +36,7 @@ int main(){
   Index nsteps_ee = 1; // Number of time steps of exponential euler in internal splitting
 
   Index nsteps = tstar/tau;
-  nsteps = 10;
+  nsteps = 1;
 
   double ts_split = tau / nsteps_split;
   double ts_ee = ts_split / nsteps_ee;
@@ -1184,8 +1184,8 @@ int main(){
         // Full step -- Exponential Euler
 
         gt::start("Third split K GPU");
-        cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
-        //ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
+        //cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
+        ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
 
 
         matmul(d_Khat,d_Tuc,d_Mhat);
@@ -1409,8 +1409,8 @@ int main(){
 
       gt::start("Third split L GPU");
       // Full step -- Exponential euler
-      cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin()); // REMEMBER TO ADAPT
-      //ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
+      //cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin()); // REMEMBER TO ADAPT
+      ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
 
       matmul(d_Lhat,d_Tuc,d_Nhat);
 
@@ -1587,7 +1587,7 @@ int main(){
   //err_energyGPUf.close();
   #endif
 
-  //cout << gt::sorted_output() << endl;
+  cout << gt::sorted_output() << endl;
 
   return 0;
 }

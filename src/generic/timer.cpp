@@ -13,6 +13,10 @@
 #include <string.h>
 #include <time.h>
 
+#ifdef __OPENMP__
+#include <omp.h>
+#endif
+
 timer::timer() {
     counter = 0;
     elapsed = 0.0;

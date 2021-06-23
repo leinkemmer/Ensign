@@ -46,7 +46,7 @@ void gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, std::funct
     }
     R(j,j) = sqrt(inner_product(Q.extract({j}), Q.extract({j})));
 
-    if(std::abs(R(j,j)) < 1e-12){
+    if(std::abs(R(j,j)) < 1e-20){
     //  cout << "Warning: linearly dependent columns in Gram-Schmidt" << endl;
     } else{
       cblas_dscal(dims[0],1.0/R(j,j),Q.extract({j}),1);
@@ -209,18 +209,30 @@ void initialize(lr2<T>& lr, vector<T*> X, vector<T*> V, std::function<T(T*,T*)> 
 
   for(Index k=0;k<r;k++) {
     if(k < n_b){
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
       for(Index i=0;i<lr.problem_size_X();i++) {
         lr.X(i, k) = X[k][i];
       }
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
       for(Index i=0;i<lr.problem_size_V();i++) {
         lr.V(i, k) = V[k][i];
       }
     }
     else{
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
       for(Index i=0;i<lr.problem_size_X();i++) {
         lr.X(i, k) = distribution(generator);
         //lr.X(i,k) = i;
       }
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
       for(Index i=0;i<lr.problem_size_V();i++) {
         lr.V(i, k) = distribution(generator);
         //lr.V(i,k) = i;

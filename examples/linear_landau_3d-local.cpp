@@ -11,6 +11,9 @@ cublasHandle_t  handle;
 cublasHandle_t handle_dot;
 #endif
 
+//double tot_gpu_mem = 0.0;
+
+
 lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int r,double tstar, Index nsteps, int nsteps_split, int nsteps_ee, int nsteps_rk4, array<double,6> lim_xx, array<double,6> lim_vv, double alpha, double kappa1, double kappa2, double kappa3, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_xx, array<fftw_plan,2> plans_vv){
   double tau = tstar/nsteps;
 
@@ -79,21 +82,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
   #ifdef __OPENMP__
   #pragma omp parallel for
-  for(Index k = 0; k < N_xx[2]; k++){
-    for(Index j = 0; j < N_xx[1]; j++){
-      for(Index i = 0; i < (N_xx[0]/2+1); i++){
-        if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-        if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-
-        Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-        lambdax_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i)*ncxx;
-        lambday_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j)*ncxx;
-        lambdaz_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k)*ncxx;
-      }
-    }
-  }
-  #else
+  #endif
   for(Index k = 0; k < N_xx[2]; k++){
     if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
     for(Index j = 0; j < N_xx[1]; j++){
@@ -108,7 +97,6 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
       }
     }
   }
-  #endif
 
   multi_array<complex<double>,1> lambdav_n({dvvh_mult});
   multi_array<complex<double>,1> lambdaw_n({dvvh_mult});
@@ -118,20 +106,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
   #ifdef __OPENMP__
   #pragma omp parallel for
-  for(Index k = 0; k < N_vv[2]; k++){
-    for(Index j = 0; j < N_vv[1]; j++){
-      for(Index i = 0; i < (N_vv[0]/2+1); i++){
-        if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
-        if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
-        Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-        lambdav_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i)*ncvv;
-        lambdaw_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j)*ncvv;
-        lambdau_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k)*ncvv;
-      }
-    }
-  }
-  #else
+  #endif
   for(Index k = 0; k < N_vv[2]; k++){
     if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
     for(Index j = 0; j < N_vv[1]; j++){
@@ -145,7 +120,6 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
       }
     }
   }
-  #endif
 
   multi_array<complex<double>,2> Khat({dxxh_mult,r});
 
@@ -270,6 +244,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   multi_array<double,2> tmpS3({r,r});
   multi_array<double,2> tmpS4({r,r});
 
+
   multi_array<complex<double>,2> tmpXhat({dxxh_mult,r});
   multi_array<complex<double>,2> tmpVhat({dvvh_mult,r});
 
@@ -293,7 +268,6 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   gt::stop("Initialization CPU");
 
   gt::start("Computation initial QOI CPU");
-
   // Initial mass
   coeff_one(lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],int_x);
   coeff_one(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],int_v);
@@ -314,25 +288,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
   #ifdef __OPENMP__
   #pragma omp parallel for
-  for(Index k = 0; k < N_xx[2]; k++){
-    for(Index j = 0; j < N_xx[1]; j++){
-      for(Index i = 0; i < (N_xx[0]/2+1); i++){
-        if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-        if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-
-        complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-        complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-        complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-        Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-        efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
-        efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-        efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-      }
-    }
-  }
-  #else
+  #endif
   for(Index k = 0; k < N_xx[2]; k++){
     if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
     for(Index j = 0; j < N_xx[1]; j++){
@@ -350,7 +306,6 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
       }
     }
   }
-  #endif
 
   #ifdef __OPENMP__
   #pragma omp parallel for
@@ -432,11 +387,18 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   cudaDeviceSynchronize();
   gt::stop("Initialization GPU - Handles");
 
+  //gt::start("Initialization GPU - Data transfer");
   lr2<double> d_lr_sol(r,{dxx_mult,dvv_mult},stloc::device);
   d_lr_sol.X = lr_sol.X;
   d_lr_sol.V = lr_sol.V;
   d_lr_sol.S = lr_sol.S;
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - Data transfer");
+
+
+  //gt::start("Initialization GPU - EF");
+  //gt::start("Init GPU - EF - dec real");
   // For Electric field
   multi_array<double,1> d_rho({r},stloc::device);
 
@@ -445,16 +407,27 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   multi_array<double,1> d_efy({dxx_mult},stloc::device);
   multi_array<double,1> d_efz({dxx_mult},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Init GPU - EF - dec real");
+
+  //gt::start("Init GPU - EF - dec fft");
   multi_array<cuDoubleComplex,1> d_efhat({dxxh_mult},stloc::device);
   multi_array<cuDoubleComplex,1> d_efhatx({dxxh_mult},stloc::device);
   multi_array<cuDoubleComplex,1> d_efhaty({dxxh_mult},stloc::device);
   multi_array<cuDoubleComplex,1> d_efhatz({dxxh_mult},stloc::device);
+
+
+  //cudaDeviceSynchronize();
+  //gt::stop("Init GPU - EF - dec fft");
 
   gt::start("Init GPU - EF - plan");
   array<cufftHandle,2> plans_d_e = create_plans_3d(N_xx,1);
 
   cudaDeviceSynchronize();
   gt::stop("Init GPU - EF - plan");
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - EF");
+
 
   gt::start("Initialization GPU - FFT");
   // FFT stuff
@@ -475,6 +448,8 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   cudaDeviceSynchronize();
   gt::stop("Initialization GPU - FFT");
 
+
+  //gt::start("Initialization GPU - C");
   // C coefficients
   multi_array<double,2> d_C1v({r,r},stloc::device);
   multi_array<double,2> d_C1w({r,r}, stloc::device);
@@ -505,6 +480,11 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   multi_array<cuDoubleComplex,2> d_dVhat_w({dvvh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_dVhat_u({dvvh_mult,r},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - C");
+
+
+  //gt::start("Initialization GPU - D");
   // D coefficients
 
   multi_array<double,2> d_D1x({r,r}, stloc::device);
@@ -538,6 +518,11 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   multi_array<double,1> d_u({dvv_mult},stloc::device);
   d_u = u;
 
+  //cudaDeviceSynchronize();
+  //  gt::stop("Initialization GPU - D");
+
+
+  //gt::start("Initialization GPU - Schur");
   // Schur decomposition
 
   multi_array<double,2> C1v_gpu({r,r});
@@ -585,8 +570,11 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   multi_array<cuDoubleComplex,2> d_Tyc({r,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_Tzc({r,r},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - Schur");
   // For K step
 
+  //gt::start("Initialization GPU - K");
   multi_array<double,2> d_Kex({dxx_mult,r},stloc::device);
   multi_array<double,2> d_Key({dxx_mult,r},stloc::device);
   multi_array<double,2> d_Kez({dxx_mult,r},stloc::device);
@@ -595,8 +583,11 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   multi_array<cuDoubleComplex,2> d_Keyhat({dxxh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_Kezhat({dxxh_mult,r},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - K");
   // For L step
 
+  //gt::start("Initialization GPU - L");
   multi_array<double,2> d_Lv({dvv_mult,r},stloc::device);
   multi_array<double,2> d_Lw({dvv_mult,r},stloc::device);
   multi_array<double,2> d_Lu({dvv_mult,r},stloc::device);
@@ -605,8 +596,12 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   multi_array<cuDoubleComplex,2> d_Lwhat({dvvh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_Luhat({dvvh_mult,r},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - L");
+
   // Temporary to perform multiplications
 
+  //gt::start("Initialization GPU - tmp");
   multi_array<double,2> d_tmpX({dxx_mult,r},stloc::device);
   multi_array<double,2> d_tmpS({r,r}, stloc::device);
   multi_array<double,2> d_tmpV({dvv_mult,r}, stloc::device);
@@ -618,8 +613,12 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   multi_array<cuDoubleComplex,2> d_tmpXhat({dxxh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_tmpVhat({dvvh_mult,r},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - tmp");
+
   // Quantities of interest
 
+  //gt::start("Initializaion QOI GPU");
   double* d_el_energy_x;
   cudaMalloc((void**)&d_el_energy_x,sizeof(double));
   double* d_el_energy_y;
@@ -652,8 +651,18 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   double d_energy_CPU;
   double err_energy_CPU;
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization QOI GPU");
+
   cudaDeviceSynchronize();
   gt::stop("Initialization GPU");
+
+
+  //  cout << "Tot GPU mem alloc: " << tot_gpu_mem << " GB" << endl;
+
+  //cout << "INTERRUPTED!" << endl;
+  //exit(1);
+
 
   ofstream el_energyGPUf;
   ofstream err_massGPUf;
@@ -673,7 +682,6 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   #endif
 
   nsteps = 10;
-
   for(Index i = 0; i < nsteps; i++){
 
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
@@ -691,32 +699,21 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
     // Electric field
 
+    //gt::start("Electric Field CPU - coeff");
     coeff_one(lr_sol.V,-h_vv[0]*h_vv[1]*h_vv[2],rho);
+    //gt::stop("Electric Field CPU - coeff");
+
+    //gt::start("Electric Field CPU - matvec");
     matvec(lr_sol.X,rho,ef);
+    //gt::stop("Electric Field CPU - matvec");
     ef += 1.0;
+
     fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
 
-    gt::start("Electric Field CPU - ptw");
+    //gt::start("Electric Field CPU - ptw");
     #ifdef __OPENMP__
     #pragma omp parallel for
-    for(Index k = 0; k < N_xx[2]; k++){
-      for(Index j = 0; j < N_xx[1]; j++){
-        for(Index i = 0; i < (N_xx[0]/2+1); i++){
-          if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-          if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-          complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-          complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-          complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-          Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-          efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
-          efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-          efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-        }
-      }
-    }
-    #else
+    #endif
     for(Index k = 0; k < N_xx[2]; k++){
       if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
       for(Index j = 0; j < N_xx[1]; j++){
@@ -734,7 +731,6 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
         }
       }
     }
-    #endif
 
     #ifdef __OPENMP__
     #pragma omp parallel for
@@ -746,7 +742,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
         efhatz(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
       }
     }
-    gt::stop("Electric Field CPU - ptw");
+    //gt::stop("Electric Field CPU - ptw");
 
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
@@ -802,7 +798,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
       matmul(Khat,Tvc,Mhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
+      #pragma omp parallel for
       #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
@@ -826,20 +822,8 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
       matmul(Khat,Twc,Mhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split*lambday*dcw_r(rr))*ncxx;
-            }
-          }
-        }
-      }
-      #else
+      #pragma omp parallel for
+      #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
           for(Index j = 0; j < N_xx[1]; j++){
@@ -852,7 +836,6 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
           }
         }
       }
-      #endif
 
       matmul_transb(Mhat,Twc,Khat);
 
@@ -882,32 +865,19 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
         matmul_transb(Keyhat,C2wc,tmpXhat);
 
         Khat += tmpXhat;
+        //Khat = Khat + tmpXhat;
 
         matmul_transb(Kezhat,C2uc,tmpXhat);
 
         Khat += tmpXhat;
+        //Khat = Khat + tmpXhat;
+
 
         matmul(Khat,Tuc,tmpXhat);
 
         #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) *= exp(-tau_ee*lambdaz*dcu_r(rr));
-                Mhat(idx,rr) += tau_ee*phi1_im(-tau_ee*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
+        #pragma omp parallel for
+        #endif
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_xx[2]; k++){
             if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
@@ -923,7 +893,6 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
             }
           }
         }
-        #endif
 
         matmul_transb(Mhat,Tuc,Khat);
 
@@ -949,33 +918,21 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
         matmul_transb(Keyhat,C2wc,Kexhat);
 
         Kexhat += Khat;
+        //Khat = Khat + tmpXhat;
 
         matmul_transb(Kezhat,C2uc,Khat);
 
         Kexhat += Khat;
+        //Khat = Khat + tmpXhat;
 
+        //gt::start("EE Third split K CPU");
         matmul(Kexhat,Tuc,Khat);
 
         Khat -= tmpXhat;
 
         #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) += tau_ee*phi2_im(-tau_ee*lambdaz*dcu_r(rr))*Khat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
+        #pragma omp parallel for
+        #endif
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_xx[2]; k++){
             if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
@@ -990,7 +947,6 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
             }
           }
         }
-        #endif
 
         matmul_transb(Mhat,Tuc,Khat);
 
@@ -1157,6 +1113,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
     schur(D1y, Ty, dd1y_r, lwork);
     schur(D1z, Tz, dd1z_r, lwork);
 
+
     Tx.to_cplx(Txc);
     Ty.to_cplx(Tyc);
     Tz.to_cplx(Tzc);
@@ -1178,7 +1135,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
       matmul(Lhat,Txc,Nhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
+      #pragma omp parallel for
       #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_vv[2]; k++){
@@ -1202,21 +1159,8 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
       matmul(Lhat,Tyc,Nhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_vv[2]; k++){
-          for(Index j = 0; j < N_vv[1]; j++){
-            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-              if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
-              complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
-              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-              Nhat(idx,rr) *= exp(tau_split*lambdaw*dd1y_r(rr))*ncvv;
-            }
-          }
-        }
-      }
-      #else
+      #pragma omp parallel for
+      #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_vv[2]; k++){
           for(Index j = 0; j < N_vv[1]; j++){
@@ -1230,7 +1174,6 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
           }
         }
       }
-      #endif
 
       matmul_transb(Nhat,Tyc,Lhat);
 
@@ -1260,31 +1203,18 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
         matmul_transb(Lwhat,D2yc,tmpVhat);
 
         Lhat += tmpVhat;
+        //Lhat = Lhat + tmpVhat;
 
         matmul_transb(Luhat,D2zc,tmpVhat);
 
         Lhat += tmpVhat;
+        //Lhat = Lhat + tmpVhat;
 
         matmul(Lhat,Tzc,tmpVhat);
 
         #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_vv[2]; k++){
-            for(Index j = 0; j < N_vv[1]; j++){
-              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
-
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
-                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-                Nhat(idx,rr) *= exp(tau_ee*lambdau*dd1z_r(rr));
-                Nhat(idx,rr) -= tau_ee*phi1_im(tau_ee*lambdau*dd1z_r(rr))*tmpVhat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
+        #pragma omp parallel for
+        #endif
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_vv[2]; k++){
             if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
@@ -1299,7 +1229,6 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
             }
           }
         }
-        #endif
 
         matmul_transb(Nhat,Tzc,Lhat);
 
@@ -1325,32 +1254,20 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
         matmul_transb(Lwhat,D2yc,Lvhat);
 
         Lvhat += Lhat;
+        //Lhat = Lhat + tmpVhat;
 
         matmul_transb(Luhat,D2zc,Lhat);
 
         Lvhat += Lhat;
+        //Lhat = Lhat + tmpVhat;
 
         matmul(Lvhat,Tzc,Lhat);
 
         Lhat -= tmpVhat;
 
         #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_vv[2]; k++){
-            for(Index j = 0; j < N_vv[1]; j++){
-              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
-
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
-                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-                Nhat(idx,rr) -= tau_ee*phi2_im(tau_ee*lambdau*dd1z_r(rr))*Lhat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
+        #pragma omp parallel for
+        #endif
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_vv[2]; k++){
             if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
@@ -1364,7 +1281,6 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
             }
           }
         }
-        #endif
 
         matmul_transb(Nhat,Tzc,Lhat);
 
@@ -1457,10 +1373,17 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
     gt::start("Electric Field GPU");
 
+    //    gt::start("Electric Field GPU - coeff");
     coeff_one(d_lr_sol.V,-h_vv[0]*h_vv[1]*h_vv[2],d_rho);
+    //  cudaDeviceSynchronize();
+    //  gt::stop("Electric Field GPU - coeff");
 
+    //gt::start("Electric Field GPU - matvec");
     matvec(d_lr_sol.X,d_rho,d_ef);
+    //cudaDeviceSynchronize();
+    //gt::stop("Electric Field GPU - matvec");
 
+    //gt::start("Electric Field GPU - FFT");
     d_ef += 1.0;
 
     cufftExecD2Z(plans_d_e[0],d_ef.begin(),(cufftDoubleComplex*)d_efhat.begin());
@@ -1471,6 +1394,8 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
     cufftExecZ2D(plans_d_e[1],(cufftDoubleComplex*)d_efhaty.begin(),d_efy.begin());
     cufftExecZ2D(plans_d_e[1],(cufftDoubleComplex*)d_efhatz.begin(),d_efz.begin());
 
+    //cudaDeviceSynchronize();
+    //gt::stop("Electric Field GPU - FFT");
     cudaDeviceSynchronize();
     gt::stop("Electric Field GPU");
 
@@ -1548,8 +1473,8 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
       matmul_transb(d_Mhat,d_Twc,d_Khat);
 
-      cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin());
-
+      cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin()); // in gpu remember to divide so we avoid the last fft
+      // actually it depends on the cuda version, in some the input is preserved, in others it is not. So do fft in general
       cudaDeviceSynchronize();
       gt::stop("Second split K GPU");
 
@@ -1917,6 +1842,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
     // Electric energy
 
+    //gt::start("Quantities GPU - El en");
     cublasDdot (handle_dot, d_efx.num_elements(), d_efx.begin(), 1, d_efx.begin(), 1, d_el_energy_x);
     cublasDdot (handle_dot, d_efy.num_elements(), d_efy.begin(), 1, d_efy.begin(), 1, d_el_energy_y);
     cublasDdot (handle_dot, d_efz.num_elements(), d_efz.begin(), 1, d_efz.begin(), 1, d_el_energy_z);
@@ -1924,17 +1850,23 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
     ptw_sum<<<1,1>>>(1,d_el_energy_x,d_el_energy_y);
     ptw_sum<<<1,1>>>(1,d_el_energy_x,d_el_energy_z);
 
-    scale_unique<<<1,1>>>(d_el_energy_x,0.5*h_xx[0]*h_xx[1]*h_xx[2]);
+    scale_unique<<<1,1>>>(d_el_energy_x,0.5*h_xx[0]*h_xx[1]*h_xx[2]); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
 
     cudaMemcpy(&d_el_energy_CPU,d_el_energy_x,sizeof(double),cudaMemcpyDeviceToHost);
 
     el_energyGPUf << d_el_energy_CPU << endl;
+    //cudaDeviceSynchronize();
+    //gt::stop("Quantities GPU - El en");
 
+    //gt::start("Quantities GPU - mass");
     // Error mass
 
+    //gt::start("Quantities GPU - mass - coeff");
     coeff_one(d_lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],d_int_x);
     coeff_one(d_lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],d_int_v);
 
+    //cudaDeviceSynchronize();
+    //gt::stop("Quantities GPU - mass - coeff");
     matvec(d_lr_sol.S,d_int_v,d_rho);
 
     cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_rho.begin(), 1,d_mass);
@@ -1945,25 +1877,33 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
     err_mass_CPU = abs(mass0-d_mass_CPU);
 
     err_massGPUf << err_mass_CPU << endl;
+    //cudaDeviceSynchronize();
+    //gt::stop("Quantities GPU - mass");
 
+    //gt::start("Quantities GPU - energy");
     // Error energy
 
+    //gt::start("Quantities GPU - energy - coeff");
     coeff_one(d_lr_sol.V,d_we_v2,d_int_v);
     coeff_one(d_lr_sol.V,d_we_w2,d_int_v2);
     coeff_one(d_lr_sol.V,d_we_u2,d_int_v3);
 
+    //cudaDeviceSynchronize();
+    //gt::stop("Quantities GPU - energy - coeff");
     ptw_sum_3mat<<<(d_int_v.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_int_v.num_elements(),d_int_v.begin(),d_int_v2.begin(),d_int_v3.begin());
 
     matvec(d_lr_sol.S,d_int_v,d_rho);
 
     cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_rho.begin(), 1, d_energy);
     cudaDeviceSynchronize();
-    scale_unique<<<1,1>>>(d_energy,0.5);
+    scale_unique<<<1,1>>>(d_energy,0.5); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
     cudaMemcpy(&d_energy_CPU,d_energy,sizeof(double),cudaMemcpyDeviceToHost);
 
     err_energy_CPU = abs(energy0-(d_energy_CPU+d_el_energy_CPU));
 
     err_energyGPUf << err_energy_CPU << endl;
+    //cudaDeviceSynchronize();
+    //gt::stop("Quantities GPU - energy");
 
     cudaDeviceSynchronize();
     gt::stop("QOI GPU");
@@ -2023,6 +1963,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
   double tau_rk4_h = tau_h / nsteps_rk4;
 
+  //gt::start("Initialization CPU");
 
   array<double,3> h_xx, h_vv;
   int jj = 0;
@@ -2083,21 +2024,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
   #ifdef __OPENMP__
   #pragma omp parallel for
-  for(Index k = 0; k < N_xx[2]; k++){
-    for(Index j = 0; j < N_xx[1]; j++){
-      for(Index i = 0; i < (N_xx[0]/2+1); i++){
-        if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-        if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-
-        Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-        lambdax_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i)*ncxx;
-        lambday_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j)*ncxx;
-        lambdaz_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k)*ncxx;
-      }
-    }
-  }
-  #else
+  #endif
   for(Index k = 0; k < N_xx[2]; k++){
     if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
     for(Index j = 0; j < N_xx[1]; j++){
@@ -2112,7 +2039,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
       }
     }
   }
-  #endif
 
   multi_array<complex<double>,1> lambdav_n({dvvh_mult});
   multi_array<complex<double>,1> lambdaw_n({dvvh_mult});
@@ -2122,20 +2048,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
   #ifdef __OPENMP__
   #pragma omp parallel for
-  for(Index k = 0; k < N_vv[2]; k++){
-    for(Index j = 0; j < N_vv[1]; j++){
-      for(Index i = 0; i < (N_vv[0]/2+1); i++){
-        if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
-        if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
-        Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-        lambdav_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i)*ncvv;
-        lambdaw_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j)*ncvv;
-        lambdau_n(idx) = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k)*ncvv;
-      }
-    }
-  }
-  #else
+  #endif
   for(Index k = 0; k < N_vv[2]; k++){
     if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
     for(Index j = 0; j < N_vv[1]; j++){
@@ -2149,7 +2062,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
       }
     }
   }
-  #endif
 
   multi_array<complex<double>,2> Khat({dxxh_mult,r});
 
@@ -2274,6 +2186,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   multi_array<double,2> tmpS3({r,r});
   multi_array<double,2> tmpS4({r,r});
 
+
   multi_array<complex<double>,2> tmpXhat({dxxh_mult,r});
   multi_array<complex<double>,2> tmpVhat({dvvh_mult,r});
 
@@ -2294,6 +2207,9 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(h_xx[0]*h_xx[1]*h_xx[2], dxx_mult);
   std::function<double(double*,double*)> ip_vv = inner_product_from_const_weight(h_vv[0]*h_vv[1]*h_vv[2], dvv_mult);
 
+  //gt::stop("Initialization CPU");
+
+  //gt::start("Initialization QOI CPU");
   // Initial mass
   coeff_one(lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],int_x);
   coeff_one(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],int_v);
@@ -2314,25 +2230,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
   #ifdef __OPENMP__
   #pragma omp parallel for
-  for(Index k = 0; k < N_xx[2]; k++){
-    for(Index j = 0; j < N_xx[1]; j++){
-      for(Index i = 0; i < (N_xx[0]/2+1); i++){
-        if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-        if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-
-        complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-        complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-        complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-        Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-        efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
-        efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-        efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-      }
-    }
-  }
-  #else
+  #endif
   for(Index k = 0; k < N_xx[2]; k++){
     if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
     for(Index j = 0; j < N_xx[1]; j++){
@@ -2350,7 +2248,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
       }
     }
   }
-  #endif
 
   #ifdef __OPENMP__
   #pragma omp parallel for
@@ -2401,6 +2298,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   for(int ii = 0; ii < r; ii++){
     energy0 += 0.5*(int_x(ii)*rho(ii));
   }
+  //gt::stop("Initialization QOI CPU");
 
   ofstream el_energyf;
   ofstream err_massf;
@@ -2420,20 +2318,33 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   // Additional stuff for second order
   lr2<double> lr_sol_e(r,{dxx_mult,dvv_mult});
 
+
+
   //// FOR GPU ///
 
   #ifdef __CUDACC__
 
+  //gt::start("Initialization GPU - Handles");
   cublasCreate(&handle);
   cublasCreate(&handle_dot);
   cublasSetPointerMode(handle_dot, CUBLAS_POINTER_MODE_DEVICE);
   cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - Handles");
 
+  //gt::start("Initialization GPU");
+
+  //gt::start("Initialization GPU - Data transfer");
   lr2<double> d_lr_sol(r,{dxx_mult,dvv_mult},stloc::device);
   d_lr_sol.X = lr_sol.X;
   d_lr_sol.V = lr_sol.V;
   d_lr_sol.S = lr_sol.S;
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - Data transfer");
+
+
+  //gt::start("Initialization GPU - EF");
+  //gt::start("Init GPU - EF - dec real");
   // For Electric field
   multi_array<double,1> d_rho({r},stloc::device);
 
@@ -2442,13 +2353,29 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   multi_array<double,1> d_efy({dxx_mult},stloc::device);
   multi_array<double,1> d_efz({dxx_mult},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Init GPU - EF - dec real");
+
+  //gt::start("Init GPU - EF - dec fft");
   multi_array<cuDoubleComplex,1> d_efhat({dxxh_mult},stloc::device);
   multi_array<cuDoubleComplex,1> d_efhatx({dxxh_mult},stloc::device);
   multi_array<cuDoubleComplex,1> d_efhaty({dxxh_mult},stloc::device);
   multi_array<cuDoubleComplex,1> d_efhatz({dxxh_mult},stloc::device);
 
+
+  //cudaDeviceSynchronize();
+  //gt::stop("Init GPU - EF - dec fft");
+
+  //gt::start("Init GPU - EF - plan");
   array<cufftHandle,2> plans_d_e = create_plans_3d(N_xx,1);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Init GPU - EF - plan");
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - EF");
+
+
+  //gt::start("Initialization GPU - FFT");
   // FFT stuff
   double* d_lim_xx;
   cudaMalloc((void**)&d_lim_xx,6*sizeof(double));
@@ -2464,6 +2391,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   multi_array<cuDoubleComplex,2> d_Lhat({dvvh_mult,r},stloc::device);
   array<cufftHandle,2> d_plans_vv = create_plans_3d(N_vv, r);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - FFT");
+
+
+  //gt::start("Initialization GPU - C");
   // C coefficients
   multi_array<double,2> d_C1v({r,r},stloc::device);
   multi_array<double,2> d_C1w({r,r}, stloc::device);
@@ -2494,6 +2426,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   multi_array<cuDoubleComplex,2> d_dVhat_w({dvvh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_dVhat_u({dvvh_mult,r},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - C");
+
+
+  //gt::start("Initialization GPU - D");
   // D coefficients
 
   multi_array<double,2> d_D1x({r,r}, stloc::device);
@@ -2527,6 +2464,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   multi_array<double,1> d_u({dvv_mult},stloc::device);
   d_u = u;
 
+  //cudaDeviceSynchronize();
+  //  gt::stop("Initialization GPU - D");
+
+
+  //gt::start("Initialization GPU - Schur");
   // Schur decomposition
 
   multi_array<double,2> C1v_gpu({r,r});
@@ -2574,8 +2516,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   multi_array<cuDoubleComplex,2> d_Tyc({r,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_Tzc({r,r},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - Schur");
   // For K step
 
+  //gt::start("Initialization GPU - K");
   multi_array<double,2> d_Kex({dxx_mult,r},stloc::device);
   multi_array<double,2> d_Key({dxx_mult,r},stloc::device);
   multi_array<double,2> d_Kez({dxx_mult,r},stloc::device);
@@ -2584,8 +2529,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   multi_array<cuDoubleComplex,2> d_Keyhat({dxxh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_Kezhat({dxxh_mult,r},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - K");
   // For L step
 
+  //gt::start("Initialization GPU - L");
   multi_array<double,2> d_Lv({dvv_mult,r},stloc::device);
   multi_array<double,2> d_Lw({dvv_mult,r},stloc::device);
   multi_array<double,2> d_Lu({dvv_mult,r},stloc::device);
@@ -2594,8 +2542,12 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   multi_array<cuDoubleComplex,2> d_Lwhat({dvvh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_Luhat({dvvh_mult,r},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - L");
+
   // Temporary to perform multiplications
 
+  //gt::start("Initialization GPU - tmp");
   multi_array<double,2> d_tmpX({dxx_mult,r},stloc::device);
   multi_array<double,2> d_tmpS({r,r}, stloc::device);
   multi_array<double,2> d_tmpV({dvv_mult,r}, stloc::device);
@@ -2607,8 +2559,12 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   multi_array<cuDoubleComplex,2> d_tmpXhat({dxxh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_tmpVhat({dvvh_mult,r},stloc::device);
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU - tmp");
+
   // Quantities of interest
 
+  //gt::start("Initializaion QOI GPU");
   double* d_el_energy_x;
   cudaMalloc((void**)&d_el_energy_x,sizeof(double));
   double* d_el_energy_y;
@@ -2641,6 +2597,19 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   double d_energy_CPU;
   double err_energy_CPU;
 
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization QOI GPU");
+
+  //cudaDeviceSynchronize();
+  //gt::stop("Initialization GPU");
+
+
+  //  cout << "Tot GPU mem alloc: " << tot_gpu_mem << " GB" << endl;
+
+  //cout << "INTERRUPTED!" << endl;
+  //exit(1);
+
+
   ofstream el_energyGPUf;
   ofstream err_massGPUf;
   ofstream err_energyGPUf;
@@ -2659,9 +2628,10 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   // Additional stuff for second order
   lr2<double> d_lr_sol_e(r,{dxx_mult,dvv_mult}, stloc::device);
 
+
   #endif
 
-  nsteps = 10;
+
   for(Index i = 0; i < nsteps; i++){
 
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
@@ -2676,42 +2646,30 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
     // Full step K until tau/2
 
-    gt::start("Lie splitting for electric field CPU");
-
     tmpX = lr_sol_e.X;
     matmul(tmpX,lr_sol_e.S,lr_sol_e.X);
 
+    //gt::start("Electric Field CPU");
 
     // Electric field
 
+    //gt::start("Electric Field CPU - coeff");
     coeff_one(lr_sol_e.V,-h_vv[0]*h_vv[1]*h_vv[2],rho);
 
+    //gt::stop("Electric Field CPU - coeff");
+
+    //gt::start("Electric Field CPU - matvec");
     matvec(lr_sol_e.X,rho,ef);
 
+    //gt::stop("Electric Field CPU - matvec");
     ef += 1.0;
 
     fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
 
+    //gt::start("Electric Field CPU - ptw");
     #ifdef __OPENMP__
     #pragma omp parallel for
-    for(Index k = 0; k < N_xx[2]; k++){
-      for(Index j = 0; j < N_xx[1]; j++){
-        for(Index i = 0; i < (N_xx[0]/2+1); i++){
-          if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-          if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-          complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-          complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-          complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-          Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-          efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
-          efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-          efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-        }
-      }
-    }
-    #else
+    #endif
     for(Index k = 0; k < N_xx[2]; k++){
       if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
       for(Index j = 0; j < N_xx[1]; j++){
@@ -2729,7 +2687,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
         }
       }
     }
-    #endif
 
     #ifdef __OPENMP__
     #pragma omp parallel for
@@ -2742,9 +2699,13 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
       }
     }
 
+    //gt::stop("Electric Field CPU - ptw");
+
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatz.begin(),efz.begin());
+
+    //gt::stop("Electric Field CPU");
 
     // Electric energy
     el_energy = 0.0;
@@ -2757,8 +2718,10 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
     el_energyf << el_energy << endl;
 
+
     // Main of K step
 
+    //gt::start("C coeff CPU");
     coeff(lr_sol_e.V, lr_sol_e.V, we_v.begin(), C1v);
     coeff(lr_sol_e.V, lr_sol_e.V, we_w.begin(), C1w);
     coeff(lr_sol_e.V, lr_sol_e.V, we_u.begin(), C1u);
@@ -2777,6 +2740,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     coeff(lr_sol_e.V, dV_w, h_vv[0]*h_vv[1]*h_vv[2], C2w);
     coeff(lr_sol_e.V, dV_u, h_vv[0]*h_vv[1]*h_vv[2], C2u);
 
+    //gt::stop("C coeff CPU");
+
+    //gt::start("K step CPU");
+
+    //gt::start("Schur K CPU");
     schur(C1v, Tv, dcv_r, lwork);
     schur(C1w, Tw, dcw_r, lwork);
     schur(C1u, Tu, dcu_r, lwork);
@@ -2788,16 +2756,19 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     C2w.to_cplx(C2wc);
     C2u.to_cplx(C2uc);
 
+    //gt::stop("Schur K CPU");
+
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
       // Full step -- Exact solution
 
+      //gt::start("First split K CPU");
       fftw_execute_dft_r2c(plans_xx[0],lr_sol_e.X.begin(),(fftw_complex*)Khat.begin());
 
       matmul(Khat,Tvc,Mhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
+      #pragma omp parallel for
       #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
@@ -2813,25 +2784,15 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       matmul_transb(Mhat,Tvc,Khat);
 
+      //gt::stop("First split K CPU");
       // Full step -- Exact solution
 
+      //gt::start("Second split K CPU");
       matmul(Khat,Twc,Mhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h*lambday*dcw_r(rr))*ncxx;
-            }
-          }
-        }
-      }
-      #else
+      #pragma omp parallel for
+      #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
           for(Index j = 0; j < N_xx[1]; j++){
@@ -2844,14 +2805,16 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
           }
         }
       }
-      #endif
 
       matmul_transb(Mhat,Twc,Khat);
 
       fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol_e.X.begin());
 
+      //gt::stop("Second split K CPU");
+
       // Full step --
 
+      //gt::start("Third split K CPU");
       fftw_execute_dft_r2c(plans_xx[0],lr_sol_e.X.begin(),(fftw_complex*)Khat.begin());
 
       matmul(Khat,Tuc,Mhat);
@@ -2875,27 +2838,12 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
         Khat += tmpXhat;
 
+        //gt::start("EE Third split K CPU");
         matmul(Khat,Tuc,tmpXhat);
 
         #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) *= exp(-tau_ee_h*lambdaz*dcu_r(rr));
-                Mhat(idx,rr) += tau_ee_h*phi1_im(-tau_ee_h*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
+        #pragma omp parallel for
+        #endif
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_xx[2]; k++){
             if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
@@ -2911,7 +2859,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
             }
           }
         }
-        #endif
 
         matmul_transb(Mhat,Tuc,Khat);
 
@@ -2938,28 +2885,14 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
         Kexhat += Khat;
 
+        //gt::start("EE Third split K CPU");
         matmul(Kexhat,Tuc,Khat);
 
         Khat -= tmpXhat;
 
         #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) += tau_ee_h*phi2_im(-tau_ee_h*lambdaz*dcu_r(rr))*Khat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
+        #pragma omp parallel for
+        #endif
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_xx[2]; k++){
             if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
@@ -2974,7 +2907,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
             }
           }
         }
-        #endif
 
         matmul_transb(Mhat,Tuc,Khat);
 
@@ -2982,14 +2914,22 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
         fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol_e.X.begin());
 
+        //gt::stop("EE Third split K CPU");
       }
 
+      //gt::stop("Third split K CPU");
     }
 
+    //gt::start("Gram Schmidt K CPU");
     gram_schmidt(lr_sol_e.X, lr_sol_e.S, ip_xx);
+
+    //gt::stop("Gram Schmidt K CPU");
+
+    //gt::stop("K step CPU");
 
     // Full step S until tau/2
 
+    //gt::start("D coeff CPU");
     #ifdef __OPENMP__
     #pragma omp parallel for
     #endif
@@ -2999,9 +2939,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
       we_z(j) = efz(j) * h_xx[0] * h_xx[1] * h_xx[2];
     }
 
+
     coeff(lr_sol_e.X, lr_sol_e.X, we_x.begin(), D1x);
     coeff(lr_sol_e.X, lr_sol_e.X, we_y.begin(), D1y);
     coeff(lr_sol_e.X, lr_sol_e.X, we_z.begin(), D1z);
+
 
     fftw_execute_dft_r2c(plans_xx[0],lr_sol_e.X.begin(),(fftw_complex*)tmpXhat.begin());
 
@@ -3018,6 +2960,10 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     coeff(lr_sol_e.X, dX_x, h_xx[0]*h_xx[1]*h_xx[2], D2x);
     coeff(lr_sol_e.X, dX_y, h_xx[0]*h_xx[1]*h_xx[2], D2y);
     coeff(lr_sol_e.X, dX_z, h_xx[0]*h_xx[1]*h_xx[2], D2z);
+
+    //gt::stop("D coeff CPU");
+
+    //gt::start("S step CPU");
 
     // RK4
     for(Index jj = 0; jj< nsteps_rk4; jj++){
@@ -3117,15 +3063,21 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
     }
 
+    //gt::stop("S step CPU");
+
     // Full step L until tau/2
 
     tmpV = lr_sol_e.V;
 
     matmul_transb(tmpV,lr_sol_e.S,lr_sol_e.V);
 
+    //gt::start("L step CPU");
+
+    //gt::start("Schur L CPU");
     schur(D1x, Tx, dd1x_r, lwork);
     schur(D1y, Ty, dd1y_r, lwork);
     schur(D1z, Tz, dd1z_r, lwork);
+
 
     Tx.to_cplx(Txc);
     Ty.to_cplx(Tyc);
@@ -3134,16 +3086,18 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     D2y.to_cplx(D2yc);
     D2z.to_cplx(D2zc);
 
+    //gt::stop("Schur L CPU");
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
 
+      //gt::start("First split L CPU");
       // Full step -- Exact solution
       fftw_execute_dft_r2c(plans_vv[0],lr_sol_e.V.begin(),(fftw_complex*)Lhat.begin());
 
       matmul(Lhat,Txc,Nhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
+      #pragma omp parallel for
       #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_vv[2]; k++){
@@ -3161,24 +3115,14 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       matmul_transb(Nhat,Txc,Lhat);
 
+      //gt::stop("First split L CPU");
+
+      //gt::start("Second split L CPU");
       matmul(Lhat,Tyc,Nhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_vv[2]; k++){
-          for(Index j = 0; j < N_vv[1]; j++){
-            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-              if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
-              complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
-              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-              Nhat(idx,rr) *= exp(tau_split_h*lambdaw*dd1y_r(rr))*ncvv;
-            }
-          }
-        }
-      }
-      #else
+      #pragma omp parallel for
+      #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_vv[2]; k++){
           for(Index j = 0; j < N_vv[1]; j++){
@@ -3192,12 +3136,14 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
           }
         }
       }
-      #endif
 
       matmul_transb(Nhat,Tyc,Lhat);
 
       fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol_e.V.begin());
 
+      //gt::stop("Second split L CPU");
+
+      //gt::start("Third split L CPU");
       // Full step --
       fftw_execute_dft_r2c(plans_vv[0],lr_sol_e.V.begin(),(fftw_complex*)Lhat.begin());
 
@@ -3226,23 +3172,8 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
         matmul(Lhat,Tzc,tmpVhat);
 
         #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_vv[2]; k++){
-            for(Index j = 0; j < N_vv[1]; j++){
-              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
-
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
-                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-                Nhat(idx,rr) *= exp(tau_ee_h*lambdau*dd1z_r(rr));
-                Nhat(idx,rr) -= tau_ee_h*phi1_im(tau_ee_h*lambdau*dd1z_r(rr))*tmpVhat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
+        #pragma omp parallel for
+        #endif
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_vv[2]; k++){
             if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
@@ -3257,7 +3188,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
             }
           }
         }
-        #endif
 
         matmul_transb(Nhat,Tzc,Lhat);
 
@@ -3289,22 +3219,8 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
         Lhat -= tmpVhat;
 
         #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_vv[2]; k++){
-            for(Index j = 0; j < N_vv[1]; j++){
-              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
-
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
-                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-                Nhat(idx,rr) -= tau_ee_h*phi2_im(tau_ee_h*lambdau*dd1z_r(rr))*Lhat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
+        #pragma omp parallel for
+        #endif
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_vv[2]; k++){
             if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
@@ -3318,7 +3234,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
             }
           }
         }
-        #endif
 
         matmul_transb(Nhat,Tzc,Lhat);
 
@@ -3328,44 +3243,29 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       }
 
+      //gt::stop("Third split L CPU");
+
     }
-
-    gt::stop("Lie splitting for electric field CPU");
-
-    gt::start("Restarted integration CPU");
-
-    gt::start("Electric field CPU");
 
     // Electric field at time tau/2
 
+    //gt::start("Electric Field CPU - coeff");
     coeff_one(lr_sol_e.V,-h_vv[0]*h_vv[1]*h_vv[2],rho);
 
+    //gt::stop("Electric Field CPU - coeff");
+
+    //gt::start("Electric Field CPU - matvec");
     matvec(lr_sol_e.X,rho,ef);
 
+    //gt::stop("Electric Field CPU - matvec");
     ef += 1.0;
 
     fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
 
+    //gt::start("Electric Field CPU - ptw");
     #ifdef __OPENMP__
     #pragma omp parallel for
-    for(Index k = 0; k < N_xx[2]; k++){
-      for(Index j = 0; j < N_xx[1]; j++){
-        for(Index i = 0; i < (N_xx[0]/2+1); i++){
-          if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-          if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-          complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-          complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-          complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-          Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-          efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
-          efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-          efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-        }
-      }
-    }
-    #else
+    #endif
     for(Index k = 0; k < N_xx[2]; k++){
       if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
       for(Index j = 0; j < N_xx[1]; j++){
@@ -3383,7 +3283,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
         }
       }
     }
-    #endif
 
     #ifdef __OPENMP__
     #pragma omp parallel for
@@ -3396,11 +3295,14 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
       }
     }
 
+    //gt::stop("Electric Field CPU - ptw");
+
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
     fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatz.begin(),efz.begin());
 
-    gt::stop("Electric field CPU");
+    //gt::stop("Electric Field CPU");
+
 
     // Here I have the electric field at time tau/2, so restart integration
 
@@ -3409,18 +3311,17 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     tmpX = lr_sol.X;
     matmul(tmpX,lr_sol.S,lr_sol.X);
 
-    gt::start("First half step K step CPU");
-
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
       // Half step -- Exact solution
 
+      //gt::start("First split K CPU");
       fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
       matmul(Khat,Tvc,Mhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
+      #pragma omp parallel for
       #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
@@ -3436,25 +3337,15 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       matmul_transb(Mhat,Tvc,Khat);
 
+      //gt::stop("First split K CPU");
       // Half step -- Exact solution
 
+      //gt::start("Second split K CPU");
       matmul(Khat,Twc,Mhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr))*ncxx;
-            }
-          }
-        }
-      }
-      #else
+      #pragma omp parallel for
+      #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
           for(Index j = 0; j < N_xx[1]; j++){
@@ -3467,14 +3358,16 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
           }
         }
       }
-      #endif
 
       matmul_transb(Mhat,Twc,Khat);
 
       fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
 
+      //gt::stop("Second split K CPU");
+
       // Full step -- exponential integrator
 
+      //gt::start("Third split K CPU");
       fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
       matmul(Khat,Tuc,Mhat);
@@ -3498,27 +3391,12 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
         Khat += tmpXhat;
 
+        //gt::start("EE Third split K CPU");
         matmul(Khat,Tuc,tmpXhat);
 
         #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) *= exp(-tau_ee_h*lambdaz*dcu_r(rr));
-                Mhat(idx,rr) += tau_ee_h*phi1_im(-tau_ee_h*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
+        #pragma omp parallel for
+        #endif
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_xx[2]; k++){
             if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
@@ -3534,7 +3412,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
             }
           }
         }
-        #endif
 
         matmul_transb(Mhat,Tuc,Khat);
 
@@ -3561,28 +3438,14 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
         Kexhat += Khat;
 
+        //gt::start("EE Third split K CPU");
         matmul(Kexhat,Tuc,Khat);
 
         Khat -= tmpXhat;
 
         #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) += tau_ee_h*phi2_im(-tau_ee_h*lambdaz*dcu_r(rr))*Khat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
+        #pragma omp parallel for
+        #endif
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_xx[2]; k++){
             if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
@@ -3597,7 +3460,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
             }
           }
         }
-        #endif
 
         matmul_transb(Mhat,Tuc,Khat);
 
@@ -3605,27 +3467,17 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
           Khat *= ncxx;
           fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
         }
+        //gt::stop("EE Third split K CPU");
       }
 
       // Half step -- exact solution
 
+      //gt::start("Second split K CPU");
       matmul(Khat,Twc,Mhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr));
-            }
-          }
-        }
-      }
-      #else
+      #pragma omp parallel for
+      #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
           for(Index j = 0; j < N_xx[1]; j++){
@@ -3638,16 +3490,17 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
           }
         }
       }
-      #endif
 
       matmul_transb(Mhat,Twc,Khat);
 
       // Half step -- Exact solution
 
+      //gt::start("First split K CPU");
+
       matmul(Khat,Tvc,Mhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
+      #pragma omp parallel for
       #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
@@ -3665,16 +3518,19 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
 
+      //gt::stop("Third split K CPU");
     }
 
-
+    //gt::start("Gram Schmidt K CPU");
     gram_schmidt(lr_sol.X, lr_sol.S, ip_xx);
 
-    gt::stop("First half step K step CPU");
+    //gt::stop("Gram Schmidt K CPU");
+
+    //gt::stop("K step CPU");
 
     // Half step S (until tau/2)
 
-    gt::start("D coeff CPU");
+    //gt::start("D coeff CPU");
     #ifdef __OPENMP__
     #pragma omp parallel for
     #endif
@@ -3688,6 +3544,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     coeff(lr_sol.X, lr_sol.X, we_x.begin(), D1x);
     coeff(lr_sol.X, lr_sol.X, we_y.begin(), D1y);
     coeff(lr_sol.X, lr_sol.X, we_z.begin(), D1z);
+
 
     fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)tmpXhat.begin());
 
@@ -3705,9 +3562,9 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     coeff(lr_sol.X, dX_y, h_xx[0]*h_xx[1]*h_xx[2], D2y);
     coeff(lr_sol.X, dX_z, h_xx[0]*h_xx[1]*h_xx[2], D2z);
 
-    gt::stop("D coeff CPU");
+    //gt::stop("D coeff CPU");
 
-    gt::start("First half step S step CPU");
+    //gt::start("S step CPU");
 
     // Rk4
     for(Index jj = 0; jj< nsteps_rk4; jj++){
@@ -3807,11 +3664,17 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
     }
 
-    gt::stop("First half step S step CPU");
+    //gt::stop("S step CPU");
+
+
+    // Full step L (until tau)
 
     tmpV = lr_sol.V;
     matmul_transb(tmpV,lr_sol.S,lr_sol.V);
 
+    //gt::start("L step CPU");
+
+    //gt::start("Schur L CPU");
     schur(D1x, Tx, dd1x_r, lwork);
     schur(D1y, Ty, dd1y_r, lwork);
     schur(D1z, Tz, dd1z_r, lwork);
@@ -3823,18 +3686,18 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     D2y.to_cplx(D2yc);
     D2z.to_cplx(D2zc);
 
-    gt::start("Full step L step CPU");
-
+    //gt::stop("Schur L CPU");
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
 
+      //gt::start("First split L CPU");
       // Half step -- Exact solution
       fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
 
       matmul(Lhat,Txc,Nhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
+      #pragma omp parallel for
       #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_vv[2]; k++){
@@ -3852,26 +3715,16 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       matmul_transb(Nhat,Txc,Lhat);
 
+      //gt::stop("First split L CPU");
+
       // Half step -- Exact solution
 
+      //gt::start("Second split L CPU");
       matmul(Lhat,Tyc,Nhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_vv[2]; k++){
-          for(Index j = 0; j < N_vv[1]; j++){
-            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-              if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
-              complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
-              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-              Nhat(idx,rr) *= exp(tau_split_h*lambdaw*dd1y_r(rr))*ncvv;
-            }
-          }
-        }
-      }
-      #else
+      #pragma omp parallel for
+      #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_vv[2]; k++){
           for(Index j = 0; j < N_vv[1]; j++){
@@ -3885,11 +3738,14 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
           }
         }
       }
-      #endif
 
       matmul_transb(Nhat,Tyc,Lhat);
 
       fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
+
+      //gt::stop("Second split L CPU");
+
+      //gt::start("Third split L CPU");
 
       // Full step -- exponential integrator
       fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
@@ -3919,23 +3775,8 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
         matmul(Lhat,Tzc,tmpVhat);
 
         #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_vv[2]; k++){
-            for(Index j = 0; j < N_vv[1]; j++){
-              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
-
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
-                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-                Nhat(idx,rr) *= exp(tau_ee*lambdau*dd1z_r(rr));
-                Nhat(idx,rr) -= tau_ee*phi1_im(tau_ee*lambdau*dd1z_r(rr))*tmpVhat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
+        #pragma omp parallel for
+        #endif
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_vv[2]; k++){
             if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
@@ -3950,7 +3791,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
             }
           }
         }
-        #endif
 
         matmul_transb(Nhat,Tzc,Lhat);
 
@@ -3982,22 +3822,8 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
         Lhat -= tmpVhat;
 
         #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_vv[2]; k++){
-            for(Index j = 0; j < N_vv[1]; j++){
-              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
-
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
-                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-                Nhat(idx,rr) -= tau_ee*phi2_im(tau_ee*lambdau*dd1z_r(rr))*Lhat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
+        #pragma omp parallel for
+        #endif
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_vv[2]; k++){
             if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
@@ -4011,7 +3837,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
             }
           }
         }
-        #endif
 
         matmul_transb(Nhat,Tzc,Lhat);
 
@@ -4026,21 +3851,8 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
       matmul(Lhat,Tyc,Nhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_vv[2]; k++){
-          for(Index j = 0; j < N_vv[1]; j++){
-            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-              if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
-              complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
-              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-              Nhat(idx,rr) *= exp(tau_split_h*lambdaw*dd1y_r(rr));
-            }
-          }
-        }
-      }
-      #else
+      #pragma omp parallel for
+      #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_vv[2]; k++){
           for(Index j = 0; j < N_vv[1]; j++){
@@ -4054,14 +3866,13 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
           }
         }
       }
-      #endif
 
       matmul_transb(Nhat,Tyc,Lhat);
 
       matmul(Lhat,Txc,Nhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
+      #pragma omp parallel for
       #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_vv[2]; k++){
@@ -4076,20 +3887,32 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
         }
       }
 
+
       matmul_transb(Nhat,Txc,Lhat);
 
       fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
 
+
+      //gt::stop("Third split L CPU");
+
     }
 
+    //gt::start("Gram Schmidt L CPU");
     gram_schmidt(lr_sol.V, lr_sol.S, ip_vv);
+
+    //gt::stop("Gram Schmidt L CPU");
+
+    //gt::start("Transpose S CPU");
     transpose_inplace(lr_sol.S);
 
-    gt::stop("Full step L step CPU");
+    //gt::stop("Transpose S CPU");
+
+    //gt::stop("L step CPU");
+
 
     // Half step S (until tau/2)
 
-    gt::start("C coeff CPU");
+    //gt::start("C coeff CPU");
     coeff(lr_sol.V, lr_sol.V, we_v.begin(), C1v);
     coeff(lr_sol.V, lr_sol.V, we_w.begin(), C1w);
     coeff(lr_sol.V, lr_sol.V, we_u.begin(), C1u);
@@ -4108,9 +3931,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     coeff(lr_sol.V, dV_w, h_vv[0]*h_vv[1]*h_vv[2], C2w);
     coeff(lr_sol.V, dV_u, h_vv[0]*h_vv[1]*h_vv[2], C2u);
 
-    gt::stop("C coeff CPU");
-
-    gt::start("Second half step S step CPU");
+    //gt::stop("C coeff CPU");
 
     // Rk4
     for(Index jj = 0; jj< nsteps_rk4; jj++){
@@ -4210,7 +4031,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
     }
 
-    gt::stop("Second half step S step CPU");
+    //gt::stop("S step CPU");
 
     // Half step K (until tau/2)
 
@@ -4228,19 +4049,19 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     C2v.to_cplx(C2vc);
     C2w.to_cplx(C2wc);
     C2u.to_cplx(C2uc);
-
-    gt::start("Second half step K step CPU");
+    //gt::stop("Schur K CPU");
 
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
       // Half step -- Exact solution
 
+      //gt::start("First split K CPU");
       fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
       matmul(Khat,Tvc,Mhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
+      #pragma omp parallel for
       #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
@@ -4256,25 +4077,15 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       matmul_transb(Mhat,Tvc,Khat);
 
+      //gt::stop("First split K CPU");
       // Half step -- Exact solution
 
+      //gt::start("Second split K CPU");
       matmul(Khat,Twc,Mhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr))*ncxx;
-            }
-          }
-        }
-      }
-      #else
+      #pragma omp parallel for
+      #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
           for(Index j = 0; j < N_xx[1]; j++){
@@ -4287,14 +4098,16 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
           }
         }
       }
-      #endif
 
       matmul_transb(Mhat,Twc,Khat);
 
       fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
 
+      //gt::stop("Second split K CPU");
+
       // Full step -- exponential integrator
 
+      //gt::start("Third split K CPU");
       fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
       matmul(Khat,Tuc,Mhat);
@@ -4322,24 +4135,8 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
         matmul(Khat,Tuc,tmpXhat);
 
         #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) *= exp(-tau_ee_h*lambdaz*dcu_r(rr));
-                Mhat(idx,rr) += tau_ee_h*phi1_im(-tau_ee_h*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
+        #pragma omp parallel for
+        #endif
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_xx[2]; k++){
             if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
@@ -4355,7 +4152,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
             }
           }
         }
-        #endif
 
         matmul_transb(Mhat,Tuc,Khat);
 
@@ -4382,28 +4178,14 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
         Kexhat += Khat;
 
+        //gt::start("EE Third split K CPU");
         matmul(Kexhat,Tuc,Khat);
 
         Khat -= tmpXhat;
 
         #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) += tau_ee_h*phi2_im(-tau_ee_h*lambdaz*dcu_r(rr))*Khat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
+        #pragma omp parallel for
+        #endif
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_xx[2]; k++){
             if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
@@ -4418,7 +4200,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
             }
           }
         }
-        #endif
 
         matmul_transb(Mhat,Tuc,Khat);
 
@@ -4426,27 +4207,17 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
           Khat *= ncxx;
           fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
         }
+        //gt::stop("EE Third split K CPU");
       }
 
       // Half step -- exact solution
 
+      //gt::start("Second split K CPU");
       matmul(Khat,Twc,Mhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr));
-            }
-          }
-        }
-      }
-      #else
+      #pragma omp parallel for
+      #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
           for(Index j = 0; j < N_xx[1]; j++){
@@ -4459,16 +4230,17 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
           }
         }
       }
-      #endif
 
       matmul_transb(Mhat,Twc,Khat);
 
       // Half step -- Exact solution
 
+      //gt::start("First split K CPU");
+
       matmul(Khat,Tvc,Mhat);
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
+      #pragma omp parallel for
       #endif
       for(int rr = 0; rr < r; rr++){
         for(Index k = 0; k < N_xx[2]; k++){
@@ -4486,13 +4258,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
 
+      //gt::stop("Third split K CPU");
     }
 
+    //gt::start("Gram Schmidt K CPU");
     gram_schmidt(lr_sol.X, lr_sol.S, ip_xx);
-
-    gt::stop("Second half step K step CPU");
-
-    gt::stop("Restarted integration CPU");
 
     // Error Mass
     coeff_one(lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],int_x);
@@ -4542,17 +4312,27 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     d_lr_sol_e.V = d_lr_sol.V;
 
     // Full step K until tau/2
+    //gt::start("Main loop GPU");
 
     d_tmpX = d_lr_sol_e.X;
 
     matmul(d_tmpX,d_lr_sol_e.S,d_lr_sol_e.X);
 
-    gt::start("Lie splitting for electric field GPU");
-
     // Electric field
 
+    //gt::start("Electric Field GPU");
+
+    //    gt::start("Electric Field GPU - coeff");
     coeff_one(d_lr_sol_e.V,-h_vv[0]*h_vv[1]*h_vv[2],d_rho);
+    //  cudaDeviceSynchronize();
+    //  gt::stop("Electric Field GPU - coeff");
+
+    //gt::start("Electric Field GPU - matvec");
     matvec(d_lr_sol_e.X,d_rho,d_ef);
+    //cudaDeviceSynchronize();
+    //gt::stop("Electric Field GPU - matvec");
+
+    //gt::start("Electric Field GPU - FFT");
     d_ef += 1.0;
 
     cufftExecD2Z(plans_d_e[0],d_ef.begin(),(cufftDoubleComplex*)d_efhat.begin());
@@ -4563,8 +4343,14 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     cufftExecZ2D(plans_d_e[1],(cufftDoubleComplex*)d_efhaty.begin(),d_efy.begin());
     cufftExecZ2D(plans_d_e[1],(cufftDoubleComplex*)d_efhatz.begin(),d_efz.begin());
 
+    //cudaDeviceSynchronize();
+    //gt::stop("Electric Field GPU - FFT");
+    //cudaDeviceSynchronize();
+    //gt::stop("Electric Field GPU");
+
     // Electric energy
 
+    //gt::start("Quantities GPU - El en");
     cublasDdot (handle_dot, d_efx.num_elements(), d_efx.begin(), 1, d_efx.begin(), 1, d_el_energy_x);
     cublasDdot (handle_dot, d_efy.num_elements(), d_efy.begin(), 1, d_efy.begin(), 1, d_el_energy_y);
     cublasDdot (handle_dot, d_efz.num_elements(), d_efz.begin(), 1, d_efz.begin(), 1, d_el_energy_z);
@@ -4572,14 +4358,17 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     ptw_sum<<<1,1>>>(1,d_el_energy_x,d_el_energy_y);
     ptw_sum<<<1,1>>>(1,d_el_energy_x,d_el_energy_z);
 
-    scale_unique<<<1,1>>>(d_el_energy_x,0.5*h_xx[0]*h_xx[1]*h_xx[2]);
+    scale_unique<<<1,1>>>(d_el_energy_x,0.5*h_xx[0]*h_xx[1]*h_xx[2]); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
 
     cudaMemcpy(&d_el_energy_CPU,d_el_energy_x,sizeof(double),cudaMemcpyDeviceToHost);
 
     el_energyGPUf << d_el_energy_CPU << endl;
+    //cudaDeviceSynchronize();
+    //gt::stop("Quantities GPU - El en");
 
     // Main of K step
 
+    //gt::start("C coeff GPU");
     coeff(d_lr_sol_e.V, d_lr_sol_e.V, d_we_v.begin(), d_C1v);
     coeff(d_lr_sol_e.V, d_lr_sol_e.V, d_we_w.begin(), d_C1w);
     coeff(d_lr_sol_e.V, d_lr_sol_e.V, d_we_u.begin(), d_C1u);
@@ -4595,6 +4384,13 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     coeff(d_lr_sol_e.V, d_dV_v, h_vv[0]*h_vv[1]*h_vv[2], d_C2v);
     coeff(d_lr_sol_e.V, d_dV_w, h_vv[0]*h_vv[1]*h_vv[2], d_C2w);
     coeff(d_lr_sol_e.V, d_dV_u, h_vv[0]*h_vv[1]*h_vv[2], d_C2u);
+
+    //cudaDeviceSynchronize();
+    //gt::stop("C coeff GPU");
+
+    //gt::start("K step GPU");
+
+    //gt::start("Schur K GPU");
 
     C1v_gpu = d_C1v;
     schur(C1v_gpu, Tv_gpu, dcv_r_gpu, lwork);
@@ -4617,10 +4413,14 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     cplx_conv<<<(d_C2w.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_C2w.num_elements(), d_C2w.begin(), d_C2wc.begin());
     cplx_conv<<<(d_C2u.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_C2u.num_elements(), d_C2u.begin(), d_C2uc.begin());
 
+    //cudaDeviceSynchronize();
+    //gt::stop("Schur K GPU");
+
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
       // Full step -- Exact solution
 
+      //gt::start("First split K GPU");
       cufftExecD2Z(d_plans_xx[0],d_lr_sol_e.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
 
       matmul(d_Khat,d_Tvc,d_Mhat);
@@ -4629,17 +4429,24 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       matmul_transb(d_Mhat,d_Tvc,d_Khat);
 
+      //cudaDeviceSynchronize();
+      //gt::stop("First split K GPU");
       // Full step -- Exact solution
 
+      //gt::start("Second split K GPU");
       matmul(d_Khat,d_Twc,d_Mhat);
 
       exact_sol_exp_3d_b<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), N_xx[0]/2 + 1, N_xx[1], N_xx[2], d_Mhat.begin(), d_dcw_r.begin(), tau_split_h, d_lim_xx, ncxx);
 
       matmul_transb(d_Mhat,d_Twc,d_Khat);
 
-      cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol_e.X.begin());
-
+      cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol_e.X.begin()); // in gpu remember to divide so we avoid the last fft
+      // actually it depends on the cuda version, in some the input is preserved, in others it is not. So do fft in general
+      //cudaDeviceSynchronize();
+      //gt::stop("Second split K GPU");
       // Full step --
+
+      //gt::start("Third split K GPU");
 
       #ifdef __FFTW__ // working on the server
       ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
@@ -4708,12 +4515,20 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
         cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol_e.X.begin());
 
       }
+      //cudaDeviceSynchronize();
+      //gt::stop("Third split K GPU");
     }
 
+    //gt::start("Gram Schmidt K GPU");
     gram_schmidt_gpu(d_lr_sol_e.X, d_lr_sol_e.S, h_xx[0]*h_xx[1]*h_xx[2]);
+    //cudaDeviceSynchronize();
+    //gt::stop("Gram Schmidt K GPU");
+
+    //gt::stop("K step GPU");
 
     // Full step S until tau/2
 
+    //gt::start("D coeff GPU");
     ptw_mult_scal<<<(d_efx.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efx.num_elements(), d_efx.begin(), h_xx[0] * h_xx[1] * h_xx[2], d_we_x.begin());
     ptw_mult_scal<<<(d_efy.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efy.num_elements(), d_efy.begin(), h_xx[0] * h_xx[1] * h_xx[2], d_we_y.begin());
     ptw_mult_scal<<<(d_efz.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efz.num_elements(), d_efz.begin(), h_xx[0] * h_xx[1] * h_xx[2], d_we_z.begin());
@@ -4734,6 +4549,10 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     coeff(d_lr_sol_e.X, d_dX_y, h_xx[0]*h_xx[1]*h_xx[2], d_D2y);
     coeff(d_lr_sol_e.X, d_dX_z, h_xx[0]*h_xx[1]*h_xx[2], d_D2z);
 
+    //cudaDeviceSynchronize();
+    //gt::stop("D coeff GPU");
+
+    //gt::start("S step GPU");
     // RK4
     for(Index jj = 0; jj< nsteps_split; jj++){
       matmul_transb(d_lr_sol_e.S,d_C1v,d_tmpS);
@@ -4813,12 +4632,18 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
       rk4_finalcomb<<<(d_tmpS4.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_tmpS4.num_elements(), d_lr_sol_e.S.begin(), tau_rk4_h, d_tmpS1.begin(), d_tmpS2.begin(), d_tmpS3.begin(), d_tmpS4.begin(),d_Tw.begin());
 
     }
+    //cudaDeviceSynchronize();
+    //gt::stop("S step GPU");
 
     // Full step L until tau/2
 
     d_tmpV = d_lr_sol_e.V;
 
     matmul_transb(d_tmpV,d_lr_sol_e.S,d_lr_sol_e.V);
+
+    //gt::start("L step GPU");
+
+    //gt::start("Schur L GPU");
 
     D1x_gpu = d_D1x;
     schur(D1x_gpu, Tx_gpu, dd1x_r_gpu, lwork);
@@ -4843,9 +4668,12 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     cplx_conv<<<(d_D2y.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D2y.num_elements(), d_D2y.begin(), d_D2yc.begin());
     cplx_conv<<<(d_D2z.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D2z.num_elements(), d_D2z.begin(), d_D2zc.begin());
 
+    //cudaDeviceSynchronize();
+    //gt::stop("Schur L GPU");
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
 
+      //gt::start("First split L GPU");
       // Full step -- Exact solution
       cufftExecD2Z(d_plans_vv[0],d_lr_sol_e.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
 
@@ -4855,6 +4683,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       matmul_transb(d_Nhat,d_Txc,d_Lhat);
 
+      //cudaDeviceSynchronize();
+      //gt::stop("First split L GPU");
+
+
+      //gt::start("Second split L GPU");
       matmul(d_Lhat,d_Tyc,d_Nhat);
 
       exact_sol_exp_3d_b<<<(d_Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Nhat.num_elements(), N_vv[0]/2 + 1, N_vv[1], N_vv[2], d_Nhat.begin(), d_dd1y_r.begin(), -tau_split_h, d_lim_vv, ncvv);
@@ -4862,6 +4695,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
       matmul_transb(d_Nhat,d_Tyc,d_Lhat);
 
       cufftExecZ2D(d_plans_vv[1],(cufftDoubleComplex*)d_Lhat.begin(),d_lr_sol_e.V.begin());
+
+      //cudaDeviceSynchronize();
+      //gt::stop("Second split L GPU");
+
+      //gt::start("Third split L GPU");
 
       // Full step --
 
@@ -4906,6 +4744,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
         // Second stage
 
+
         ptw_mult_row_k<<<(d_lr_sol_e.V.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_lr_sol_e.V.num_elements(),d_lr_sol_e.V.shape()[0],d_lr_sol_e.V.begin(),d_v.begin(),d_Lv.begin());
         ptw_mult_row_k<<<(d_lr_sol_e.V.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_lr_sol_e.V.num_elements(),d_lr_sol_e.V.shape()[0],d_lr_sol_e.V.begin(),d_w.begin(),d_Lw.begin());
         ptw_mult_row_k<<<(d_lr_sol_e.V.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_lr_sol_e.V.num_elements(),d_lr_sol_e.V.shape()[0],d_lr_sol_e.V.begin(),d_u.begin(),d_Lu.begin());
@@ -4935,19 +4774,25 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
 
       }
+      //cudaDeviceSynchronize();
+      //gt::stop("Third split L GPU");
     }
-
-    cudaDeviceSynchronize();
-    gt::stop("Lie splitting for electric field GPU");
-
-    gt::start("Restarted integration GPU");
 
     // Electric field at time tau/2
 
-    gt::start("Electric Field GPU");
+    //gt::start("Electric Field GPU");
 
+    //    gt::start("Electric Field GPU - coeff");
     coeff_one(d_lr_sol_e.V,-h_vv[0]*h_vv[1]*h_vv[2],d_rho);
+    //  cudaDeviceSynchronize();
+    //  gt::stop("Electric Field GPU - coeff");
+
+    //gt::start("Electric Field GPU - matvec");
     matvec(d_lr_sol_e.X,d_rho,d_ef);
+    //cudaDeviceSynchronize();
+    //gt::stop("Electric Field GPU - matvec");
+
+    //gt::start("Electric Field GPU - FFT");
     d_ef += 1.0;
 
     cufftExecD2Z(plans_d_e[0],d_ef.begin(),(cufftDoubleComplex*)d_efhat.begin());
@@ -4958,8 +4803,10 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     cufftExecZ2D(plans_d_e[1],(cufftDoubleComplex*)d_efhaty.begin(),d_efy.begin());
     cufftExecZ2D(plans_d_e[1],(cufftDoubleComplex*)d_efhatz.begin(),d_efz.begin());
 
-    cudaDeviceSynchronize();
-    gt::stop("Electric Field GPU");
+    //cudaDeviceSynchronize();
+    //gt::stop("Electric Field GPU - FFT");
+    //cudaDeviceSynchronize();
+    //gt::stop("Electric Field GPU");
 
     // Here I have the electric field at time tau/2, so restart integration
 
@@ -4968,12 +4815,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     d_tmpX = d_lr_sol.X;
     matmul(d_tmpX,d_lr_sol.S,d_lr_sol.X);
 
-    gt::start("First half step K step GPU");
-
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
       // Half step -- Exact solution
 
+      //gt::start("First split K GPU");
       cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
 
       matmul(d_Khat,d_Tvc,d_Mhat);
@@ -4982,17 +4828,24 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       matmul_transb(d_Mhat,d_Tvc,d_Khat);
 
+      //cudaDeviceSynchronize();
+      //gt::stop("First split K GPU");
       // Half step -- Exact solution
 
+      //gt::start("Second split K GPU");
       matmul(d_Khat,d_Twc,d_Mhat);
 
       exact_sol_exp_3d_b<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), N_xx[0]/2 + 1, N_xx[1], N_xx[2], d_Mhat.begin(), d_dcw_r.begin(), tau_split_h/2.0, d_lim_xx, ncxx);
 
       matmul_transb(d_Mhat,d_Twc,d_Khat);
 
-      cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin());
-
+      cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin()); // in gpu remember to divide so we avoid the last fft
+      // actually it depends on the cuda version, in some the input is preserved, in others it is not. So do fft in general
+      //cudaDeviceSynchronize();
+      //gt::stop("Second split K GPU");
       // Full step -- exponential integrator
+
+      //gt::start("Third split K GPU");
 
       #ifdef __FFTW__ // working on the server
       ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
@@ -5064,6 +4917,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       // Half step -- Exact solution
 
+      //gt::start("Second split K GPU");
       matmul(d_Khat,d_Twc,d_Mhat);
 
       exact_sol_exp_3d_c<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), N_xx[0]/2 + 1, N_xx[1], N_xx[2], d_Mhat.begin(), d_dcw_r.begin(), tau_split_h/2.0, d_lim_xx);
@@ -5072,6 +4926,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       // Half step -- Exact solution
 
+      //gt::start("First split K GPU");
       matmul(d_Khat,d_Tvc,d_Mhat);
 
       exact_sol_exp_3d_d<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), N_xx[0]/2 + 1, N_xx[1], N_xx[2], d_Mhat.begin(), d_dcv_r.begin(), tau_split_h/2.0, d_lim_xx, ncxx);
@@ -5080,16 +4935,20 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin()); // in gpu remember to divide so we avoid the last fft
 
+      //cudaDeviceSynchronize();
+      //gt::stop("Third split K GPU");
     }
 
+    //gt::start("Gram Schmidt K GPU");
     gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, h_xx[0]*h_xx[1]*h_xx[2]);
+    //cudaDeviceSynchronize();
+    //gt::stop("Gram Schmidt K GPU");
 
-    cudaDeviceSynchronize();
-    gt::stop("First half step K step GPU");
+    //gt::stop("K step GPU");
 
     // Half step S (until tau/2)
 
-    gt::start("D coeff GPU");
+    //gt::start("D coeff GPU");
     ptw_mult_scal<<<(d_efx.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efx.num_elements(), d_efx.begin(), h_xx[0] * h_xx[1] * h_xx[2], d_we_x.begin());
     ptw_mult_scal<<<(d_efy.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efy.num_elements(), d_efy.begin(), h_xx[0] * h_xx[1] * h_xx[2], d_we_y.begin());
     ptw_mult_scal<<<(d_efz.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efz.num_elements(), d_efz.begin(), h_xx[0] * h_xx[1] * h_xx[2], d_we_z.begin());
@@ -5110,10 +4969,10 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     coeff(d_lr_sol.X, d_dX_y, h_xx[0]*h_xx[1]*h_xx[2], d_D2y);
     coeff(d_lr_sol.X, d_dX_z, h_xx[0]*h_xx[1]*h_xx[2], d_D2z);
 
-    cudaDeviceSynchronize();
-    gt::stop("D coeff GPU");
+    //cudaDeviceSynchronize();
+    //gt::stop("D coeff GPU");
 
-    gt::start("First half step S step GPU");
+    //gt::start("S step GPU");
     // RK4
     for(Index jj = 0; jj< nsteps_split; jj++){
       matmul_transb(d_lr_sol.S,d_C1v,d_tmpS);
@@ -5194,14 +5053,16 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
     }
 
-    cudaDeviceSynchronize();
-    gt::stop("First half step S step GPU");
 
     // Full step L (until tau)
 
     d_tmpV = d_lr_sol.V;
 
     matmul_transb(d_tmpV,d_lr_sol.S,d_lr_sol.V);
+
+    //gt::start("L step GPU");
+
+    //gt::start("Schur L GPU");
 
     D1x_gpu = d_D1x;
     schur(D1x_gpu, Tx_gpu, dd1x_r_gpu, lwork);
@@ -5226,10 +5087,12 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     cplx_conv<<<(d_D2y.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D2y.num_elements(), d_D2y.begin(), d_D2yc.begin());
     cplx_conv<<<(d_D2z.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D2z.num_elements(), d_D2z.begin(), d_D2zc.begin());
 
-    gt::start("Full step L step GPU");
+    //cudaDeviceSynchronize();
+    //gt::stop("Schur L GPU");
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
 
+      //gt::start("First split L GPU");
       // Half step -- Exact solution
       cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
 
@@ -5239,8 +5102,12 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       matmul_transb(d_Nhat,d_Txc,d_Lhat);
 
+      //cudaDeviceSynchronize();
+      //gt::stop("First split L GPU");
+
       // Half step -- Exact solution
 
+      //gt::start("Second split L GPU");
       matmul(d_Lhat,d_Tyc,d_Nhat);
 
       exact_sol_exp_3d_b<<<(d_Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Nhat.num_elements(), N_vv[0]/2 + 1, N_vv[1], N_vv[2], d_Nhat.begin(), d_dd1y_r.begin(), -tau_split_h, d_lim_vv, ncvv);
@@ -5248,6 +5115,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
       matmul_transb(d_Nhat,d_Tyc,d_Lhat);
 
       cufftExecZ2D(d_plans_vv[1],(cufftDoubleComplex*)d_Lhat.begin(),d_lr_sol.V.begin());
+
+      //cudaDeviceSynchronize();
+      //gt::stop("Second split L GPU");
+
+      //gt::start("Third split L GPU");
 
       // Full step -- exponential integrator
 
@@ -5258,6 +5130,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
       #endif
 
       matmul(d_Lhat,d_Tzc,d_Nhat);
+
 
       for(Index jj = 0; jj < nsteps_ee; jj++){
 
@@ -5291,6 +5164,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
         // Second stage
 
+
         ptw_mult_row_k<<<(d_lr_sol.V.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_lr_sol.V.num_elements(),d_lr_sol.V.shape()[0],d_lr_sol.V.begin(),d_v.begin(),d_Lv.begin());
         ptw_mult_row_k<<<(d_lr_sol.V.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_lr_sol.V.num_elements(),d_lr_sol.V.shape()[0],d_lr_sol.V.begin(),d_w.begin(),d_Lw.begin());
         ptw_mult_row_k<<<(d_lr_sol.V.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_lr_sol.V.num_elements(),d_lr_sol.V.shape()[0],d_lr_sol.V.begin(),d_u.begin(),d_Lu.begin());
@@ -5322,6 +5196,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       // Half step -- Exact solution
 
+      //gt::start("Second split L GPU");
       matmul(d_Lhat,d_Tyc,d_Nhat);
 
       exact_sol_exp_3d_c<<<(d_Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Nhat.num_elements(), N_vv[0]/2 + 1, N_vv[1], N_vv[2], d_Nhat.begin(), d_dd1y_r.begin(), -tau_split_h, d_lim_vv);
@@ -5338,17 +5213,20 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       cufftExecZ2D(d_plans_vv[1],(cufftDoubleComplex*)d_Lhat.begin(),d_lr_sol.V.begin());
 
+      //cudaDeviceSynchronize();
+      //gt::stop("Third split L GPU");
     }
 
+    //gt::start("Gram Schmidt L GPU");
     gram_schmidt_gpu(d_lr_sol.V, d_lr_sol.S, h_vv[0]*h_vv[1]*h_vv[2]);
-    transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
+    //cudaDeviceSynchronize();
+    //gt::stop("Gram Schmidt L GPU");
 
-    cudaDeviceSynchronize();
-    gt::stop("Full step L step GPU");
+    //gt::start("Transpose S GPU");
+    transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
 
     // Half step S (until tau/2)
 
-    gt::start("C coeff GPU");
     coeff(d_lr_sol.V, d_lr_sol.V, d_we_v.begin(), d_C1v);
     coeff(d_lr_sol.V, d_lr_sol.V, d_we_w.begin(), d_C1w);
     coeff(d_lr_sol.V, d_lr_sol.V, d_we_u.begin(), d_C1u);
@@ -5365,10 +5243,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     coeff(d_lr_sol.V, d_dV_w, h_vv[0]*h_vv[1]*h_vv[2], d_C2w);
     coeff(d_lr_sol.V, d_dV_u, h_vv[0]*h_vv[1]*h_vv[2], d_C2u);
 
-    cudaDeviceSynchronize();
-    gt::stop("C coeff GPU");
-
-    gt::start("Second half step S step GPU");
     // RK4
     for(Index jj = 0; jj< nsteps_split; jj++){
       matmul_transb(d_lr_sol.S,d_C1v,d_tmpS);
@@ -5449,9 +5323,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
     }
 
-    cudaDeviceSynchronize();
-    gt::stop("Second half step S step GPU");
-
     // Half step K (until tau/2)
 
     d_tmpX = d_lr_sol.X;
@@ -5478,11 +5349,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     cplx_conv<<<(d_C2w.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_C2w.num_elements(), d_C2w.begin(), d_C2wc.begin());
     cplx_conv<<<(d_C2u.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_C2u.num_elements(), d_C2u.begin(), d_C2uc.begin());
 
-    gt::start("Second half step K step GPU");
     // Internal splitting
     for(Index ii = 0; ii < nsteps_split; ii++){
       // Half step -- Exact solution
 
+      //gt::start("First split K GPU");
       cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
 
       matmul(d_Khat,d_Tvc,d_Mhat);
@@ -5491,17 +5362,24 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       matmul_transb(d_Mhat,d_Tvc,d_Khat);
 
+      //cudaDeviceSynchronize();
+      //gt::stop("First split K GPU");
       // Half step -- Exact solution
 
+      //gt::start("Second split K GPU");
       matmul(d_Khat,d_Twc,d_Mhat);
 
       exact_sol_exp_3d_b<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), N_xx[0]/2 + 1, N_xx[1], N_xx[2], d_Mhat.begin(), d_dcw_r.begin(), tau_split_h/2.0, d_lim_xx, ncxx);
 
       matmul_transb(d_Mhat,d_Twc,d_Khat);
 
-      cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin());
-
+      cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin()); // in gpu remember to divide so we avoid the last fft
+      // actually it depends on the cuda version, in some the input is preserved, in others it is not. So do fft in general
+      //cudaDeviceSynchronize();
+      //gt::stop("Second split K GPU");
       // Full step -- exponential integrator
+
+      //gt::start("Third split K GPU");
 
       #ifdef __FFTW__ // working on the server
       ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
@@ -5573,6 +5451,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       // Half step -- Exact solution
 
+      //gt::start("Second split K GPU");
       matmul(d_Khat,d_Twc,d_Mhat);
 
       exact_sol_exp_3d_c<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), N_xx[0]/2 + 1, N_xx[1], N_xx[2], d_Mhat.begin(), d_dcw_r.begin(), tau_split_h/2.0, d_lim_xx);
@@ -5581,6 +5460,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       // Half step -- Exact solution
 
+      //gt::start("First split K GPU");
       matmul(d_Khat,d_Tvc,d_Mhat);
 
       exact_sol_exp_3d_d<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), N_xx[0]/2 + 1, N_xx[1], N_xx[2], d_Mhat.begin(), d_dcv_r.begin(), tau_split_h/2.0, d_lim_xx, ncxx);
@@ -5589,21 +5469,21 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin()); // in gpu remember to divide so we avoid the last fft
 
+      //cudaDeviceSynchronize();
+      //gt::stop("Third split K GPU");
     }
 
+    //gt::start("Gram Schmidt K GPU");
     gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, h_xx[0]*h_xx[1]*h_xx[2]);
-
-    cudaDeviceSynchronize();
-    gt::stop("Second half step K step GPU");
-
-    cudaDeviceSynchronize();
-    gt::stop("Restarted integration GPU");
 
     // Error mass
 
+    //gt::start("Quantities GPU - mass - coeff");
     coeff_one(d_lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],d_int_x);
     coeff_one(d_lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],d_int_v);
 
+    //cudaDeviceSynchronize();
+    //gt::stop("Quantities GPU - mass - coeff");
     matvec(d_lr_sol.S,d_int_v,d_rho);
 
     cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_rho.begin(), 1,d_mass);
@@ -5614,13 +5494,19 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     err_mass_CPU = abs(mass0-d_mass_CPU);
 
     err_massGPUf << err_mass_CPU << endl;
+    //cudaDeviceSynchronize();
+    //gt::stop("Quantities GPU - mass");
 
+    //gt::start("Quantities GPU - energy");
     // Error energy
 
+    //gt::start("Quantities GPU - energy - coeff");
     coeff_one(d_lr_sol.V,d_we_v2,d_int_v);
     coeff_one(d_lr_sol.V,d_we_w2,d_int_v2);
     coeff_one(d_lr_sol.V,d_we_u2,d_int_v3);
 
+    //cudaDeviceSynchronize();
+    //gt::stop("Quantities GPU - energy - coeff");
     ptw_sum_3mat<<<(d_int_v.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_int_v.num_elements(),d_int_v.begin(),d_int_v2.begin(),d_int_v3.begin());
 
     matvec(d_lr_sol.S,d_int_v,d_rho);
@@ -5633,6 +5519,10 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     err_energy_CPU = abs(energy0-(d_energy_CPU+d_el_energy_CPU));
 
     err_energyGPUf << err_energy_CPU << endl;
+    //cudaDeviceSynchronize();
+    //gt::stop("Quantities GPU - energy");
+    //cudaDeviceSynchronize();
+    //gt::stop("Quantities GPU");
 
     #endif
 
@@ -5672,8 +5562,8 @@ int main(){
   #endif
 
 
-  array<Index,3> N_xx = {128,128,128}; // Sizes in space
-  array<Index,3> N_vv = {128,128,128}; // Sizes in velocity
+  array<Index,3> N_xx = {32,32,32}; // Sizes in space
+  array<Index,3> N_vv = {32,32,32}; // Sizes in velocity
 
   int r = 10; // rank desired
 
@@ -5689,6 +5579,7 @@ int main(){
 
   array<double,6> lim_xx = {0.0,4.0*M_PI,0.0,4.0*M_PI,0.0,4.0*M_PI}; // Limits for box [ax,bx] x [ay,by] x [az,bz] {ax,bx,ay,by,az,bz}
   array<double,6> lim_vv = {-6.0,6.0,-6.0,6.0,-6.0,6.0}; // Limits for box [av,bv] x [aw,bw] x [au,bu] {av,bv,aw,bw,au,bu}
+
 
   double alpha = 0.01;
   double kappa1 = 0.5;
@@ -5786,11 +5677,8 @@ int main(){
   // Computation of reference solution
   lr2<double> lr_sol_fin(r,{dxx_mult,dvv_mult});
 
-  //cout << "First order" << endl;
-  //lr_sol_fin = integration_first_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,alpha,kappa1,kappa2,kappa3,lr_sol0, plans_e, plans_xx, plans_vv);
-
-  cout << "Second order" << endl;
-  lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,alpha,kappa1,kappa2,kappa3,lr_sol0, plans_e, plans_xx, plans_vv);
+  lr_sol_fin = integration_first_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,alpha,kappa1,kappa2,kappa3,lr_sol0, plans_e, plans_xx, plans_vv);
+  //lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,alpha,kappa1,kappa2,kappa3,lr_sol0, plans_e, plans_xx, plans_vv);
 
   cout << gt::sorted_output() << endl;
 
@@ -5841,6 +5729,7 @@ int main(){
       }
     }
     error_order1_3d << error_o1 << endl;
+
 
     lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nspan[count],nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,alpha,kappa1,kappa2,kappa3,lr_sol0, plans_e, plans_xx, plans_vv);
 
