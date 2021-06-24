@@ -200,9 +200,9 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
   ofstream err_massf;
   ofstream err_energyf;
 
-  el_energyf.open("el_energy_order1_1d.txt");
-  err_massf.open("err_mass_order1_1d.txt");
-  err_energyf.open("err_energy_order1_1d.txt");
+  el_energyf.open("../../plots/el_energy_order1_1d.txt");
+  err_massf.open("../../plots/err_mass_order1_1d.txt");
+  err_energyf.open("../../plots/err_energy_order1_1d.txt");
 
   el_energyf.precision(16);
   err_massf.precision(16);
@@ -306,9 +306,9 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
   ofstream err_massGPUf;
   ofstream err_energyGPUf;
 
-  el_energyGPUf.open("el_energy_gpu_order1_1d.txt");
-  err_massGPUf.open("err_mass_gpu_order1_1d.txt");
-  err_energyGPUf.open("err_energy_gpu_order1_1d.txt");
+  el_energyGPUf.open("../../plots/el_energy_gpu_order1_1d.txt");
+  err_massGPUf.open("../../plots/err_mass_gpu_order1_1d.txt");
+  err_energyGPUf.open("../../plots/err_energy_gpu_order1_1d.txt");
 
   el_energyGPUf.precision(16);
   err_massGPUf.precision(16);
@@ -328,10 +328,12 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
   #endif
 
+
+//  nsteps = 1;
   for(Index i = 0; i < nsteps; i++){
 
 
-    cout << "Time step " << i << " on " << nsteps << endl;
+    cout << "Time step " << i + 1 << " on " << nsteps << endl;
 
     // CPU
 
@@ -443,7 +445,6 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
       fftw_execute_dft_c2r(plans_x[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
 
     }
-
     gram_schmidt(lr_sol.X, lr_sol.S, ip_x);
 
     /* S step */
@@ -1146,9 +1147,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
   ofstream err_massf;
   ofstream err_energyf;
 
-  el_energyf.open("el_energy_order2_1d.txt");
-  err_massf.open("err_mass_order2_1d.txt");
-  err_energyf.open("err_energy_order2_1d.txt");
+  el_energyf.open("../../plots/el_energy_order2_1d.txt");
+  err_massf.open("../../plots/err_mass_order2_1d.txt");
+  err_energyf.open("../../plots/err_energy_order2_1d.txt");
 
   el_energyf.precision(16);
   err_massf.precision(16);
@@ -1261,9 +1262,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
   ofstream err_massGPUf;
   ofstream err_energyGPUf;
 
-  el_energyGPUf.open("el_energy_gpu_order2_1d.txt");
-  err_massGPUf.open("err_mass_gpu_order2_1d.txt");
-  err_energyGPUf.open("err_energy_gpu_order2_1d.txt");
+  el_energyGPUf.open("../../plots/el_energy_gpu_order2_1d.txt");
+  err_massGPUf.open("../../plots/err_mass_gpu_order2_1d.txt");
+  err_energyGPUf.open("../../plots/err_energy_gpu_order2_1d.txt");
 
   el_energyGPUf.precision(16);
   err_massGPUf.precision(16);
@@ -1288,7 +1289,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
   for(Index i = 0; i < nsteps; i++){
 
-    cout << "Time step " << i << " on " << nsteps << endl;
+    cout << "Time step " << i + 1 << " on " << nsteps << endl;
 
     /* Lie splitting to obtain the electric field */
 
@@ -2578,12 +2579,12 @@ int main(){
   Index Nx = 64; // NEEDS TO BE EVEN FOR FOURIER
   Index Nv = 256; // NEEDS TO BE EVEN FOR FOURIER
 
-  //int r = 15; // rank desired
-  int r = 5;
+  int r = 15; // rank desired
+  //int r = 5;
 
-  double tstar = 20.0; // final time
+  double tstar = 100.0; // final time
 
-  Index nsteps_ref = 3200;
+  Index nsteps_ref = 4000;
 
   vector<Index> nspan = {1000,1200,1400,1600,1800,2000};
 
@@ -2651,12 +2652,12 @@ int main(){
   lr2<double> lr_sol_fin(r,{Nx,Nv});
 
   cout << "First order" << endl;
-  lr_sol_fin = integration_first_order(Nx,Nv,r,tstar,nsteps_ref,nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,ee_flag,lr_sol0, plans_e, plans_x, plans_v);
+  //lr_sol_fin = integration_first_order(Nx,Nv,r,tstar,nsteps_ref,nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,ee_flag,lr_sol0, plans_e, plans_x, plans_v);
 
-  //cout << "Second order" << endl;
-  //lr_sol_fin = integration_second_order(Nx,Nv,r,tstar,nsteps_ref,nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,lr_sol0, plans_e, plans_x, plans_v);
+  cout << "Second order" << endl;
+  lr_sol_fin = integration_second_order(Nx,Nv,r,tstar,nsteps_ref,nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,lr_sol0, plans_e, plans_x, plans_v);
 
-  cout << gt::sorted_output() << endl;
+  //cout << gt::sorted_output() << endl;
   exit(1);
 
   multi_array<double,2> refsol({Nx,Nv});
@@ -2667,11 +2668,11 @@ int main(){
   matmul_transb(tmpsol,lr_sol_fin.V,refsol);
 
   ofstream error_order1_1d;
-  error_order1_1d.open("error_order1_1d.txt");
+  error_order1_1d.open("../../plots/error_order1_1d.txt");
   error_order1_1d.precision(16);
 
   ofstream error_order2_1d;
-  error_order2_1d.open("error_order2_1d.txt");
+  error_order2_1d.open("../../plots/error_order2_1d.txt");
   error_order2_1d.precision(16);
 
   error_order1_1d << nspan.size() << endl;

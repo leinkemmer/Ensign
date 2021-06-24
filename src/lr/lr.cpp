@@ -46,10 +46,16 @@ void gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, std::funct
     }
     R(j,j) = sqrt(inner_product(Q.extract({j}), Q.extract({j})));
 
-    if(std::abs(R(j,j)) < 1e-20){
-    //  cout << "Warning: linearly dependent columns in Gram-Schmidt" << endl;
-    } else{
+    if(std::abs(R(j,j)) > 1e-16){
       cblas_dscal(dims[0],1.0/R(j,j),Q.extract({j}),1);
+    } else{
+      
+            //for(Index ss = 0; ss < dims[0]; ss++){
+            //  Q(ss,j) = cos(2.0*M_PI*j*ss/double(dims[0]));
+            //}
+            //j--;
+          //  cout << "Warning: linearly dependent columns in Gram-Schmidt" << endl;
+
     }
   }
 };

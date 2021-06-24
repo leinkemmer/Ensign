@@ -1941,7 +1941,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
   for(Index i = 0; i < nsteps; i++){
 
-    cout << "Time step " << i << " on " << nsteps << endl;
+    cout << "Time step " << i + 1 << " on " << nsteps << endl;
 
     /* Lie splitting to obtain the electric field */
 
