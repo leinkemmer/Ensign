@@ -4046,14 +4046,14 @@ int main(){
   }
   #endif
 
-  array<Index,2> N_xx = {32,32}; // Sizes in space
-  array<Index,2> N_vv = {64,64}; // Sizes in velocity
+  array<Index,2> N_xx = {64,64}; // Sizes in space
+  array<Index,2> N_vv = {256,256}; // Sizes in velocity
 
   int r = 5; // rank desired
 
   double tstar = 20.0; // final time
 
-  Index nsteps_ref = 3200;
+  Index nsteps_ref = 10000;
 
   vector<Index> nspan = {1000,1200,1400,1600,1800,2000};
 
@@ -4131,14 +4131,13 @@ int main(){
   // Computation of reference solution
   lr2<double> lr_sol_fin(r,{dxx_mult,dvv_mult});
 
-  cout << "First order" << endl;
-  lr_sol_fin = integration_first_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,alpha,kappa1,kappa2,lr_sol0, plans_e, plans_xx, plans_vv);
+  //cout << "First order" << endl;
+  //lr_sol_fin = integration_first_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,alpha,kappa1,kappa2,lr_sol0, plans_e, plans_xx, plans_vv);
 
   //cout << "Second order" << endl;
-  //lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,alpha,kappa1,kappa2,lr_sol0, plans_e, plans_xx, plans_vv);
+  lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,alpha,kappa1,kappa2,lr_sol0, plans_e, plans_xx, plans_vv);
 
-  cout << gt::sorted_output() << endl;
-  exit(1);
+  //cout << gt::sorted_output() << endl;
 
   multi_array<double,2> refsol({dxx_mult,dvv_mult});
   multi_array<double,2> sol({dxx_mult,dvv_mult});

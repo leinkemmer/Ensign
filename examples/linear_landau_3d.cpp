@@ -5672,14 +5672,14 @@ int main(){
   #endif
 
 
-  array<Index,3> N_xx = {128,128,128}; // Sizes in space
-  array<Index,3> N_vv = {128,128,128}; // Sizes in velocity
+  array<Index,3> N_xx = {64,64,64}; // Sizes in space
+  array<Index,3> N_vv = {256,256,256}; // Sizes in velocity
 
   int r = 10; // rank desired
 
-  double tstar = 20.0; // final time //10.0
+  double tstar = 10.0; // final time //10.0
 
-  Index nsteps_ref = 3200;
+  Index nsteps_ref = 10000;
 
   vector<Index> nspan = {1000,1200,1400,1600,1800,2000};
 
