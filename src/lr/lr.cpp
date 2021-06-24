@@ -49,7 +49,7 @@ void gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, std::funct
     if(std::abs(R(j,j)) > 1e-16){
       cblas_dscal(dims[0],1.0/R(j,j),Q.extract({j}),1);
     } else{
-      
+
             //for(Index ss = 0; ss < dims[0]; ss++){
             //  Q(ss,j) = cos(2.0*M_PI*j*ss/double(dims[0]));
             //}
@@ -60,6 +60,43 @@ void gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, std::funct
   }
 };
 
+/*
+template<>
+void gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product) {
+  array<Index,2> dims = Q.shape();
+
+  std::default_random_engine generator(time(0));
+  std::normal_distribution<double> distribution(0.0,1.0);
+
+  for(Index j=0;j<dims[1];j++) {
+    for(Index k=0;k<j;k++) {
+      R(k,j) = inner_product(Q.extract({j}), Q.extract({k}));
+      cblas_daxpy(dims[0], -R(k,j), Q.extract({k}), 1, Q.extract({j}),1);
+      R(j,k) = 0.0;
+    }
+    R(j,j) = sqrt(inner_product(Q.extract({j}), Q.extract({j})));
+
+    if(std::abs(R(j,j)) > 1e-16){
+      cblas_dscal(dims[0],1.0/R(j,j),Q.extract({j}),1);
+    } else{
+
+      for(Index l = 0; l < dims[0]; l++){
+        Q(l,j) = distribution(generator);
+      }
+
+      for(Index k=0;k<j;k++) {
+        double val = inner_product(Q.extract({j}), Q.extract({k}));
+        cblas_daxpy(dims[0], -val, Q.extract({k}), 1, Q.extract({j}),1);
+        //R(j,k) = 0.0;
+      }
+
+      double nrm = sqrt(inner_product(Q.extract({j}), Q.extract({j})));
+      cblas_dscal(dims[0],1.0/nrm,Q.extract({j}),1);
+
+    }
+  }
+};
+*/
 #ifdef __CUDACC__
 void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w) { //with constant weight for inner product
   Index n = Q.shape()[0];
