@@ -310,9 +310,9 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
   ofstream err_massf;
   ofstream err_energyf;
 
-  el_energyf.open("../../el_energy_order1_2d.txt");
-  err_massf.open("../../err_mass_order1_2d.txt");
-  err_energyf.open("../../err_energy_order1_2d.txt");
+  el_energyf.open("../../plots/el_energy_order1_2d.txt");
+  err_massf.open("../../plots/err_mass_order1_2d.txt");
+  err_energyf.open("../../plots/err_energy_order1_2d.txt");
 
   el_energyf.precision(16);
   err_massf.precision(16);
@@ -511,9 +511,9 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
   ofstream err_massGPUf;
   ofstream err_energyGPUf;
 
-  el_energyGPUf.open("../../el_energy_gpu_order1_2d.txt");
-  err_massGPUf.open("../../err_mass_gpu_order1_2d.txt");
-  err_energyGPUf.open("../../err_energy_gpu_order1_2d.txt");
+  el_energyGPUf.open("../../plots/el_energy_gpu_order1_2d.txt");
+  err_massGPUf.open("../../plots/err_mass_gpu_order1_2d.txt");
+  err_energyGPUf.open("../../plots/err_energy_gpu_order1_2d.txt");
 
   el_energyGPUf.precision(16);
   err_massGPUf.precision(16);
@@ -1719,9 +1719,9 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
   ofstream err_massf;
   ofstream err_energyf;
 
-  el_energyf.open("../../el_energy_order2_2d.txt");
-  err_massf.open("../../err_mass_order2_2d.txt");
-  err_energyf.open("../../err_energy_order2_2d.txt");
+  el_energyf.open("../../plots/el_energy_order2_2d.txt");
+  err_massf.open("../../plots/err_mass_order2_2d.txt");
+  err_energyf.open("../../plots/err_energy_order2_2d.txt");
 
   el_energyf.precision(16);
   err_massf.precision(16);
@@ -1923,9 +1923,9 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
   ofstream err_massGPUf;
   ofstream err_energyGPUf;
 
-  el_energyGPUf.open("../../el_energy_gpu_order2_2d.txt");
-  err_massGPUf.open("../../err_mass_gpu_order2_2d.txt");
-  err_energyGPUf.open("../../err_energy_gpu_order2_2d.txt");
+  el_energyGPUf.open("../../plots/el_energy_gpu_order2_2d.txt");
+  err_massGPUf.open("../../plots/err_mass_gpu_order2_2d.txt");
+  err_energyGPUf.open("../../plots/err_energy_gpu_order2_2d.txt");
 
   el_energyGPUf.precision(16);
   err_massGPUf.precision(16);
@@ -4147,11 +4147,11 @@ int main(){
   matmul_transb(tmpsol,lr_sol_fin.V,refsol);
 
   ofstream error_order1_2d;
-  error_order1_2d.open("../../error_order1_2d.txt");
+  error_order1_2d.open("../../plots/error_order1_2d.txt");
   error_order1_2d.precision(16);
 
   ofstream error_order2_2d;
-  error_order2_2d.open("../../error_order2_2d.txt");
+  error_order2_2d.open("../../plots/error_order2_2d.txt");
   error_order2_2d.precision(16);
 
 

@@ -672,8 +672,6 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
   #endif
 
-  nsteps = 10;
-
   for(Index i = 0; i < nsteps; i++){
 
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
@@ -2661,7 +2659,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
   #endif
 
-  nsteps = 10;
   for(Index i = 0; i < nsteps; i++){
 
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
@@ -5789,13 +5786,8 @@ int main(){
   //cout << "First order" << endl;
   //lr_sol_fin = integration_first_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,alpha,kappa1,kappa2,kappa3,lr_sol0, plans_e, plans_xx, plans_vv);
 
-  cout << "Second order" << endl;
+  //cout << "Second order" << endl;
   lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,alpha,kappa1,kappa2,kappa3,lr_sol0, plans_e, plans_xx, plans_vv);
-
-  cout << gt::sorted_output() << endl;
-
-  exit(1);
-
 
 
   multi_array<double,2> refsol({dxx_mult,dvv_mult});
