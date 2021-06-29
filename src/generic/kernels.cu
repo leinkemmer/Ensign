@@ -198,9 +198,7 @@ __global__ void ptw_div_gs(int n, double* A, double* alpha){
   int idx = threadIdx.x + blockDim.x * blockIdx.x;
 
   while(idx < n){
-    if(abs(*alpha) > 1e-16){
-      A[idx] /= (*alpha);
-    }
+    A[idx] /= (*alpha);
     idx += blockDim.x * gridDim.x;
   }
 }

@@ -478,6 +478,12 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
   multi_array<cuDoubleComplex,2> d_tmpXhat({dxxh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_tmpVhat({dvvh_mult,r},stloc::device);
 
+  // For random values generation
+  curandGenerator_t gen;
+
+  curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
+  curandSetPseudoRandomGeneratorSeed(gen,time(0));
+
   // Quantities of interest
 
   double* d_el_energy_x;
@@ -1149,7 +1155,7 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
       }
     }
 
-    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, h_xx[0]*h_xx[1]);
+    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, h_xx[0]*h_xx[1], gen);
 
     ptw_mult_scal<<<(d_efx.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efx.num_elements(), d_efx.begin(), h_xx[0] * h_xx[1], d_we_x.begin());
     ptw_mult_scal<<<(d_efy.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efy.num_elements(), d_efy.begin(), h_xx[0] * h_xx[1], d_we_y.begin());
@@ -1317,7 +1323,7 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
       }
     }
 
-    gram_schmidt_gpu(d_lr_sol.V, d_lr_sol.S, h_vv[0]*h_vv[1]);
+    gram_schmidt_gpu(d_lr_sol.V, d_lr_sol.S, h_vv[0]*h_vv[1], gen);
 
     transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
 
@@ -1402,6 +1408,8 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
   destroy_plans(plans_d_e);
   destroy_plans(d_plans_xx);
   destroy_plans(d_plans_vv);
+
+  curandDestroyGenerator(gen);
 
   el_energyGPUf.close();
   err_massGPUf.close();
@@ -1889,6 +1897,12 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
   multi_array<cuDoubleComplex,2> d_tmpXhat({dxxh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_tmpVhat({dvvh_mult,r},stloc::device);
+
+  // For random values generation
+  curandGenerator_t gen;
+
+  curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
+  curandSetPseudoRandomGeneratorSeed(gen,time(0));
 
   // Quantities of interest
 
@@ -3304,7 +3318,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
       }
     }
 
-    gram_schmidt_gpu(d_lr_sol_e.X, d_lr_sol_e.S, h_xx[0]*h_xx[1]);
+    gram_schmidt_gpu(d_lr_sol_e.X, d_lr_sol_e.S, h_xx[0]*h_xx[1], gen);
 
     // Full step S until tau/2
 
@@ -3590,7 +3604,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
     }
 
-    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, h_xx[0]*h_xx[1]);
+    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, h_xx[0]*h_xx[1], gen);
 
 
     // Half step S (until tau/2)
@@ -3769,7 +3783,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
     }
 
-    gram_schmidt_gpu(d_lr_sol.V, d_lr_sol.S, h_vv[0]*h_vv[1]);
+    gram_schmidt_gpu(d_lr_sol.V, d_lr_sol.S, h_vv[0]*h_vv[1], gen);
     transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
 
     // Half step S (until tau/2)
@@ -3951,7 +3965,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
     }
 
-    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, h_xx[0]*h_xx[1]);
+    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, h_xx[0]*h_xx[1], gen);
 
     cudaDeviceSynchronize();
     gt::stop("Restarted integration GPU");
@@ -4022,6 +4036,8 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
   destroy_plans(plans_d_e);
   destroy_plans(d_plans_xx);
   destroy_plans(d_plans_vv);
+
+  curandDestroyGenerator(gen);
 
   el_energyGPUf.close();
   err_massGPUf.close();

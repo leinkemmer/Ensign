@@ -64,7 +64,7 @@ void gram_schmidt(multi_array<T,2>& Q, multi_array<T,2>& R,
 //void gram_schmidt_gpu(Index n, int r, double* Q, double* R, double w);
 #ifdef __CUDACC__
   //void gram_schmidt_gpu(Index n, int r, double* Q, double* R, double w); //with constant weight for inner product
-  void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w);
+  void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, curandGenerator_t gen);
   void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double* w);
 #endif
   /*

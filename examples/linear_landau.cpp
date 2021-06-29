@@ -216,6 +216,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
   cublasCreate (&handle);
   cublasCreate (&handle_dot);
   cublasSetPointerMode(handle_dot, CUBLAS_POINTER_MODE_DEVICE);
+
   // To be substituted if we initialize in GPU
 
   lr2<double> d_lr_sol(r,{Nx,Nv}, stloc::device);
@@ -325,6 +326,12 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
   multi_array<double,2> d_tmpS2({r,r},stloc::device);
   multi_array<double,2> d_tmpS3({r,r},stloc::device);
   multi_array<double,2> d_tmpS4({r,r},stloc::device);
+
+  // For random values generation
+  curandGenerator_t gen;
+
+  curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
+  curandSetPseudoRandomGeneratorSeed(gen,time(0));
 
   #endif
 
@@ -744,7 +751,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
     }
 
 
-    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, hx);
+    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, hx, gen);
 
 
     // S step
@@ -866,7 +873,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     }
 
-    gram_schmidt_gpu(d_lr_sol.V, d_lr_sol.S, hv);
+    gram_schmidt_gpu(d_lr_sol.V, d_lr_sol.S, hv, gen);
 
     transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
 
@@ -940,6 +947,8 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
   destroy_plans(plans_d_e);
   destroy_plans(plans_d_x);
   destroy_plans(plans_d_v);
+
+  curandDestroyGenerator(gen);
 
   el_energyGPUf.close();
   err_massGPUf.close();
@@ -1284,6 +1293,13 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
   // Additional stuff for second order
   lr2<double> d_lr_sol_e(r,{Nx,Nv}, stloc::device);
+
+  // For random values generation
+  curandGenerator_t gen;
+
+  curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
+  curandSetPseudoRandomGeneratorSeed(gen,time(0));
+
 
   #endif
 
@@ -2100,7 +2116,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     }
 
-    gram_schmidt_gpu(d_lr_sol_e.X, d_lr_sol_e.S, hx);
+    gram_schmidt_gpu(d_lr_sol_e.X, d_lr_sol_e.S, hx, gen);
 
     /* Half step S */
 
@@ -2276,7 +2292,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     }
 
-    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, hx);
+    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, hx, gen);
 
     /* Half step S */
 
@@ -2382,7 +2398,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     }
 
-    gram_schmidt_gpu(d_lr_sol.V, d_lr_sol.S, hv);
+    gram_schmidt_gpu(d_lr_sol.V, d_lr_sol.S, hv, gen);
     transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
 
     /* Half step S */
@@ -2487,7 +2503,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     }
 
-    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, hx);
+    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, hx, gen);
 
     cudaDeviceSynchronize();
     gt::stop("Restarted integration GPU");
@@ -2552,6 +2568,8 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
   destroy_plans(plans_d_x);
   destroy_plans(plans_d_v);
 
+  curandDestroyGenerator(gen);
+
   el_energyGPUf.close();
   err_massGPUf.close();
   err_energyGPUf.close();
@@ -2561,6 +2579,13 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
   return lr_sol;
 }
+
+#define CUDA_CALL(x) do { if((x)!=cudaSuccess) { \
+    printf("Error at %s:%d\n",__FILE__,__LINE__);\
+    return EXIT_FAILURE;}} while(0)
+#define CURAND_CALL(x) do { if((x)!=CURAND_STATUS_SUCCESS) { \
+    printf("Error at %s:%d\n",__FILE__,__LINE__);\
+    return EXIT_FAILURE;}} while(0)
 
 
 int main(){
@@ -2579,9 +2604,9 @@ int main(){
   Index Nx = 64; // NEEDS TO BE EVEN FOR FOURIER
   Index Nv = 256; // NEEDS TO BE EVEN FOR FOURIER
 
-  int r = 5; // rank desired
+  int r = 10; // rank desired
 
-  double tstar = 20.0; // final time
+  double tstar = 100.0; // final time
 
   Index nsteps_ref = 10000;
 
@@ -2650,11 +2675,13 @@ int main(){
   // Computation of reference solution
   lr2<double> lr_sol_fin(r,{Nx,Nv});
 
-  //cout << "First order" << endl;
-  //lr_sol_fin = integration_first_order(Nx,Nv,r,tstar,nsteps_ref,nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,ee_flag,lr_sol0, plans_e, plans_x, plans_v);
+  cout << "First order" << endl;
+  lr_sol_fin = integration_first_order(Nx,Nv,r,tstar,nsteps_ref,nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,ee_flag,lr_sol0, plans_e, plans_x, plans_v);
 
   //cout << "Second order" << endl;
-  lr_sol_fin = integration_second_order(Nx,Nv,r,tstar,nsteps_ref,nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,lr_sol0, plans_e, plans_x, plans_v);
+  //lr_sol_fin = integration_second_order(Nx,Nv,r,tstar,nsteps_ref,nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,lr_sol0, plans_e, plans_x, plans_v);
+
+  exit(1);
 
   //cout << gt::sorted_output() << endl;
 

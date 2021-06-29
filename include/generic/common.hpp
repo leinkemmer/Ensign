@@ -22,6 +22,7 @@
 #include <cuda_runtime.h>
 #include "cublas_v2.h"
 #include <cufft.h>
+#include <curand.h>
 #endif
 
 #ifdef __OPENMP__
