@@ -11,7 +11,7 @@ cublasHandle_t  handle;
 cublasHandle_t handle_dot;
 #endif
 
-lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int r,double tstar, Index nsteps, int nsteps_split, int nsteps_ee, int nsteps_rk4, array<double,6> lim_xx, array<double,6> lim_vv, double alpha, double kappa1, double kappa2, double kappa3, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_xx, array<fftw_plan,2> plans_vv){
+lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int r,double tstar, Index nsteps, int nsteps_split, int nsteps_ee, int nsteps_rk4, array<double,6> lim_xx, array<double,6> lim_vv, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_xx, array<fftw_plan,2> plans_vv){
   double tau = tstar/nsteps;
 
   double tau_split = tau/nsteps_split;
@@ -2038,7 +2038,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
 }
 
-lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, int r,double tstar, Index nsteps, int nsteps_split, int nsteps_ee, int nsteps_rk4, array<double,6> lim_xx, array<double,6> lim_vv, double alpha, double kappa1, double kappa2, double kappa3, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_xx, array<fftw_plan,2> plans_vv){
+lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, int r,double tstar, Index nsteps, int nsteps_split, int nsteps_ee, int nsteps_rk4, array<double,6> lim_xx, array<double,6> lim_vv, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_xx, array<fftw_plan,2> plans_vv){
 
   double tau = tstar/nsteps;
   double tau_h = tau/2.0;
@@ -5757,13 +5757,31 @@ int main(){
   int nsteps_ee = 1;
   int nsteps_rk4 = 1;
 
+/*
+  // Linear Landau
   array<double,6> lim_xx = {0.0,4.0*M_PI,0.0,4.0*M_PI,0.0,4.0*M_PI}; // Limits for box [ax,bx] x [ay,by] x [az,bz] {ax,bx,ay,by,az,bz}
   array<double,6> lim_vv = {-6.0,6.0,-6.0,6.0,-6.0,6.0}; // Limits for box [av,bv] x [aw,bw] x [au,bu] {av,bv,aw,bw,au,bu}
-
-  double alpha = 0.01;
+  double alpha1 = 0.01;
+  double alpha2 = 0.01;
+  double alpha3 = 0.01;
   double kappa1 = 0.5;
   double kappa2 = 0.5;
   double kappa3 = 0.5;
+*/
+
+  // Two stream instability
+  array<double,6> lim_xx = {0.0,10.0*M_PI,0.0,10.0*M_PI,0.0,10.0*M_PI};
+  array<double,6> lim_vv = {-9.0,9.0,-9.0,9.0,-9.0,9.0};
+
+  double alpha1 = 0.001;
+  double alpha2 = 0.001;
+  double alpha3 = 0.001;
+  double kappa1 = 1.0/5.0;
+  double kappa2 = 1.0/5.0;
+  double kappa3 = 1.0/5.0;
+  double v0 = 2.4;
+  double w0 = 2.4;
+  double u0 = 2.4;
 
   // Initial datum generation
 
@@ -5797,7 +5815,7 @@ int main(){
         double y = lim_xx[2] + j*h_xx[1];
         double z = lim_xx[4] + k*h_xx[2];
 
-        xx(i+j*N_xx[0] + k*(N_xx[0]*N_xx[1])) = 1.0 + alpha*cos(kappa1*x) + alpha*cos(kappa2*y) + alpha*cos(kappa3*z);
+        xx(i+j*N_xx[0] + k*(N_xx[0]*N_xx[1])) = 1.0 + alpha1*cos(kappa1*x) + alpha2*cos(kappa2*y) + alpha3*cos(kappa3*z);
       }
     }
   }
@@ -5816,7 +5834,8 @@ int main(){
         double w = lim_vv[2] + j*h_vv[1];
         double u = lim_vv[4] + k*h_vv[2];
 
-        vv(idx) = (1.0/(sqrt(pow(2*M_PI,3)))) * exp(-(pow(v,2)+pow(w,2)+pow(u,2))/2.0);
+        //vv(idx) = (1.0/(sqrt(pow(2*M_PI,3)))) * exp(-(pow(v,2)+pow(w,2)+pow(u,2))/2.0);
+        vv(idx) = (1.0/(sqrt(pow(8*M_PI,3)))) * (exp(-(pow(v-v0,2))/2.0)+exp(-(pow(v+v0,2))/2.0))*(exp(-(pow(w-w0,2))/2.0)+exp(-(pow(w+w0,2))/2.0))*(exp(-(pow(u-u0,2))/2.0)+exp(-(pow(u+u0,2))/2.0));
       }
     }
   }
@@ -5857,10 +5876,10 @@ int main(){
   lr2<double> lr_sol_fin(r,{dxx_mult,dvv_mult});
 
   //cout << "First order" << endl;
-  //lr_sol_fin = integration_first_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,alpha,kappa1,kappa2,kappa3,lr_sol0, plans_e, plans_xx, plans_vv);
+  //lr_sol_fin = integration_first_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
 
   //cout << "Second order" << endl;
-  lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,alpha,kappa1,kappa2,kappa3,lr_sol0, plans_e, plans_xx, plans_vv);
+  lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
   
   multi_array<double,2> refsol({dxx_mult,dvv_mult});
   multi_array<double,2> sol({dxx_mult,dvv_mult});
@@ -5889,7 +5908,7 @@ int main(){
 
   for(int count = 0; count < nspan.size(); count++){
 
-    lr_sol_fin = integration_first_order(N_xx,N_vv,r,tstar,nspan[count],nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,alpha,kappa1,kappa2,kappa3,lr_sol0, plans_e, plans_xx, plans_vv);
+    lr_sol_fin = integration_first_order(N_xx,N_vv,r,tstar,nspan[count],nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
 
     matmul(lr_sol_fin.X,lr_sol_fin.S,tmpsol);
     matmul_transb(tmpsol,lr_sol_fin.V,sol);
@@ -5906,7 +5925,7 @@ int main(){
     }
     error_order1_3d << error_o1 << endl;
 
-    lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nspan[count],nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,alpha,kappa1,kappa2,kappa3,lr_sol0, plans_e, plans_xx, plans_vv);
+    lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nspan[count],nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
 
     matmul(lr_sol_fin.X,lr_sol_fin.S,tmpsol);
     matmul_transb(tmpsol,lr_sol_fin.V,sol);
