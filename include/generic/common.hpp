@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <assert.h>
 #include <complex>
+#include <string>
+
 #ifdef __MKL__
   #include <mkl.h>
 #else
@@ -38,6 +40,8 @@ using std::vector;
 using std::fill;
 using std::abs;
 using std::complex;
+using std::string;
+using std::to_string;
 
 typedef ptrdiff_t Index;
 enum class stloc { host, device };
