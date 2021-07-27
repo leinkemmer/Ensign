@@ -79,7 +79,10 @@ void gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, std::funct
     if(std::abs(ip) > 1e-16){
       cblas_dscal(dims[0],1.0/R(j,j),Q.extract({j}),1);
     } else{
-
+      
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
       for(Index l = 0; l < dims[0]; l++){
         Q(l,j) = distribution(generator);
       }
