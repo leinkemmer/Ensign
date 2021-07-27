@@ -46,6 +46,11 @@ if(${MKL_ENABLED})
    include_directories(${MKL_INCLUDEDIR})
 endif()
 
+option("CPU" ON)
+if(${CPU})
+  add_definitions("-D__CPU__")
+endif()
+
 include_directories(include)
 
 add_subdirectory(extern/Catch2)

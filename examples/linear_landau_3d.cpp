@@ -403,6 +403,8 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   }
   gt::stop("Computation initial QOI CPU");
 
+  #ifdef __CPU__
+
   ofstream el_energyf;
   ofstream err_massf;
   ofstream err_energyf;
@@ -429,6 +431,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   el_energyf << tstar << endl;
   el_energyf << tau << endl;
 
+  #endif
 
   //// FOR GPU ///
 
@@ -705,6 +708,8 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
 
     // CPU
+
+    #ifdef __CPU__
 
     gt::start("Main loop CPU");
 
@@ -1469,6 +1474,8 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
     gt::stop("QOI CPU");
 
+    #endif
+
     // GPU
 
     #ifdef __CUDACC__
@@ -1996,18 +2003,23 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
     #endif
 
-
+    #ifdef __CPU__
     cout << "Electric energy: " << el_energy << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Electric energy GPU: " << d_el_energy_CPU << endl;
     #endif
 
+    #ifdef __CPU__
     cout << "Error in mass: " << err_mass << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Error in mass GPU: " << err_mass_CPU << endl;
     #endif
 
+    #ifdef __CPU__
     cout << "Error in energy: " << err_energy << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Error in energy GPU: " << err_energy_CPU << endl;
     #endif
@@ -2015,9 +2027,11 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
   }
 
+  #ifdef __CPU__
   el_energyf.close();
   err_massf.close();
   err_energyf.close();
+  #endif
 
   #ifdef __CUDACC__
   cublasDestroy(handle);
@@ -2034,7 +2048,14 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   err_energyGPUf.close();
   #endif
 
+  #ifdef __CPU__
   return lr_sol;
+  #else
+  lr_sol.X = d_lr_sol.X;
+  lr_sol.S = d_lr_sol.S;
+  lr_sol.V = d_lr_sol.V;
+  return lr_sol;
+  #endif
 
 }
 
@@ -2430,6 +2451,8 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     energy0 += 0.5*(int_x(ii)*rho(ii));
   }
 
+  #ifdef __CPU__
+
   ofstream el_energyf;
   ofstream err_massf;
   ofstream err_energyf;
@@ -2455,6 +2478,8 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
   el_energyf << tstar << endl;
   el_energyf << tau << endl;
+
+  #endif
 
   // Additional stuff for second order
   lr2<double> lr_sol_e(r,{dxx_mult,dvv_mult});
@@ -2722,6 +2747,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
 
     // CPU
+    #ifdef __CPU__
 
     /* Lie splitting to obtain the electric field */
 
@@ -4586,6 +4612,8 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
     err_energyf << err_energy << endl;
 
+    #endif
+
     // GPU
 
     #ifdef __CUDACC__
@@ -5691,17 +5719,23 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
     #endif
 
+    #ifdef __CPU__
     cout << "Electric energy: " << el_energy << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Electric energy GPU: " << d_el_energy_CPU << endl;
     #endif
 
+    #ifdef __CPU__
     cout << "Error in mass: " << err_mass << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Error in mass GPU: " << err_mass_CPU << endl;
     #endif
 
+    #ifdef __CPU__
     cout << "Error in energy: " << err_energy << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Error in energy GPU: " << err_energy_CPU << endl;
     #endif
@@ -5723,8 +5757,14 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   err_energyGPUf.close();
   #endif
 
+  #ifdef __CPU__
   return lr_sol;
-
+  #else
+  lr_sol.X = d_lr_sol.X;
+  lr_sol.S = d_lr_sol.S;
+  lr_sol.V = d_lr_sol.V;
+  return lr_sol;
+  #endif
 }
 
 
@@ -5742,14 +5782,14 @@ int main(){
   #endif
 
 
-  array<Index,3> N_xx = {32,32,32}; // Sizes in space
-  array<Index,3> N_vv = {64,64,64}; // Sizes in velocity
+  array<Index,3> N_xx = {16,16,16}; // Sizes in space
+  array<Index,3> N_vv = {32,32,32}; // Sizes in velocity
 
   int r = 10; // rank desired
 
   double tstar = 10.0; // final time //10.0
 
-  Index nsteps_ref = 10000;
+  Index nsteps_ref = 5000;
 
   vector<Index> nspan = {1000,1200,1400,1600,1800,2000};
 
@@ -5757,7 +5797,7 @@ int main(){
   int nsteps_ee = 1;
   int nsteps_rk4 = 1;
 
-/*
+
   // Linear Landau
   array<double,6> lim_xx = {0.0,4.0*M_PI,0.0,4.0*M_PI,0.0,4.0*M_PI}; // Limits for box [ax,bx] x [ay,by] x [az,bz] {ax,bx,ay,by,az,bz}
   array<double,6> lim_vv = {-6.0,6.0,-6.0,6.0,-6.0,6.0}; // Limits for box [av,bv] x [aw,bw] x [au,bu] {av,bv,aw,bw,au,bu}
@@ -5767,8 +5807,8 @@ int main(){
   double kappa1 = 0.5;
   double kappa2 = 0.5;
   double kappa3 = 0.5;
-*/
 
+/*
   // Two stream instability
   array<double,6> lim_xx = {0.0,10.0*M_PI,0.0,10.0*M_PI,0.0,10.0*M_PI};
   array<double,6> lim_vv = {-9.0,9.0,-9.0,9.0,-9.0,9.0};
@@ -5782,7 +5822,7 @@ int main(){
   double v0 = 2.4;
   double w0 = 2.4;
   double u0 = 2.4;
-
+*/
   // Initial datum generation
 
   gt::start("Initial datum generation (CPU)");
@@ -5834,8 +5874,8 @@ int main(){
         double w = lim_vv[2] + j*h_vv[1];
         double u = lim_vv[4] + k*h_vv[2];
 
-        //vv(idx) = (1.0/(sqrt(pow(2*M_PI,3)))) * exp(-(pow(v,2)+pow(w,2)+pow(u,2))/2.0);
-        vv(idx) = (1.0/(sqrt(pow(8*M_PI,3)))) * (exp(-(pow(v-v0,2))/2.0)+exp(-(pow(v+v0,2))/2.0))*(exp(-(pow(w-w0,2))/2.0)+exp(-(pow(w+w0,2))/2.0))*(exp(-(pow(u-u0,2))/2.0)+exp(-(pow(u+u0,2))/2.0));
+        vv(idx) = (1.0/(sqrt(pow(2*M_PI,3)))) * exp(-(pow(v,2)+pow(w,2)+pow(u,2))/2.0);
+        //vv(idx) = (1.0/(sqrt(pow(8*M_PI,3)))) * (exp(-(pow(v-v0,2))/2.0)+exp(-(pow(v+v0,2))/2.0))*(exp(-(pow(w-w0,2))/2.0)+exp(-(pow(w+w0,2))/2.0))*(exp(-(pow(u-u0,2))/2.0)+exp(-(pow(u+u0,2))/2.0));
       }
     }
   }
@@ -5876,11 +5916,11 @@ int main(){
   lr2<double> lr_sol_fin(r,{dxx_mult,dvv_mult});
 
   //cout << "First order" << endl;
-  //lr_sol_fin = integration_first_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
+  lr_sol_fin = integration_first_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
 
   //cout << "Second order" << endl;
-  lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
-  
+  //lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
+
   multi_array<double,2> refsol({dxx_mult,dvv_mult});
   multi_array<double,2> sol({dxx_mult,dvv_mult});
   multi_array<double,2> tmpsol({dxx_mult,r});
@@ -5924,7 +5964,7 @@ int main(){
       }
     }
     error_order1_3d << error_o1 << endl;
-
+/*
     lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nspan[count],nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
 
     matmul(lr_sol_fin.X,lr_sol_fin.S,tmpsol);
@@ -5940,7 +5980,7 @@ int main(){
       }
     }
     error_order2_3d << error_o2 << endl;
-
+*/
   }
 
   error_order1_3d.close();
