@@ -2604,9 +2604,9 @@ int main(){
   Index Nx = 64; // NEEDS TO BE EVEN FOR FOURIER
   Index Nv = 256; // NEEDS TO BE EVEN FOR FOURIER
 
-  int r = 10; // rank desired
+  int r = 5; // rank desired
 
-  double tstar = 100.0; // final time
+  double tstar = 10.0; // final time
 
   Index nsteps_ref = 10000;
 
@@ -2675,13 +2675,13 @@ int main(){
   // Computation of reference solution
   lr2<double> lr_sol_fin(r,{Nx,Nv});
 
-  cout << "First order" << endl;
-  lr_sol_fin = integration_first_order(Nx,Nv,r,tstar,nsteps_ref,nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,ee_flag,lr_sol0, plans_e, plans_x, plans_v);
+  //cout << "First order" << endl;
+  //lr_sol_fin = integration_first_order(Nx,Nv,r,tstar,nsteps_ref,nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,ee_flag,lr_sol0, plans_e, plans_x, plans_v);
 
-  //cout << "Second order" << endl;
-  //lr_sol_fin = integration_second_order(Nx,Nv,r,tstar,nsteps_ref,nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,lr_sol0, plans_e, plans_x, plans_v);
+  cout << "Second order" << endl;
+  lr_sol_fin = integration_second_order(Nx,Nv,r,tstar,nsteps_ref,nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,lr_sol0, plans_e, plans_x, plans_v);
 
-  exit(1);
+  //exit(1);
 
   //cout << gt::sorted_output() << endl;
 

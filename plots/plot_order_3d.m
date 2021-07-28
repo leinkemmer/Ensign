@@ -22,7 +22,9 @@ loglog(nspan,err(end)*(nspan/nspan(end)).^(-1),'-r','linewidth',1.5);
 hold on
 loglog(nspan,err,'x','linewidth',2)
 hold on
-loglog(nspan,err2(end)*(nspan/nspan(end)).^(-2),'-g','linewidth',1.5);
+loglog(nspan,err2(1)*(nspan/nspan(1)).^(-2),'-g','linewidth',1.5);
+hold on
+loglog(nspan,err2(1)*(nspan/nspan(1)).^(-1),'-b','linewidth',1.5);
 hold on
 loglog(nspan,err2,'o','linewidth',2)
 legend('Error order 1','Order 1','Error order 2','Order 2')

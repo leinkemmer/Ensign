@@ -2054,6 +2054,8 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   lr_sol.X = d_lr_sol.X;
   lr_sol.S = d_lr_sol.S;
   lr_sol.V = d_lr_sol.V;
+
+  cudaDeviceSynchronize();
   return lr_sol;
   #endif
 
@@ -5760,9 +5762,12 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   #ifdef __CPU__
   return lr_sol;
   #else
+
   lr_sol.X = d_lr_sol.X;
   lr_sol.S = d_lr_sol.S;
   lr_sol.V = d_lr_sol.V;
+  cudaDeviceSynchronize();
+
   return lr_sol;
   #endif
 }
@@ -5781,15 +5786,14 @@ int main(){
   }
   #endif
 
-
   array<Index,3> N_xx = {16,16,16}; // Sizes in space
-  array<Index,3> N_vv = {32,32,32}; // Sizes in velocity
+  array<Index,3> N_vv = {64,64,64}; // Sizes in velocity
 
   int r = 10; // rank desired
 
   double tstar = 10.0; // final time //10.0
 
-  Index nsteps_ref = 5000;
+  Index nsteps_ref = 10000;
 
   vector<Index> nspan = {1000,1200,1400,1600,1800,2000};
 
@@ -5916,10 +5920,10 @@ int main(){
   lr2<double> lr_sol_fin(r,{dxx_mult,dvv_mult});
 
   //cout << "First order" << endl;
-  lr_sol_fin = integration_first_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
+  //lr_sol_fin = integration_first_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
 
   //cout << "Second order" << endl;
-  //lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
+  lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
 
   multi_array<double,2> refsol({dxx_mult,dvv_mult});
   multi_array<double,2> sol({dxx_mult,dvv_mult});
@@ -5964,7 +5968,7 @@ int main(){
       }
     }
     error_order1_3d << error_o1 << endl;
-/*
+
     lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nspan[count],nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
 
     matmul(lr_sol_fin.X,lr_sol_fin.S,tmpsol);
@@ -5980,7 +5984,7 @@ int main(){
       }
     }
     error_order2_3d << error_o2 << endl;
-*/
+
   }
 
   error_order1_3d.close();
