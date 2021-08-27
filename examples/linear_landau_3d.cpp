@@ -14,7 +14,7 @@ cublasHandle_t handle_dot;
 lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int r,double tstar, Index nsteps, int nsteps_split, int nsteps_ee, int nsteps_rk4, array<double,6> lim_xx, array<double,6> lim_vv, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_xx, array<fftw_plan,2> plans_vv){
   double tau = tstar/nsteps;
 
-  double tau_split = tau/nsteps_split;
+  double tau_split = tau / nsteps_split;
   double tau_ee = tau_split / nsteps_ee;
   double tau_rk4 = tau / nsteps_rk4;
 
@@ -2056,6 +2056,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   lr_sol.V = d_lr_sol.V;
 
   cudaDeviceSynchronize();
+
   return lr_sol;
   #endif
 
@@ -5786,7 +5787,7 @@ int main(){
   }
   #endif
 
-  array<Index,3> N_xx = {16,16,16}; // Sizes in space
+  array<Index,3> N_xx = {32,32,32}; // Sizes in space
   array<Index,3> N_vv = {64,64,64}; // Sizes in velocity
 
   int r = 10; // rank desired
@@ -5795,12 +5796,11 @@ int main(){
 
   Index nsteps_ref = 10000;
 
-  vector<Index> nspan = {1000,1200,1400,1600,1800,2000};
+  vector<Index> nspan = {1800,2200,2600,3000,3400};
 
   int nsteps_split = 1;
   int nsteps_ee = 1;
   int nsteps_rk4 = 1;
-
 
   // Linear Landau
   array<double,6> lim_xx = {0.0,4.0*M_PI,0.0,4.0*M_PI,0.0,4.0*M_PI}; // Limits for box [ax,bx] x [ay,by] x [az,bz] {ax,bx,ay,by,az,bz}
@@ -5920,35 +5920,37 @@ int main(){
   lr2<double> lr_sol_fin(r,{dxx_mult,dvv_mult});
 
   //cout << "First order" << endl;
-  //lr_sol_fin = integration_first_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
+
+  lr_sol_fin = integration_first_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
 
   //cout << "Second order" << endl;
-  lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
+  //lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nsteps_ref,nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
 
   multi_array<double,2> refsol({dxx_mult,dvv_mult});
   multi_array<double,2> sol({dxx_mult,dvv_mult});
   multi_array<double,2> tmpsol({dxx_mult,r});
 
   matmul(lr_sol_fin.X,lr_sol_fin.S,tmpsol);
+
   matmul_transb(tmpsol,lr_sol_fin.V,refsol);
 
   ofstream error_order1_3d;
   error_order1_3d.open("../../plots/error_order1_3d.txt");
   error_order1_3d.precision(16);
 
-  ofstream error_order2_3d;
-  error_order2_3d.open("../../plots/error_order2_3d.txt");
-  error_order2_3d.precision(16);
+  //ofstream error_order2_3d;
+  //error_order2_3d.open("../../plots/error_order2_3d.txt");
+  //error_order2_3d.precision(16);
 
   error_order1_3d << nspan.size() << endl;
   for(int count = 0; count < nspan.size(); count++){
     error_order1_3d << nspan[count] << endl;
   }
 
-  error_order2_3d << nspan.size() << endl;
-  for(int count = 0; count < nspan.size(); count++){
-    error_order2_3d << nspan[count] << endl;
-  }
+  //error_order2_3d << nspan.size() << endl;
+  //for(int count = 0; count < nspan.size(); count++){
+  //  error_order2_3d << nspan[count] << endl;
+  //}
 
   for(int count = 0; count < nspan.size(); count++){
 
@@ -5969,26 +5971,26 @@ int main(){
     }
     error_order1_3d << error_o1 << endl;
 
-    lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nspan[count],nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
+    //lr_sol_fin = integration_second_order(N_xx,N_vv,r,tstar,nspan[count],nsteps_split,nsteps_ee,nsteps_rk4,lim_xx,lim_vv,lr_sol0, plans_e, plans_xx, plans_vv);
 
-    matmul(lr_sol_fin.X,lr_sol_fin.S,tmpsol);
-    matmul_transb(tmpsol,lr_sol_fin.V,sol);
+    //matmul(lr_sol_fin.X,lr_sol_fin.S,tmpsol);
+    //matmul_transb(tmpsol,lr_sol_fin.V,sol);
 
-    double error_o2 = 0.0;
-    for(int iii = 0; iii < dxx_mult; iii++){
-      for(int jjj = 0; jjj < dvv_mult; jjj++){
-        double value = abs(refsol(iii,jjj)-sol(iii,jjj));
-        if( error_o2 < value){
-          error_o2 = value;
-        }
-      }
-    }
-    error_order2_3d << error_o2 << endl;
+    //double error_o2 = 0.0;
+    //for(int iii = 0; iii < dxx_mult; iii++){
+    //  for(int jjj = 0; jjj < dvv_mult; jjj++){
+    //    double value = abs(refsol(iii,jjj)-sol(iii,jjj));
+    //    if( error_o2 < value){
+    //      error_o2 = value;
+    //    }
+    //  }
+    //}
+    //error_order2_3d << error_o2 << endl;
 
   }
 
   error_order1_3d.close();
-  error_order2_3d.close();
+  //error_order2_3d.close();
 
   destroy_plans(plans_e);
   destroy_plans(plans_xx);

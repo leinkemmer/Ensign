@@ -76,10 +76,10 @@ void gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, std::funct
     double ip = inner_product(Q.extract({j}), Q.extract({j}));
     R(j,j) = sqrt(ip);
 
-    if(std::abs(ip) > 1e-16){
+    if(R(j,j) > 1e-14){
       cblas_dscal(dims[0],1.0/R(j,j),Q.extract({j}),1);
     } else{
-      
+
       #ifdef __OPENMP__
       #pragma omp parallel for
       #endif
@@ -122,7 +122,7 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
       double val;
       cudaMemcpy(&val,&R(j,j),sizeof(double),cudaMemcpyDeviceToHost);
 
-      if(std::abs(val) > 1e-8){
+      if(std::abs(val) > 1e-14){
         ptw_div_gs<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j), &R(j,j));
       } else{
 

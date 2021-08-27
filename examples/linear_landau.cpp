@@ -2604,13 +2604,13 @@ int main(){
   Index Nx = 64; // NEEDS TO BE EVEN FOR FOURIER
   Index Nv = 256; // NEEDS TO BE EVEN FOR FOURIER
 
-  int r = 5; // rank desired
+  int r = 25; // rank desired
 
   double tstar = 10.0; // final time
 
   Index nsteps_ref = 10000;
 
-  vector<Index> nspan = {1000,1200,1400,1600,1800,2000};
+  vector<Index> nspan = {1800,2200,2600,3000,3400};
 
   int nsteps_ee = 1; // number of time steps for exponential integrator
   int nsteps_rk4 = 1; // number of time steps for rk4
