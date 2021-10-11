@@ -279,12 +279,15 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   multi_array<double,1> int_v2({r});
 
   double mass0 = 0.0;
-  double mass = 0.0;
   double energy0 = 0.0;
+
+  #ifdef __CPU__
+  double mass = 0.0;
   double energy = 0.0;
   double el_energy = 0.0;
   double err_mass = 0.0;
   double err_energy = 0.0;
+  #endif
 
   // Initialization
   std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(h_xx[0]*h_xx[1]*h_xx[2], dxx_mult);
@@ -2335,12 +2338,15 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   multi_array<double,1> int_v2({r});
 
   double mass0 = 0.0;
-  double mass = 0.0;
   double energy0 = 0.0;
+
+  #ifdef __CPU__
+  double mass = 0.0;
   double energy = 0.0;
   double el_energy = 0.0;
   double err_mass = 0.0;
   double err_energy = 0.0;
+  #endif
 
   // Initialization
   std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(h_xx[0]*h_xx[1]*h_xx[2], dxx_mult);
@@ -5787,12 +5793,12 @@ int main(){
   }
   #endif
 
-  array<Index,3> N_xx = {20,20,20}; // Sizes in space 20
-  array<Index,3> N_vv = {20,20,20}; // Sizes in velocity 20
+  array<Index,3> N_xx = {32,32,32}; // Sizes in space 20
+  array<Index,3> N_vv = {32,32,32}; // Sizes in velocity 20
 
   int r = 10; // rank desired 10
 
-  double tstar = 0.05; // final time //0.2
+  double tstar = 0.05; // final time //0.05 for two stream
 
   Index nsteps_ref = 2000; //7000
 
@@ -5801,7 +5807,7 @@ int main(){
   int nsteps_split = 1;
   int nsteps_ee = 1;
   int nsteps_rk4 = 1;
-/*
+
   // Linear Landau
   array<double,6> lim_xx = {0.0,4.0*M_PI,0.0,4.0*M_PI,0.0,4.0*M_PI}; // Limits for box [ax,bx] x [ay,by] x [az,bz] {ax,bx,ay,by,az,bz}
   array<double,6> lim_vv = {-6.0,6.0,-6.0,6.0,-6.0,6.0}; // Limits for box [av,bv] x [aw,bw] x [au,bu] {av,bv,aw,bw,au,bu}
@@ -5811,8 +5817,8 @@ int main(){
   double kappa1 = 0.5;
   double kappa2 = 0.5;
   double kappa3 = 0.5;
-*/
 
+/*
   // Two stream instability
   array<double,6> lim_xx = {0.0,10.0*M_PI,0.0,10.0*M_PI,0.0,10.0*M_PI};
   array<double,6> lim_vv = {-9.0,9.0,-9.0,9.0,-9.0,9.0};
@@ -5829,7 +5835,7 @@ int main(){
   double v0b = -2.5;
   double w0b = -2.25;
   double u0b = -2.0;
-
+*/
   // Initial datum generation
 
   gt::start("Initial datum generation (CPU)");
@@ -5881,8 +5887,8 @@ int main(){
         double w = lim_vv[2] + j*h_vv[1];
         double u = lim_vv[4] + k*h_vv[2];
 
-        //vv(idx) = (1.0/(sqrt(pow(2*M_PI,3)))) * exp(-(pow(v,2)+pow(w,2)+pow(u,2))/2.0);
-        vv(idx) = (1.0/(sqrt(pow(8*M_PI,3)))) * (exp(-(pow(v-v0,2))/2.0)+exp(-(pow(v-v0b,2))/2.0))*(exp(-(pow(w-w0,2))/2.0)+exp(-(pow(w-w0b,2))/2.0))*(exp(-(pow(u-u0,2))/2.0)+exp(-(pow(u-u0b,2))/2.0));
+        vv(idx) = (1.0/(sqrt(pow(2*M_PI,3)))) * exp(-(pow(v,2)+pow(w,2)+pow(u,2))/2.0);
+        //vv(idx) = (1.0/(sqrt(pow(8*M_PI,3)))) * (exp(-(pow(v-v0,2))/2.0)+exp(-(pow(v-v0b,2))/2.0))*(exp(-(pow(w-w0,2))/2.0)+exp(-(pow(w-w0b,2))/2.0))*(exp(-(pow(u-u0,2))/2.0)+exp(-(pow(u-u0b,2))/2.0));
       }
     }
   }
