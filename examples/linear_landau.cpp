@@ -195,7 +195,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
   for(int ii = 0; ii < r; ii++){
     energy0 += (0.5*int_x(ii)*tmp_vec(ii));
   }
-
+  #ifdef __CPU__
   ofstream el_energyf;
   ofstream err_massf;
   ofstream err_energyf;
@@ -210,7 +210,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
   el_energyf << tstar << endl;
   el_energyf << tau << endl;
-
+  #endif
   //// FOR GPU ////
   #ifdef __CUDACC__
   cublasCreate (&handle);
@@ -343,7 +343,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
 
     // CPU
-
+    #ifdef __CPU__
     gt::start("Main loop CPU");
     /* K step */
     tmpX = lr_sol.X;
@@ -666,7 +666,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     err_energyf << err_energy << endl;
 
-
+    #endif
     // GPU
     #ifdef __CUDACC__
     // K step
@@ -918,28 +918,31 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
     err_energyGPUf << err_energy_CPU << endl;
 
     #endif
-
+    #ifdef __CPU__
     cout << "Electric energy CPU: " << el_energy << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Electric energy GPU: " << d_el_energy_CPU << endl;
     #endif
-
+    #ifdef __CPU__
     cout << "Error in mass CPU: " << err_mass << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Error in mass GPU: " << err_mass_CPU << endl;
     #endif
-
+    #ifdef __CPU__
     cout << "Error in energy CPU: " << err_energy << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Error in energy GPU: " << err_energy_CPU << endl;
     #endif
 
   }
-
+  #ifdef __CPU__
   el_energyf.close();
   err_massf.close();
   err_energyf.close();
-
+  #endif
   #ifdef __CUDACC__
   cublasDestroy(handle);
   cublasDestroy(handle_dot);
@@ -956,8 +959,14 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
   #endif
 
   //lr_sol = d_lr_sol;
-
+  #ifdef __CPU__
   return lr_sol;
+  #else
+  lr_sol.X = d_lr_sol.X;
+  lr_sol.S = d_lr_sol.S;
+  lr_sol.V = d_lr_sol.V;
+  return lr_sol;
+  #endif
 }
 
 lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Index nsteps, int nsteps_ee, int nsteps_rk4, double ax, double bx, double av, double bv, double alpha, double kappa, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_x, array<fftw_plan,2> plans_v){
@@ -1151,7 +1160,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
   for(int ii = 0; ii < r; ii++){
     energy0 += (0.5*int_x(ii)*tmp_vec(ii));
   }
-
+  #ifdef __CPU__
   ofstream el_energyf;
   ofstream err_massf;
   ofstream err_energyf;
@@ -1166,7 +1175,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
   el_energyf << tstar << endl;
   el_energyf << tau << endl;
-
+  #endif
   // Additional stuff for second order
   lr2<double> lr_sol_e(r,{Nx,Nv});
 
@@ -1306,7 +1315,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
   for(Index i = 0; i < nsteps; i++){
 
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
-
+    #ifdef __CPU__
     /* Lie splitting to obtain the electric field */
 
     lr_sol_e.X = lr_sol.X;
@@ -2010,7 +2019,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     err_energy = abs(energy0-energy);
 
     err_energyf << err_energy << endl;
-
+    #endif
 
     // GPU
     #ifdef __CUDACC__
@@ -2538,28 +2547,31 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     err_energyGPUf << err_energy_CPU << endl;
 
     #endif
-
+    #ifdef __CPU__
     cout << "Electric energy CPU: " << el_energy << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Electric energy GPU: " << d_el_energy_CPU << endl;
     #endif
-
+    #ifdef __CPU__
     cout << "Error in mass CPU: " << err_mass << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Error in mass GPU: " << err_mass_CPU << endl;
     #endif
-
+    #ifdef __CPU__
     cout << "Error in energy CPU: " << err_energy << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Error in energy GPU: " << err_energy_CPU << endl;
     #endif
 
   }
-
+  #ifdef __CPU__
   el_energyf.close();
   err_massf.close();
   err_energyf.close();
-
+  #endif
   #ifdef __CUDACC__
   cublasDestroy(handle);
   cublasDestroy(handle_dot);
@@ -2576,17 +2588,15 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
   #endif
 
   //lr_sol = d_lr_sol;
-
+  #ifdef __CPU__
   return lr_sol;
-}
-
-#define CUDA_CALL(x) do { if((x)!=cudaSuccess) { \
-    printf("Error at %s:%d\n",__FILE__,__LINE__);\
-    return EXIT_FAILURE;}} while(0)
-#define CURAND_CALL(x) do { if((x)!=CURAND_STATUS_SUCCESS) { \
-    printf("Error at %s:%d\n",__FILE__,__LINE__);\
-    return EXIT_FAILURE;}} while(0)
-
+  #else
+  lr_sol.X = d_lr_sol.X;
+  lr_sol.S = d_lr_sol.S;
+  lr_sol.V = d_lr_sol.V;
+  return lr_sol;
+  #endif
+  }
 
 int main(){
 
@@ -2601,10 +2611,10 @@ int main(){
   }
   #endif
 
-  Index Nx = 64; // NEEDS TO BE EVEN FOR FOURIER
-  Index Nv = 256; // NEEDS TO BE EVEN FOR FOURIER
+  Index Nx = 32; // NEEDS TO BE EVEN FOR FOURIER
+  Index Nv = 32; // NEEDS TO BE EVEN FOR FOURIER
 
-  int r = 25; // rank desired
+  int r = 10; // rank desired
 
   double tstar = 10.0; // final time
 
@@ -2615,6 +2625,8 @@ int main(){
   int nsteps_ee = 1; // number of time steps for exponential integrator
   int nsteps_rk4 = 1; // number of time steps for rk4
 
+/*
+  // Linear Landau
   double ax = 0;
   double bx = 4.0*M_PI;
 
@@ -2623,6 +2635,19 @@ int main(){
 
   double alpha = 0.01;
   double kappa = 0.5;
+*/
+
+  // Two stream instability
+
+  double ax = 0;
+  double bx = 10.0*M_PI;
+
+  double av = -9.0;
+  double bv = 9.0;
+
+  double alpha = 0.001;
+  double kappa = 1.0/5.0;
+  double v0 = 2.4;
 
   bool ee_flag = false;
 
@@ -2649,7 +2674,8 @@ int main(){
   #pragma omp parallel for
   #endif
   for(Index i = 0; i < Nv; i++){
-    vv(i) = (1.0/sqrt(2*M_PI)) *exp(-pow((av + i*hv),2)/2.0);
+    //vv(i) = (1.0/sqrt(2*M_PI)) *exp(-pow((av + i*hv),2)/2.0);
+    vv(i) = (1.0/sqrt(8*M_PI)) * (exp(-pow((av + i*hv - v0),2)/2.0)+exp(-pow((av + i*hv +v0),2)/2.0));
   }
   V.push_back(vv.begin());
 

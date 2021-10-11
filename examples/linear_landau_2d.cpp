@@ -306,6 +306,8 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
     energy0 += 0.5*(int_x(ii)*rho(ii));
   }
 
+  #ifdef __CPU__
+
   ofstream el_energyf;
   ofstream err_massf;
   ofstream err_energyf;
@@ -321,6 +323,7 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
   el_energyf << tstar << endl;
   el_energyf << tau << endl;
 
+  #endif
   //// FOR GPU ////
 
   #ifdef __CUDACC__
@@ -536,6 +539,8 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
 
     // CPU
+
+    #ifdef __CPU__
 
     gt::start("Main loop CPU");
 
@@ -1030,6 +1035,8 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
 
     err_energyf << err_energy << endl;
 
+    #endif
+
     #ifdef __CUDACC__
 
     /* K step */
@@ -1096,11 +1103,11 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
       cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin());
 
       // Full step -- Exponential Euler
-      #ifdef __FFTW__
-      ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
-      #else
+      //#ifdef __FFTW__
+      //ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
+      //#else
       cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin()); // check if CUDA preserves input and eventually adapt. YES
-      #endif
+      //#endif
 
       matmul(d_Khat,d_Twc,d_Mhat);
 
@@ -1265,11 +1272,11 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
       cufftExecZ2D(d_plans_vv[1],(cufftDoubleComplex*)d_Lhat.begin(),d_lr_sol.V.begin());
 
       // Full step --
-      #ifdef __FFTW__
-      ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
-      #else
+      //#ifdef __FFTW__
+      //ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
+      //#else
       cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin()); // check if CUDA preserves input and eventually adapt
-      #endif
+      //#endif
 
       matmul(d_Lhat,d_Tyc,d_Nhat);
 
@@ -1379,28 +1386,31 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
     err_energyGPUf << err_energy_CPU << endl;
 
     #endif
-
+    #ifdef __CPU__
     cout << "Electric energy: " << el_energy << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Electric energy GPU: " << d_el_energy_CPU << endl;
     #endif
-
+    #ifdef __CPU__
     cout << "Error in mass: " << err_mass << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Error in mass GPU: " << err_mass_CPU << endl;
     #endif
-
+    #ifdef __CPU__
     cout << "Error in energy: " << err_energy << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Error in energy GPU: " << err_energy_CPU << endl;
     #endif
 
   }
-
+  #ifdef __CPU__
   el_energyf.close();
   err_massf.close();
   err_energyf.close();
-
+  #endif
   #ifdef __CUDACC__
   cublasDestroy(handle);
   cublasDestroy(handle_dot);
@@ -1416,10 +1426,15 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
   err_energyGPUf.close();
   #endif
 
-  //lr_sol = d_lr_sol;
-
+  #ifdef __CPU__
   return lr_sol;
-
+  #else
+  lr_sol.X = d_lr_sol.X;
+  lr_sol.S = d_lr_sol.S;
+  lr_sol.V = d_lr_sol.V;
+  cudaDeviceSynchronize();
+  return lr_sol;
+  #endif
 }
 
 lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, int r,double tstar, Index nsteps, int nsteps_split, int nsteps_ee, int nsteps_rk4, array<double,4> lim_xx, array<double,4> lim_vv, double alpha, double kappa1, double kappa2, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_xx, array<fftw_plan,2> plans_vv){
@@ -1723,6 +1738,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
     energy0 += 0.5*(int_x(ii)*rho(ii));
   }
 
+  #ifdef __CPU__
   ofstream el_energyf;
   ofstream err_massf;
   ofstream err_energyf;
@@ -1737,7 +1753,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
   el_energyf << tstar << endl;
   el_energyf << tau << endl;
-
+  #endif
   // Additional stuff for second order
   lr2<double> lr_sol_e(r,{dxx_mult,dvv_mult});
 
@@ -1957,6 +1973,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
 
+    #ifdef __CPU__
     /* Lie splitting to obtain the electric field */
 
     lr_sol_e.X = lr_sol.X;
@@ -3172,7 +3189,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
     err_energy = abs(energy0-energy);
 
     err_energyf << err_energy << endl;
-
+    #endif
     #ifdef __CUDACC__
 
     // Lie splitting to obtain the electric field
@@ -3259,11 +3276,11 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
       cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol_e.X.begin());
 
       // Full step --
-      #ifdef __FFTW__
-      ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
-      #else
+      //#ifdef __FFTW__
+      //ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
+      //#else
       cufftExecD2Z(d_plans_xx[0],d_lr_sol_e.X.begin(),(cufftDoubleComplex*)d_Khat.begin()); // check if CUDA preserves input and eventually adapt. YES
-      #endif
+      //#endif
 
       matmul(d_Khat,d_Twc,d_Mhat);
 
@@ -3432,11 +3449,11 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
       cufftExecZ2D(d_plans_vv[1],(cufftDoubleComplex*)d_Lhat.begin(),d_lr_sol_e.V.begin());
 
       // Full step --
-      #ifdef __FFTW__
-      ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
-      #else
+      //#ifdef __FFTW__
+      //ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
+      //#else
       cufftExecD2Z(d_plans_vv[0],d_lr_sol_e.V.begin(),(cufftDoubleComplex*)d_Lhat.begin()); // check if CUDA preserves input and eventually adapt
-      #endif
+      //#endif
 
       matmul(d_Lhat,d_Tyc,d_Nhat);
 
@@ -3532,11 +3549,11 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
       cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin());
 
       // Full step --
-      #ifdef __FFTW__
-      ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
-      #else
+      //#ifdef __FFTW__
+      //ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
+      //#else
       cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin()); // check if CUDA preserves input and eventually adapt. YES
-      #endif
+      //#endif
 
       matmul(d_Khat,d_Twc,d_Mhat);
 
@@ -3716,11 +3733,11 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
       cufftExecZ2D(d_plans_vv[1],(cufftDoubleComplex*)d_Lhat.begin(),d_lr_sol.V.begin());
 
       // Full step --
-      #ifdef __FFTW__
-      ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
-      #else
+      //#ifdef __FFTW__
+      //ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
+      //#else
       cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin()); // check if CUDA preserves input and eventually adapt
-      #endif
+      //#endif
 
       matmul(d_Lhat,d_Tyc,d_Nhat);
 
@@ -3893,11 +3910,11 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
       cufftExecZ2D(d_plans_xx[1],(cufftDoubleComplex*)d_Khat.begin(),d_lr_sol.X.begin());
 
       // Full step --
-      #ifdef __FFTW__
-      ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
-      #else
+      //#ifdef __FFTW__
+      //ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
+      //#else
       cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin()); // check if CUDA preserves input and eventually adapt. YES
-      #endif
+      //#endif
 
       matmul(d_Khat,d_Twc,d_Mhat);
 
@@ -4007,28 +4024,31 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
     err_energyGPUf << err_energy_CPU << endl;
 
     #endif
-
+    #ifdef __CPU__
     cout << "Electric energy: " << el_energy << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Electric energy GPU: " << d_el_energy_CPU << endl;
     #endif
-
+    #ifdef __CPU__
     cout << "Error in mass: " << err_mass << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Error in mass GPU: " << err_mass_CPU << endl;
     #endif
-
+    #ifdef __CPU__
     cout << "Error in energy: " << err_energy << endl;
+    #endif
     #ifdef __CUDACC__
     cout << "Error in energy GPU: " << err_energy_CPU << endl;
     #endif
 
   }
-
+  #ifdef __CPU__
   el_energyf.close();
   err_massf.close();
   err_energyf.close();
-
+  #endif
   #ifdef __CUDACC__
   cublasDestroy(handle);
   cublasDestroy(handle_dot);
@@ -4045,8 +4065,15 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
   #endif
 
   //lr_sol = d_lr_sol;
-
+  #ifdef __CPU__
   return lr_sol;
+  #else
+  lr_sol.X = d_lr_sol.X;
+  lr_sol.S = d_lr_sol.S;
+  lr_sol.V = d_lr_sol.V;
+  cudaDeviceSynchronize();
+  return lr_sol;
+  #endif
 }
 
 int main(){
@@ -4062,27 +4089,39 @@ int main(){
   }
   #endif
 
-  array<Index,2> N_xx = {64,64}; // Sizes in space
-  array<Index,2> N_vv = {256,256}; // Sizes in velocity
+  array<Index,2> N_xx = {32,32}; // Sizes in space
+  array<Index,2> N_vv = {32,32}; // Sizes in velocity
 
-  int r = 5; // rank desired
+  int r = 10; // rank desired
 
-  double tstar = 20.0; // final time
+  double tstar = 1.0; // final time
 
-  Index nsteps_ref = 10000;
+  Index nsteps_ref = 5000;
 
-  vector<Index> nspan = {1000,1200,1400,1600,1800,2000};
+  vector<Index> nspan = {200,400,600,800,1000};
 
   int nsteps_split = 1; // Number of time steps internal splitting
   int nsteps_ee = 1; // number of time steps for exponential integrator
   int nsteps_rk4 = 1; // number of time steps for rk4
 
+/*
+// Linear Landau
   array<double,4> lim_xx = {0.0,4.0*M_PI,0.0,4.0*M_PI}; // Limits for box [ax,bx] x [ay,by] {ax,bx,ay,by}
   array<double,4> lim_vv = {-6.0,6.0,-6.0,6.0}; // Limits for box [av,bv] x [aw,bw] {av,bv,aw,bw}
 
   double alpha = 0.01;
   double kappa1 = 0.5;
   double kappa2 = 0.5;
+*/
+// Two stream instability
+  array<double,4> lim_xx = {0.0,10.0*M_PI,0.0,10.0*M_PI}; // Limits for box [ax,bx] x [ay,by] {ax,bx,ay,by}
+  array<double,4> lim_vv = {-9.0,9.0,-9.0,9.0}; // Limits for box [av,bv] x [aw,bw] {av,bv,aw,bw}
+
+  double alpha = 0.001;
+  double kappa1 = 1.0/5.0;
+  double kappa2 = 1.0/5.0;
+  double v0 = 2.4;
+  double w0 = 2.4;
 
   // Initial datum generation
   array<double,2> h_xx, h_vv;
@@ -4118,7 +4157,8 @@ int main(){
     for(Index i = 0; i < N_vv[0]; i++){
       double v = lim_vv[0] + i*h_vv[0];
       double w = lim_vv[2] + j*h_vv[1];
-      vv(i+j*N_vv[0]) = (1.0/(2*M_PI)) *exp(-(pow(v,2)+pow(w,2))/2.0);
+      //vv(i+j*N_vv[0]) = (1.0/(2*M_PI)) *exp(-(pow(v,2)+pow(w,2))/2.0);
+      vv(i+j*N_vv[0]) = (1.0/(8*M_PI)) *(exp(-pow(v-v0,2)/2.0)+exp(-pow(v+v0,2)/2.0))*(exp(-pow(w-w0,2)/2.0)+exp(-pow(w+w0,2)/2.0));
     }
   }
   V.push_back(vv.begin());

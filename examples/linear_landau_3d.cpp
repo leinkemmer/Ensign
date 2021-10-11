@@ -1590,11 +1590,11 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
       gt::start("Third split K GPU");
 
-      #ifdef __FFTW__ // working on the server
-      ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
-      #else
+      //#ifdef __FFTW__ // working on the server
+      //ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
+      //#else
       cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
-      #endif
+      //#endif
 
       matmul(d_Khat,d_Tuc,d_Mhat);
 
@@ -1851,11 +1851,11 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
       // Full step --
 
-      #ifdef __FFTW__ // working on the server
-      ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
-      #else
+      //#ifdef __FFTW__ // working on the server
+      //ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
+      //#else
       cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
-      #endif
+      //#endif
 
       matmul(d_Lhat,d_Tzc,d_Nhat);
 
@@ -4727,11 +4727,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       // Full step --
 
-      #ifdef __FFTW__ // working on the server
-      ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
-      #else
+      //#ifdef __FFTW__ // working on the server
+      //ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
+      //#else
       cufftExecD2Z(d_plans_xx[0],d_lr_sol_e.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
-      #endif
+      //#endif
 
       matmul(d_Khat,d_Tuc,d_Mhat);
 
@@ -4951,11 +4951,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       // Full step --
 
-      #ifdef __FFTW__ // working on the server
-      ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
-      #else
+      //#ifdef __FFTW__ // working on the server
+      //ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
+      //#else
       cufftExecD2Z(d_plans_vv[0],d_lr_sol_e.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
-      #endif
+      //#endif
 
       matmul(d_Lhat,d_Tzc,d_Nhat);
 
@@ -5080,11 +5080,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       // Full step -- exponential integrator
 
-      #ifdef __FFTW__ // working on the server
-      ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
-      #else
+      //#ifdef __FFTW__ // working on the server
+      //ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
+      //#else
       cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
-      #endif
+      //#endif
 
       matmul(d_Khat,d_Tuc,d_Mhat);
 
@@ -5337,11 +5337,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       // Full step -- exponential integrator
 
-      #ifdef __FFTW__ // working on the server
-      ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
-      #else
+      //#ifdef __FFTW__ // working on the server
+      //ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(), d_Lhat.begin(), 1.0/ncvv);
+      //#else
       cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
-      #endif
+      //#endif
 
       matmul(d_Lhat,d_Tzc,d_Nhat);
 
@@ -5589,11 +5589,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
       // Full step -- exponential integrator
 
-      #ifdef __FFTW__ // working on the server
-      ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
-      #else
+      //#ifdef __FFTW__ // working on the server
+      //ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(), d_Khat.begin(), 1.0/ncxx);
+      //#else
       cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
-      #endif
+      //#endif
 
       matmul(d_Khat,d_Tuc,d_Mhat);
 
@@ -5787,21 +5787,21 @@ int main(){
   }
   #endif
 
-  array<Index,3> N_xx = {8,8,8}; // Sizes in space
-  array<Index,3> N_vv = {16,16,16}; // Sizes in velocity
+  array<Index,3> N_xx = {20,20,20}; // Sizes in space 20
+  array<Index,3> N_vv = {20,20,20}; // Sizes in velocity 20
 
-  int r = 10; // rank desired
+  int r = 10; // rank desired 10
 
-  double tstar = 10.0; // final time //10.0
+  double tstar = 0.05; // final time //0.2
 
-  Index nsteps_ref = 10000;
+  Index nsteps_ref = 2000; //7000
 
-  vector<Index> nspan = {1800,2200,2600,3000,3400};
+  vector<Index> nspan = {40,50,60,70,80}; //25:25:300
 
   int nsteps_split = 1;
   int nsteps_ee = 1;
   int nsteps_rk4 = 1;
-
+/*
   // Linear Landau
   array<double,6> lim_xx = {0.0,4.0*M_PI,0.0,4.0*M_PI,0.0,4.0*M_PI}; // Limits for box [ax,bx] x [ay,by] x [az,bz] {ax,bx,ay,by,az,bz}
   array<double,6> lim_vv = {-6.0,6.0,-6.0,6.0,-6.0,6.0}; // Limits for box [av,bv] x [aw,bw] x [au,bu] {av,bv,aw,bw,au,bu}
@@ -5811,8 +5811,8 @@ int main(){
   double kappa1 = 0.5;
   double kappa2 = 0.5;
   double kappa3 = 0.5;
+*/
 
-/*
   // Two stream instability
   array<double,6> lim_xx = {0.0,10.0*M_PI,0.0,10.0*M_PI,0.0,10.0*M_PI};
   array<double,6> lim_vv = {-9.0,9.0,-9.0,9.0,-9.0,9.0};
@@ -5823,10 +5823,13 @@ int main(){
   double kappa1 = 1.0/5.0;
   double kappa2 = 1.0/5.0;
   double kappa3 = 1.0/5.0;
-  double v0 = 2.4;
-  double w0 = 2.4;
-  double u0 = 2.4;
-*/
+  double v0 = 2.5;
+  double w0 = 0;
+  double u0 = 0;
+  double v0b = -2.5;
+  double w0b = -2.25;
+  double u0b = -2.0;
+
   // Initial datum generation
 
   gt::start("Initial datum generation (CPU)");
@@ -5878,8 +5881,8 @@ int main(){
         double w = lim_vv[2] + j*h_vv[1];
         double u = lim_vv[4] + k*h_vv[2];
 
-        vv(idx) = (1.0/(sqrt(pow(2*M_PI,3)))) * exp(-(pow(v,2)+pow(w,2)+pow(u,2))/2.0);
-        //vv(idx) = (1.0/(sqrt(pow(8*M_PI,3)))) * (exp(-(pow(v-v0,2))/2.0)+exp(-(pow(v+v0,2))/2.0))*(exp(-(pow(w-w0,2))/2.0)+exp(-(pow(w+w0,2))/2.0))*(exp(-(pow(u-u0,2))/2.0)+exp(-(pow(u+u0,2))/2.0));
+        //vv(idx) = (1.0/(sqrt(pow(2*M_PI,3)))) * exp(-(pow(v,2)+pow(w,2)+pow(u,2))/2.0);
+        vv(idx) = (1.0/(sqrt(pow(8*M_PI,3)))) * (exp(-(pow(v-v0,2))/2.0)+exp(-(pow(v-v0b,2))/2.0))*(exp(-(pow(w-w0,2))/2.0)+exp(-(pow(w-w0b,2))/2.0))*(exp(-(pow(u-u0,2))/2.0)+exp(-(pow(u-u0b,2))/2.0));
       }
     }
   }
