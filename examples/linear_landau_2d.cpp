@@ -230,8 +230,8 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
   std::function<double(double*,double*)> ip_vv = inner_product_from_const_weight(h_vv[0]*h_vv[1], dvv_mult);
 
   // Initial mass
-  coeff_one(lr_sol.X,h_xx[0]*h_xx[1],int_x);
-  coeff_one(lr_sol.V,h_vv[0]*h_vv[1],int_v);
+  integrate(lr_sol.X,h_xx[0]*h_xx[1],int_x);
+  integrate(lr_sol.V,h_vv[0]*h_vv[1],int_v);
 
   matvec(lr_sol.S,int_v,rho);
 
@@ -240,7 +240,7 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
   }
 
   // Initial energy
-  coeff_one(lr_sol.V,h_vv[0]*h_vv[1],rho);
+  integrate(lr_sol.V,h_vv[0]*h_vv[1],rho);
   rho *= -1.0;
   matmul(lr_sol.X,lr_sol.S,tmpX);
   matvec(tmpX,rho,ef);
@@ -295,8 +295,8 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
     we_w2(j) = pow(w(j),2) * h_vv[0] * h_vv[1];
   }
 
-  coeff_one(lr_sol.V,we_v2,int_v);
-  coeff_one(lr_sol.V,we_w2,int_v2);
+  integrate(lr_sol.V,we_v2,int_v);
+  integrate(lr_sol.V,we_w2,int_v2);
 
   int_v += int_v2;
 
@@ -552,7 +552,7 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
 
     // Electric field
 
-    coeff_one(lr_sol.V,-h_vv[0]*h_vv[1],rho);
+    integrate(lr_sol.V,-h_vv[0]*h_vv[1],rho);
 
     matvec(lr_sol.X,rho,ef);
 
@@ -595,8 +595,8 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
 
     // Main of K step
 
-    coeff(lr_sol.V, lr_sol.V, we_v.begin(), C1v);
-    coeff(lr_sol.V, lr_sol.V, we_w.begin(), C1w);
+    coeff(lr_sol.V, lr_sol.V, we_v, C1v);
+    coeff(lr_sol.V, lr_sol.V, we_w, C1w);
 
     fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)tmpVhat.begin());
 
@@ -758,8 +758,8 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
     }
 
 
-    coeff(lr_sol.X, lr_sol.X, we_x.begin(), D1x);
-    coeff(lr_sol.X, lr_sol.X, we_y.begin(), D1y);
+    coeff(lr_sol.X, lr_sol.X, we_x, D1x);
+    coeff(lr_sol.X, lr_sol.X, we_y, D1y);
 
     fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)tmpXhat.begin());
 
@@ -1001,9 +1001,9 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
     el_energyf << el_energy << endl;
 
     // Error Mass
-    coeff_one(lr_sol.X,h_xx[0]*h_xx[1],int_x);
+    integrate(lr_sol.X,h_xx[0]*h_xx[1],int_x);
 
-    coeff_one(lr_sol.V,h_vv[0]*h_vv[1],int_v);
+    integrate(lr_sol.V,h_vv[0]*h_vv[1],int_v);
 
     matvec(lr_sol.S,int_v,rho);
 
@@ -1018,9 +1018,9 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
 
     // Error energy
 
-    coeff_one(lr_sol.V,we_v2,int_v);
+    integrate(lr_sol.V,we_v2,int_v);
 
-    coeff_one(lr_sol.V,we_w2,int_v2);
+    integrate(lr_sol.V,we_w2,int_v2);
 
     int_v += int_v2;
 
@@ -1047,7 +1047,7 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
 
     matmul(d_tmpX,d_lr_sol.S,d_lr_sol.X);
 
-    coeff_one(d_lr_sol.V,-h_vv[0]*h_vv[1],d_rho);
+    integrate(d_lr_sol.V,-h_vv[0]*h_vv[1],d_rho);
 
     matvec(d_lr_sol.X,d_rho,d_ef);
 
@@ -1060,8 +1060,8 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
     cufftExecZ2D(plans_d_e[1],(cufftDoubleComplex*)d_efhatx.begin(),d_efx.begin());
     cufftExecZ2D(plans_d_e[1],(cufftDoubleComplex*)d_efhaty.begin(),d_efy.begin());
 
-    coeff(d_lr_sol.V, d_lr_sol.V, d_we_v.begin(), d_C1v);
-    coeff(d_lr_sol.V, d_lr_sol.V, d_we_w.begin(), d_C1w);
+    coeff(d_lr_sol.V, d_lr_sol.V, d_we_v, d_C1v);
+    coeff(d_lr_sol.V, d_lr_sol.V, d_we_w, d_C1w);
 
     cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_tmpVhat.begin());
 
@@ -1167,9 +1167,9 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
     ptw_mult_scal<<<(d_efx.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efx.num_elements(), d_efx.begin(), h_xx[0] * h_xx[1], d_we_x.begin());
     ptw_mult_scal<<<(d_efy.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efy.num_elements(), d_efy.begin(), h_xx[0] * h_xx[1], d_we_y.begin());
 
-    coeff(d_lr_sol.X, d_lr_sol.X, d_we_x.begin(), d_D1x);
+    coeff(d_lr_sol.X, d_lr_sol.X, d_we_x, d_D1x);
 
-    coeff(d_lr_sol.X, d_lr_sol.X, d_we_y.begin(), d_D1y);
+    coeff(d_lr_sol.X, d_lr_sol.X, d_we_y, d_D1y);
 
     cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_tmpXhat.begin()); // check if CUDA preserves input and eventually adapt
 
@@ -1351,9 +1351,9 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
 
     // Error in mass
 
-    coeff_one(d_lr_sol.X,h_xx[0]*h_xx[1],d_int_x);
+    integrate(d_lr_sol.X,h_xx[0]*h_xx[1],d_int_x);
 
-    coeff_one(d_lr_sol.V,h_vv[0]*h_vv[1],d_int_v);
+    integrate(d_lr_sol.V,h_vv[0]*h_vv[1],d_int_v);
 
     matvec(d_lr_sol.S,d_int_v,d_rho);
 
@@ -1366,9 +1366,9 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
     err_massGPUf << err_mass_CPU << endl;
 
     // Error in energy
-    coeff_one(d_lr_sol.V,d_we_v2,d_int_v);
+    integrate(d_lr_sol.V,d_we_v2,d_int_v);
 
-    coeff_one(d_lr_sol.V,d_we_w2,d_int_v2);
+    integrate(d_lr_sol.V,d_we_w2,d_int_v2);
 
     ptw_sum<<<(d_int_v.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_int_v.num_elements(),d_int_v.begin(),d_int_v2.begin());
 
@@ -1661,8 +1661,8 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
   std::function<double(double*,double*)> ip_vv = inner_product_from_const_weight(h_vv[0]*h_vv[1], dvv_mult);
 
   // Initial mass
-  coeff_one(lr_sol.X,h_xx[0]*h_xx[1],int_x);
-  coeff_one(lr_sol.V,h_vv[0]*h_vv[1],int_v);
+  integrate(lr_sol.X,h_xx[0]*h_xx[1],int_x);
+  integrate(lr_sol.V,h_vv[0]*h_vv[1],int_v);
 
   matvec(lr_sol.S,int_v,rho);
 
@@ -1671,7 +1671,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
   }
 
   // Initial energy
-  coeff_one(lr_sol.V,h_vv[0]*h_vv[1],rho);
+  integrate(lr_sol.V,h_vv[0]*h_vv[1],rho);
   rho *= -1.0;
   matmul(lr_sol.X,lr_sol.S,tmpX);
   matvec(tmpX,rho,ef);
@@ -1727,8 +1727,8 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
     we_w2(j) = pow(w(j),2) * h_vv[0] * h_vv[1];
   }
 
-  coeff_one(lr_sol.V,we_v2,int_v);
-  coeff_one(lr_sol.V,we_w2,int_v2);
+  integrate(lr_sol.V,we_v2,int_v);
+  integrate(lr_sol.V,we_w2,int_v2);
 
   int_v += int_v2;
 
@@ -1990,7 +1990,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
     // Electric field
 
-    coeff_one(lr_sol_e.V,-h_vv[0]*h_vv[1],rho);
+    integrate(lr_sol_e.V,-h_vv[0]*h_vv[1],rho);
 
     matvec(lr_sol_e.X,rho,ef);
 
@@ -2043,8 +2043,8 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
     // Main of K step
 
-    coeff(lr_sol_e.V, lr_sol_e.V, we_v.begin(), C1v);
-    coeff(lr_sol_e.V, lr_sol_e.V, we_w.begin(), C1w);
+    coeff(lr_sol_e.V, lr_sol_e.V, we_v, C1v);
+    coeff(lr_sol_e.V, lr_sol_e.V, we_w, C1w);
 
     fftw_execute_dft_r2c(plans_vv[0],lr_sol_e.V.begin(),(fftw_complex*)tmpVhat.begin());
 
@@ -2206,8 +2206,8 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
       we_y(j) = efy(j) * h_xx[0] * h_xx[1];
     }
 
-    coeff(lr_sol_e.X, lr_sol_e.X, we_x.begin(), D1x);
-    coeff(lr_sol_e.X, lr_sol_e.X, we_y.begin(), D1y);
+    coeff(lr_sol_e.X, lr_sol_e.X, we_x, D1x);
+    coeff(lr_sol_e.X, lr_sol_e.X, we_y, D1y);
 
     fftw_execute_dft_r2c(plans_xx[0],lr_sol_e.X.begin(),(fftw_complex*)tmpXhat.begin());
 
@@ -2439,7 +2439,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
     // Electric field at time tau/2
 
-    coeff_one(lr_sol_e.V,-h_vv[0]*h_vv[1],rho);
+    integrate(lr_sol_e.V,-h_vv[0]*h_vv[1],rho);
     matvec(lr_sol_e.X,rho,ef);
 
     ef += 1.0;
@@ -2646,8 +2646,8 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
     }
 
 
-    coeff(lr_sol.X, lr_sol.X, we_x.begin(), D1x);
-    coeff(lr_sol.X, lr_sol.X, we_y.begin(), D1y);
+    coeff(lr_sol.X, lr_sol.X, we_x, D1x);
+    coeff(lr_sol.X, lr_sol.X, we_y, D1y);
 
     fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)tmpXhat.begin());
 
@@ -2901,8 +2901,8 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
     // Half step S (until tau/2)
 
-    coeff(lr_sol.V, lr_sol.V, we_v.begin(), C1v);
-    coeff(lr_sol.V, lr_sol.V, we_w.begin(), C1w);
+    coeff(lr_sol.V, lr_sol.V, we_v, C1v);
+    coeff(lr_sol.V, lr_sol.V, we_w, C1w);
 
     fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)tmpVhat.begin());
 
@@ -3156,9 +3156,9 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
     gt::stop("Restarted integration CPU");
 
     // Error Mass
-    coeff_one(lr_sol.X,h_xx[0]*h_xx[1],int_x);
+    integrate(lr_sol.X,h_xx[0]*h_xx[1],int_x);
 
-    coeff_one(lr_sol.V,h_vv[0]*h_vv[1],int_v);
+    integrate(lr_sol.V,h_vv[0]*h_vv[1],int_v);
 
     matvec(lr_sol.S,int_v,rho);
 
@@ -3173,9 +3173,9 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
     // Error energy
 
-    coeff_one(lr_sol.V,we_v2,int_v);
+    integrate(lr_sol.V,we_v2,int_v);
 
-    coeff_one(lr_sol.V,we_w2,int_v2);
+    integrate(lr_sol.V,we_w2,int_v2);
 
     int_v += int_v2;
 
@@ -3206,7 +3206,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
     gt::start("Lie splitting for electric field GPU");
 
-    coeff_one(d_lr_sol_e.V,-h_vv[0]*h_vv[1],d_rho);
+    integrate(d_lr_sol_e.V,-h_vv[0]*h_vv[1],d_rho);
 
     matvec(d_lr_sol_e.X,d_rho,d_ef);
 
@@ -3233,8 +3233,8 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
     // Main of K step
 
-    coeff(d_lr_sol_e.V, d_lr_sol_e.V, d_we_v.begin(), d_C1v);
-    coeff(d_lr_sol_e.V, d_lr_sol_e.V, d_we_w.begin(), d_C1w);
+    coeff(d_lr_sol_e.V, d_lr_sol_e.V, d_we_v, d_C1v);
+    coeff(d_lr_sol_e.V, d_lr_sol_e.V, d_we_w, d_C1w);
 
     cufftExecD2Z(d_plans_vv[0],d_lr_sol_e.V.begin(),(cufftDoubleComplex*)d_tmpVhat.begin());
 
@@ -3342,9 +3342,9 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
     ptw_mult_scal<<<(d_efx.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efx.num_elements(), d_efx.begin(), h_xx[0] * h_xx[1], d_we_x.begin());
     ptw_mult_scal<<<(d_efy.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efy.num_elements(), d_efy.begin(), h_xx[0] * h_xx[1], d_we_y.begin());
 
-    coeff(d_lr_sol_e.X, d_lr_sol_e.X, d_we_x.begin(), d_D1x);
+    coeff(d_lr_sol_e.X, d_lr_sol_e.X, d_we_x, d_D1x);
 
-    coeff(d_lr_sol_e.X, d_lr_sol_e.X, d_we_y.begin(), d_D1y);
+    coeff(d_lr_sol_e.X, d_lr_sol_e.X, d_we_y, d_D1y);
 
     cufftExecD2Z(d_plans_xx[0],d_lr_sol_e.X.begin(),(cufftDoubleComplex*)d_tmpXhat.begin()); // check if CUDA preserves input and eventually adapt
 
@@ -3514,7 +3514,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
     // Electric field at time tau/2
 
-    coeff_one(d_lr_sol_e.V,-h_vv[0]*h_vv[1],d_rho);
+    integrate(d_lr_sol_e.V,-h_vv[0]*h_vv[1],d_rho);
 
     matvec(d_lr_sol_e.X,d_rho,d_ef);
 
@@ -3629,8 +3629,8 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
     ptw_mult_scal<<<(d_efx.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efx.num_elements(), d_efx.begin(), h_xx[0] * h_xx[1], d_we_x.begin());
     ptw_mult_scal<<<(d_efy.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_efy.num_elements(), d_efy.begin(), h_xx[0] * h_xx[1], d_we_y.begin());
 
-    coeff(d_lr_sol.X, d_lr_sol.X, d_we_x.begin(), d_D1x);
-    coeff(d_lr_sol.X, d_lr_sol.X, d_we_y.begin(), d_D1y);
+    coeff(d_lr_sol.X, d_lr_sol.X, d_we_x, d_D1x);
+    coeff(d_lr_sol.X, d_lr_sol.X, d_we_y, d_D1y);
 
     cufftExecD2Z(d_plans_xx[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_tmpXhat.begin()); // check if CUDA preserves input and eventually adapt
 
@@ -3805,8 +3805,8 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
     // Half step S (until tau/2)
 
-    coeff(d_lr_sol.V, d_lr_sol.V, d_we_v.begin(), d_C1v);
-    coeff(d_lr_sol.V, d_lr_sol.V, d_we_w.begin(), d_C1w);
+    coeff(d_lr_sol.V, d_lr_sol.V, d_we_v, d_C1v);
+    coeff(d_lr_sol.V, d_lr_sol.V, d_we_w, d_C1w);
 
     cufftExecD2Z(d_plans_vv[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_tmpVhat.begin());
 
@@ -3989,9 +3989,9 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
     // Error in mass
 
-    coeff_one(d_lr_sol.X,h_xx[0]*h_xx[1],d_int_x);
+    integrate(d_lr_sol.X,h_xx[0]*h_xx[1],d_int_x);
 
-    coeff_one(d_lr_sol.V,h_vv[0]*h_vv[1],d_int_v);
+    integrate(d_lr_sol.V,h_vv[0]*h_vv[1],d_int_v);
 
     matvec(d_lr_sol.S,d_int_v,d_rho);
 
@@ -4004,9 +4004,9 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
     err_massGPUf << err_mass_CPU << endl;
 
     // Error in energy
-    coeff_one(d_lr_sol.V,d_we_v2,d_int_v);
+    integrate(d_lr_sol.V,d_we_v2,d_int_v);
 
-    coeff_one(d_lr_sol.V,d_we_w2,d_int_v2);
+    integrate(d_lr_sol.V,d_we_w2,d_int_v2);
 
     ptw_sum<<<(d_int_v.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_int_v.num_elements(),d_int_v.begin(),d_int_v2.begin());
 
@@ -4132,7 +4132,7 @@ int main(){
     jj+=2;
   }
 
-  vector<double*> X, V;
+  vector<const double*> X, V;
 
   Index dxx_mult = N_xx[0]*N_xx[1];
   Index dxxh_mult = N_xx[1]*(N_xx[0]/2 + 1);

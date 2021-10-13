@@ -57,12 +57,12 @@ TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
     array<double,4> v3 = {1.0,2.0,3.0,15.0};
 
 
-    vector<double*> X;
+    vector<const double*> X;
     X.push_back(x1.begin());
     X.push_back(x2.begin());
     X.push_back(x3.begin());
 
-    vector<double*> V;
+    vector<const double*> V;
     V.push_back(v1.begin());
     V.push_back(v2.begin());
     V.push_back(v3.begin());

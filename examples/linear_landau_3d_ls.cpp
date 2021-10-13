@@ -49,7 +49,7 @@ int main(){
     jj+=2;
   }
 
-  vector<double*> X, V;
+  vector<const double*> X, V;
 
   Index dxx_mult = N_xx[0]*N_xx[1]*N_xx[2];
   Index dxxh_mult = N_xx[2]*N_xx[1]*(N_xx[0]/2 + 1);
@@ -291,8 +291,8 @@ int main(){
 
   gt::start("Initialization QOI CPU");
   // Initial mass
-  coeff_one(lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],int_x);
-  coeff_one(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],int_v);
+  integrate(lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],int_x);
+  integrate(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],int_v);
 
   matvec(lr_sol.S,int_v,rho);
 
@@ -301,7 +301,7 @@ int main(){
   }
 
   // Initial energy
-  coeff_one(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],rho);
+  integrate(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],rho);
   rho *= -1.0;
   matvec(lr_sol.X,rho,ef);
   ef += 1.0;
@@ -349,12 +349,12 @@ int main(){
     we_u2(j) = pow(u(j),2) * h_vv[0] * h_vv[1] * h_vv[2];
   }
 
-  coeff_one(lr_sol.V,we_v2,int_v);
-  coeff_one(lr_sol.V,we_w2,int_v2);
+  integrate(lr_sol.V,we_v2,int_v);
+  integrate(lr_sol.V,we_w2,int_v2);
 
   int_v += int_v2;
 
-  coeff_one(lr_sol.V,we_u2,int_v2);
+  integrate(lr_sol.V,we_u2,int_v2);
 
   int_v += int_v2;
 
@@ -560,7 +560,7 @@ int main(){
     // Electric field
 
     //gt::start("Electric Field CPU - coeff");
-    coeff_one(lr_sol.V,-h_vv[0]*h_vv[1]*h_vv[2],rho);
+    integrate(lr_sol.V,-h_vv[0]*h_vv[1]*h_vv[2],rho);
 
     //gt::stop("Electric Field CPU - coeff");
 
@@ -991,8 +991,8 @@ int main(){
     //el_energyf << el_energy << endl;
 
     // Error Mass
-    coeff_one(lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],int_x);
-    coeff_one(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],int_v);
+    integrate(lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],int_x);
+    integrate(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],int_v);
 
     matvec(lr_sol.S,int_v,rho);
 
@@ -1007,12 +1007,12 @@ int main(){
 
     // Error in energy
 
-    coeff_one(lr_sol.V,we_v2,int_v);
-    coeff_one(lr_sol.V,we_w2,int_v2);
+    integrate(lr_sol.V,we_v2,int_v);
+    integrate(lr_sol.V,we_w2,int_v2);
 
     int_v += int_v2;
 
-    coeff_one(lr_sol.V,we_u2,int_v2);
+    integrate(lr_sol.V,we_u2,int_v2);
 
     int_v += int_v2;
 
@@ -1042,7 +1042,7 @@ int main(){
     gt::start("Electric Field GPU");
 
 //    gt::start("Electric Field GPU - coeff");
-    coeff_one(d_lr_sol.V,-h_vv[0]*h_vv[1]*h_vv[2],d_rho);
+    integrate(d_lr_sol.V,-h_vv[0]*h_vv[1]*h_vv[2],d_rho);
   //  cudaDeviceSynchronize();
   //  gt::stop("Electric Field GPU - coeff");
 
@@ -1500,8 +1500,8 @@ int main(){
     // Error mass
 
     //gt::start("Quantities GPU - mass - coeff");
-    coeff_one(d_lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],d_int_x);
-    coeff_one(d_lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],d_int_v);
+    integrate(d_lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],d_int_x);
+    integrate(d_lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],d_int_v);
 
     //cudaDeviceSynchronize();
     //gt::stop("Quantities GPU - mass - coeff");
@@ -1522,9 +1522,9 @@ int main(){
     // Error energy
 
     //gt::start("Quantities GPU - energy - coeff");
-    coeff_one(d_lr_sol.V,d_we_v2,d_int_v);
-    coeff_one(d_lr_sol.V,d_we_w2,d_int_v2);
-    coeff_one(d_lr_sol.V,d_we_u2,d_int_v3);
+    integrate(d_lr_sol.V,d_we_v2,d_int_v);
+    integrate(d_lr_sol.V,d_we_w2,d_int_v2);
+    integrate(d_lr_sol.V,d_we_u2,d_int_v3);
 
     //cudaDeviceSynchronize();
     //gt::stop("Quantities GPU - energy - coeff");

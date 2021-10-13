@@ -33,7 +33,7 @@ template<class T>
 void set_const2(multi_array<T,2>& a, T alpha);
 
 template<class T>
-void ptw_mult_row(multi_array<T,2>& a, T* w, multi_array<T,2>& out);
+void ptw_mult_row(const multi_array<T,2>& a, const T* w, multi_array<T,2>& out);
 
 template<class T>
 void transpose_inplace(multi_array<T,2>& a);

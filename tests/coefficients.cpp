@@ -75,11 +75,13 @@ TEST_CASE( "coefficients", "[coefficients]" ) {
       }
     }
 
-    array<double,3> ww = {-1.0,2.0,5.0};
-    array<float,3> wwf = {-1.0,2.0,5.0};
+    multi_array<double,1> ww({3});
+    ww(0)=-1.0; ww(1)=2.0; ww(2)=5.0;
+    multi_array<float,1> wwf({3});
+    wwf(0)=-1.0; wwf(1)=2.0; wwf(2)=5.0;
 
-    coeff(aaa, bbb, ww.begin(), out3);
-    coeff(aaaf, bbbf, wwf.begin(), out3f);
+    coeff(aaa, bbb, ww, out3);
+    coeff(aaaf, bbbf, wwf, out3f);
 
     multi_array<double,2> R3({2,2});
     R3(0,0) = 34.0; R3(0,1) = 70.0;

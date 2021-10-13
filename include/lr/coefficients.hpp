@@ -3,43 +3,35 @@
 #include <generic/common.hpp>
 #include <generic/storage.hpp>
 #include <generic/matrix.hpp>
-/*
-template<class T, size_t d1, size_t d2>
-void coeff(multi_array<T,d1>& a, multi_array<T,d2>& b, T w, multi_array<T,d1+d2-2>& out);
 
-template<class T, size_t d1, size_t d2>
-void coeff(multi_array<T,d1>& a, multi_array<T,d2>& b, T* w, multi_array<T,d1+d2-2>& out);
-
-template<class T, size_t d1>
-void coeff_one(multi_array<T,d1>& a, T* w, multi_array<T,1>& out);
-
-template<class T, size_t d1>
-void coeff_one(multi_array<T,d1>& a, T w, multi_array<T,1>& out);
+/* Computes a low-rank coefficient that approximates \int a_i(x) b_j(x) \,dx.
+ *
+ * This functions assumes that w is a constant weight.
 */
 template<class T>
-void coeff(multi_array<T,2>& a, multi_array<T,2>& b, T w, multi_array<T,2>& out);
+void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, T w, multi_array<T,2>& out);
 
-template<class T>
-void coeff(multi_array<T,2>& a, multi_array<T,2>& b, T* w, multi_array<T,2>& out);
-
-template<class T>
-void coeff_one(multi_array<T,2>& a, T w, multi_array<T,1>& out);
-
-template<class T>
-void coeff_one(multi_array<T,2>& a, multi_array<T,1>& w, multi_array<T,1>& out);
-
-/*
-template<class T, size_t d1, size_t d2>
-void coeff_rho(multi_array<T,d1>& a, T* w, multi_array<T,1>& out);
-
-template<class T, size_t d1, size_t d2>
-void coeff_rho(multi_array<T,d1>& a, T w, multi_array<T,1>& out);
+/* Computes a low-rank coefficient that approximates \int a_i(x) b_j(x) \,dx.
+ *
+ * If a and b are of size (n,r) then w must be of size n.
+ * The weight w can be used as a pure weight (in a quadrature sense) but also
+ * can incooperate a x dependent function.
 */
-
-/*
-template<class T, size_t d1>
-void coeff3(multi_array<T,2>& a, multi_array<T,2>& b, multi_array<T,d1>& c, T w, multi_array<T,2>& out);
-
 template<class T>
-void coeff3(multi_array<T,2>& a, multi_array<T,2>& b,  multi_array<T,1>& c, T* w, multi_array<T,2>& out);
+void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, const multi_array<T,1>& w, multi_array<T,2>& out);
+
+/* Computes an approximation to the integral \int a_i(x) \,dx.
+*
+* This function assumes that w is a constant weight.
 */
+template<class T>
+void integrate(const multi_array<T,2>& a, T w, multi_array<T,1>& out);
+
+/* Computes an approximation to the integral \int a_i(x) \,dx.
+*
+*  If a is of size (n,r) then w must be a contiguous memory region of size n.
+*  The weight w can be used as a pure weight (in a quadrature sense) but also
+*  can incooperate a x dependent function.
+*/
+template<class T>
+void integrate(const multi_array<T,2>& a, const multi_array<T,1>& w, multi_array<T,1>& out);

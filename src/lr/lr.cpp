@@ -34,31 +34,7 @@ std::function<T(T*,T*)> inner_product_from_const_weight(T w, Index N) {
 };
 template std::function<double(double*,double*)> inner_product_from_const_weight(double w, Index N);
 template std::function<float(float*,float*)> inner_product_from_const_weight(float w, Index N);
-/*
-template<>
-void gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product) {
-  array<Index,2> dims = Q.shape();
-  for(Index j=0;j<dims[1];j++) {
-    for(Index k=0;k<j;k++) {
-      R(k,j) = inner_product(Q.extract({j}), Q.extract({k}));
-      cblas_daxpy(dims[0], -R(k,j), Q.extract({k}), 1, Q.extract({j}),1);
-      R(j,k) = 0.0;
-    }
-    R(j,j) = sqrt(inner_product(Q.extract({j}), Q.extract({j})));
 
-    if(std::abs(R(j,j)) > 1e-16){
-      cblas_dscal(dims[0],1.0/R(j,j),Q.extract({j}),1);
-    } else{
-            //for(Index ss = 0; ss < dims[0]; ss++){
-            //  Q(ss,j) = cos(2.0*M_PI*j*ss/double(dims[0]));
-            //}
-            //j--;
-          //  cout << "Warning: linearly dependent columns in Gram-Schmidt" << endl;
-
-    }
-  }
-};
-*/
 
 template<>
 void gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product) {
@@ -147,6 +123,7 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
 };
 
 // STILL TO BE TESTED
+/*
 void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double* w) { //with non-constant weight for inner product. Still to be tested
 
   Index n = Q.shape()[0];
@@ -168,31 +145,11 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
 
   }
 };
-
-#endif
-/*
-void gram_schmidt_gpu(Index n, int r, double* Q, double* R, double w) { //with constant weight for inner product
-  cublasHandle_t  handle;
-  cublasCreate (&handle);
-
-  for(Index j=0;j<r;j++) {
-    for(Index k=0;k<j;k++) {
-      cublasDdot (handle, n, Q + n*j, 1, Q + n*k, 1,R + k + r*j);
-      scale_unique<<<1,1>>>(R + k + r*j,w); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
-      dmaxpy<<<2,2>>>(n, R + k + r*j, Q + n*k, Q + n*j);
-      scale_unique<<<1,1>>>(R + j + r*k,0.0);
-    }
-      cublasDdot (handle, n, Q + n*j, 1, Q + n*j, 1,R + j + r*j);
-      scale_sqrt_unique<<<1,1>>>(R + j + r*j,w);
-      ptw_div_gs<<<2,2>>>(n, Q + n*j, R + j + r*j);
-
-  }
-
-  cublasDestroy(handle);
-
-};
 */
 
+#endif
+
+/*
 template<>
 void gram_schmidt(multi_array<float,2>& Q, multi_array<float,2>& R, std::function<float(float*,float*)> inner_product) {
   array<Index,2> dims = Q.shape();
@@ -209,67 +166,11 @@ void gram_schmidt(multi_array<float,2>& Q, multi_array<float,2>& R, std::functio
       cblas_sscal(dims[0],float(1.0/R(j,j)),Q.extract({j}),1);
     }
   }
-};
+};*/
 
-/*
-template<class T>
-void gram_schmidt(multi_array<T,2>& Q, multi_array<T,2>& R,
-std::function<T(T*,T*)> inner_product) {
-
-array<Index,2> dims = Q.shape();
-
-for(Index j=0;j<dims[1];j++) {
-for(int k=0;k<j;k++) {
-R(k,j) = inner_product(Q.extract(j), Q.extract(k));
-Q.extract(k) *= R(k,j);
-Q.extract(j) -= Q.extract(k);
-}
-R(j,j) = sqrt(inner_product(Q.extract(j), Q.extract(j)));
-Q.extract(j) /= R(j,j);
-}
-
-};
-*/
-/*
-template<class T>
-void ptw_prod_diff(T* v1, Index n, T* v2, T scal) {
-  std::transform(v1, v1+n,v2, v1, [&scal](T& a,T& b){return a-scal*b;} );
-};
-template void ptw_prod_diff(double* v1, Index n, double* v2, double scal);
-template void ptw_prod_diff(float* v1, Index n, float* v2, float scal);
 
 template<class T>
-void gram_schmidt(multi_array<T,2>& Q, multi_array<T,2>& R, std::function<T(T*,T*)> inner_product) {
-
-  array<Index,2> dims = Q.shape();
-
-  for(Index j=0;j<dims[1];j++) {
-    for(Index k=0;k<j;k++) {
-      R(k,j) = inner_product(Q.extract({j}), Q.extract({k}));
-      ptw_prod_diff(Q.extract({j}), dims[0], Q.extract({k}), R(k,j));
-    }
-    R(j,j) = sqrt(inner_product(Q.extract({j}), Q.extract({j})));
-    if(std::abs(R(j,j)) < T(10)*std::numeric_limits<T>::epsilon()){
-      cout << "Warning: linearly dependent columns in Gram-Schmidt" << endl;
-    } else{
-      ptw_div(Q.extract({j}), dims[0], R(j,j));
-    }
-  }
-
-};
-template void gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product);
-template void gram_schmidt(multi_array<float,2>& Q, multi_array<float,2>& R, std::function<float(float*,float*)> inner_product);
-*/
-/*
-template<class T>
-void ptw_div(T* v, Index n, T scal) {
-  std::transform(v, v+n, v, [&scal](T& a){return a/scal;} );
-};
-template void ptw_div(double* v, Index n, double scal);
-template void ptw_div(float* v, Index n, float scal);
-*/
-template<class T>
-void initialize(lr2<T>& lr, vector<T*> X, vector<T*> V, std::function<T(T*,T*)> inner_product_X, std::function<T(T*,T*)> inner_product_V) {
+void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, std::function<T(T*,T*)> inner_product_X, std::function<T(T*,T*)> inner_product_V) {
 
   int n_b = X.size();
   Index r = lr.rank();
@@ -298,14 +199,12 @@ void initialize(lr2<T>& lr, vector<T*> X, vector<T*> V, std::function<T(T*,T*)> 
       #endif
       for(Index i=0;i<lr.problem_size_X();i++) {
         lr.X(i, k) = distribution(generator);
-        //lr.X(i,k) = i;
       }
       #ifdef __OPENMP__
       #pragma omp parallel for
       #endif
       for(Index i=0;i<lr.problem_size_V();i++) {
         lr.V(i, k) = distribution(generator);
-        //lr.V(i,k) = i;
       }
     }
   }
@@ -330,5 +229,5 @@ void initialize(lr2<T>& lr, vector<T*> X, vector<T*> V, std::function<T(T*,T*)> 
   matmul_transb(X_R, V_R, lr.S);
 
 };
-template void initialize(lr2<double>& lr, vector<double*> X, vector<double*> V, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V);
-template void initialize(lr2<float>& lr, vector<float*> X, vector<float*> V, std::function<float(float*,float*)> inner_product_X, std::function<float(float*,float*)> inner_product_V);
+template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V);
+//template void initialize(lr2<float>& lr, vector<const float*> X, vector<const float*> V, std::function<float(float*,float*)> inner_product_X, std::function<float(float*,float*)> inner_product_V);

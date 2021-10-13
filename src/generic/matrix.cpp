@@ -87,14 +87,14 @@ template void set_const2(multi_array<double,2>&, double);
 template void set_const2(multi_array<float,2>&, float);
 
 template<class T>
-void ptw_mult_row(multi_array<T,2>& a, T* w, multi_array<T,2>& out){
+void ptw_mult_row(const multi_array<T,2>& a, const T* w, multi_array<T,2>& out){
   if(a.sl == stloc::host){
     Index N = a.shape()[0];
     #ifdef __OPENMP__
     #pragma omp parallel for collapse(2)
     for(int r = 0; r < a.shape()[1]; r++){
       for(Index i = 0; i < a.shape()[0]; i++){
-        T* ptr = a.extract({r});
+        const T* ptr = a.extract({r});
         out(i,r) = ptr[i]*w[i];
       }
     }
@@ -118,10 +118,10 @@ void ptw_mult_row(multi_array<T,2>& a, T* w, multi_array<T,2>& out){
   }
 
 }
-template void ptw_mult_row(multi_array<double,2>&, double*, multi_array<double,2>&);
-template void ptw_mult_row(multi_array<float,2>&, float*, multi_array<float,2>&);
-template void ptw_mult_row(multi_array<complex<double>,2>&, complex<double>*, multi_array<complex<double>,2>&);
-template void ptw_mult_row(multi_array<complex<float>,2>&, complex<float>*, multi_array<complex<float>,2>&);
+template void ptw_mult_row(const multi_array<double,2>&, const double*, multi_array<double,2>&);
+template void ptw_mult_row(const multi_array<float,2>&, const float*, multi_array<float,2>&);
+template void ptw_mult_row(const multi_array<complex<double>,2>&, const complex<double>*, multi_array<complex<double>,2>&);
+template void ptw_mult_row(const multi_array<complex<float>,2>&, const complex<float>*, multi_array<complex<float>,2>&);
 
 
 template<class T> // kernel?

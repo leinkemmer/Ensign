@@ -59,3 +59,25 @@ T phi2_im(T a) { // use it only for purely imaginary
 #ifdef __CUDACC__
 void* gpu_malloc(size_t size);
 #endif
+
+
+// parser for command line arguments separated by whitespace
+template<size_t d>
+array<Index,d> parse(string s) {
+    array<Index,d> out;
+    std::istringstream iss(s);
+    for(size_t i=0;i<d;i++) {
+        if(iss.eof()) {
+            cout << "ERROR: not enough dof provided to parse" << endl;
+            exit(1);
+        }
+        iss >> out[i];
+    }
+
+    if(!iss.eof()) {
+        cout << "ERROR: to many dof provided to parse" << endl;
+        exit(1);
+    }
+    return out;
+}
+

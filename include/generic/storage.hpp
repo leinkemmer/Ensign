@@ -100,7 +100,7 @@ struct multi_array {
     }
   }
 
-  Index linear_idx(array<Index,d> idx) {
+  Index linear_idx(array<Index,d> idx) const {
     Index k=0;
     Index stride = 1;
     for(size_t i=0;i<d;i++) {
@@ -139,6 +139,14 @@ struct multi_array {
     idx[0] = 0;
     return &v[linear_idx(idx)];
   }
+
+  const T* extract(array<Index,d-1> idx_r) const {
+    array<Index,d> idx;
+    std::copy(std::begin(idx_r), std::end(idx_r), std::begin(idx)+1);
+    idx[0] = 0;
+    return &v[linear_idx(idx)];
+  }
+
 
   array<Index,d> shape() const {
     return e;
