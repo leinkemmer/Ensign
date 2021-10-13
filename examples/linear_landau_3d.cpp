@@ -5,11 +5,14 @@
 #include <generic/kernels.hpp>
 #include <generic/timer.hpp>
 
+#include <cxxopts.hpp>
 
 #ifdef __CUDACC__
 cublasHandle_t  handle;
 cublasHandle_t handle_dot;
 #endif
+
+bool CPU;
 
 lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int r,double tstar, Index nsteps, int nsteps_split, int nsteps_ee, int nsteps_rk4, array<double,6> lim_xx, array<double,6> lim_vv, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_xx, array<fftw_plan,2> plans_vv){
   double tau = tstar/nsteps;
@@ -281,13 +284,11 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   double mass0 = 0.0;
   double energy0 = 0.0;
 
-  #ifdef __CPU__
   double mass = 0.0;
   double energy = 0.0;
   double el_energy = 0.0;
   double err_mass = 0.0;
   double err_energy = 0.0;
-  #endif
 
   // Initialization
   std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(h_xx[0]*h_xx[1]*h_xx[2], dxx_mult);
@@ -406,35 +407,32 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   }
   gt::stop("Computation initial QOI CPU");
 
-  #ifdef __CPU__
-
   ofstream el_energyf;
   ofstream err_massf;
   ofstream err_energyf;
+  if(CPU) {
+    string str = "../../plots/el_energy_order1_";
+    str += to_string(nsteps);
+    str += "_3d.txt";
+    el_energyf.open(str);
 
-  string str = "../../plots/el_energy_order1_";
-  str += to_string(nsteps);
-  str += "_3d.txt";
-  el_energyf.open(str);
+    str = "../../plots/err_mass_order1_";
+    str += to_string(nsteps);
+    str += "_3d.txt";
+    err_massf.open(str);
 
-  str = "../../plots/err_mass_order1_";
-  str += to_string(nsteps);
-  str += "_3d.txt";
-  err_massf.open(str);
+    str = "../../plots/err_energy_order1_";
+    str += to_string(nsteps);
+    str += "_3d.txt";
+    err_energyf.open(str);
 
-  str = "../../plots/err_energy_order1_";
-  str += to_string(nsteps);
-  str += "_3d.txt";
-  err_energyf.open(str);
+    el_energyf.precision(16);
+    err_massf.precision(16);
+    err_energyf.precision(16);
 
-  el_energyf.precision(16);
-  err_massf.precision(16);
-  err_energyf.precision(16);
-
-  el_energyf << tstar << endl;
-  el_energyf << tau << endl;
-
-  #endif
+    el_energyf << tstar << endl;
+    el_energyf << tau << endl;
+  }
 
   //// FOR GPU ///
 
@@ -716,595 +714,528 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
     // CPU
 
-    #ifdef __CPU__
+    if(CPU) {
+      gt::start("Main loop CPU");
 
-    gt::start("Main loop CPU");
+      /* K step */
 
-    /* K step */
+      tmpX = lr_sol.X;
+      matmul(tmpX,lr_sol.S,lr_sol.X);
 
-    tmpX = lr_sol.X;
-    matmul(tmpX,lr_sol.S,lr_sol.X);
+      gt::start("Electric Field CPU");
 
-    gt::start("Electric Field CPU");
+      // Electric field
 
-    // Electric field
+      coeff_one(lr_sol.V,-h_vv[0]*h_vv[1]*h_vv[2],rho);
+      matvec(lr_sol.X,rho,ef);
+      ef += 1.0;
+      fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
 
-    coeff_one(lr_sol.V,-h_vv[0]*h_vv[1]*h_vv[2],rho);
-    matvec(lr_sol.X,rho,ef);
-    ef += 1.0;
-    fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
-
-    //gt::start("Electric Field CPU - ptw");
-    #ifdef __OPENMP__
-    #pragma omp parallel for
-    for(Index k = 0; k < N_xx[2]; k++){
-      for(Index j = 0; j < N_xx[1]; j++){
-        for(Index i = 0; i < (N_xx[0]/2+1); i++){
-          if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-          if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-          complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-          complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-          complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-          Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-          efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
-          efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-          efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-        }
-      }
-    }
-    #else
-    for(Index k = 0; k < N_xx[2]; k++){
-      if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-      for(Index j = 0; j < N_xx[1]; j++){
-        if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-        for(Index i = 0; i < (N_xx[0]/2+1); i++){
-          complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-          complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-          complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-          Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-          efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
-          efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-          efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-        }
-      }
-    }
-    #endif
-
-    #ifdef __OPENMP__
-    #pragma omp parallel for
-    #endif
-    for(Index k = 0; k < (N_xx[2]/2 + 1); k += (N_xx[2]/2)){
-      for(Index j = 0; j < (N_xx[1]/2 + 1); j += (N_xx[1]/2)){
-        efhatx(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
-        efhaty(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
-        efhatz(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
-      }
-    }
-    //gt::stop("Electric Field CPU - ptw");
-
-    fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
-    fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
-    fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatz.begin(),efz.begin());
-
-    gt::stop("Electric Field CPU");
-
-    // Main of K step
-
-    gt::start("C coeff CPU");
-    coeff(lr_sol.V, lr_sol.V, we_v.begin(), C1v);
-    coeff(lr_sol.V, lr_sol.V, we_w.begin(), C1w);
-    coeff(lr_sol.V, lr_sol.V, we_u.begin(), C1u);
-
-    fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)tmpVhat.begin());
-
-    ptw_mult_row(tmpVhat,lambdav_n.begin(),dVhat_v);
-    ptw_mult_row(tmpVhat,lambdaw_n.begin(),dVhat_w);
-    ptw_mult_row(tmpVhat,lambdau_n.begin(),dVhat_u);
-
-    fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_v.begin(),dV_v.begin());
-    fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_w.begin(),dV_w.begin());
-    fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_u.begin(),dV_u.begin());
-
-    coeff(lr_sol.V, dV_v, h_vv[0]*h_vv[1]*h_vv[2], C2v);
-    coeff(lr_sol.V, dV_w, h_vv[0]*h_vv[1]*h_vv[2], C2w);
-    coeff(lr_sol.V, dV_u, h_vv[0]*h_vv[1]*h_vv[2], C2u);
-    gt::stop("C coeff CPU");
-
-    gt::start("Schur C CPU");
-    schur(C1v, Tv, dcv_r, lwork);
-    schur(C1w, Tw, dcw_r, lwork);
-    schur(C1u, Tu, dcu_r, lwork);
-
-    Tv.to_cplx(Tvc);
-    Tw.to_cplx(Twc);
-    Tu.to_cplx(Tuc);
-    C2v.to_cplx(C2vc);
-    C2w.to_cplx(C2wc);
-    C2u.to_cplx(C2uc);
-
-    gt::stop("Schur C CPU");
-
-    gt::start("K step CPU");
-
-    // Internal splitting
-    for(Index ii = 0; ii < nsteps_split; ii++){
-      // Full step -- Exact solution
-
-      //gt::start("First split K CPU");
-      fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
-
-      matmul(Khat,Tvc,Mhat);
-
+      //gt::start("Electric Field CPU - ptw");
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      #endif
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split*lambdax*dcv_r(rr));
-            }
-          }
-        }
-      }
-
-
-      matmul_transb(Mhat,Tvc,Khat);
-
-      //gt::stop("First split K CPU");
-      // Full step -- Exact solution
-
-      //gt::start("Second split K CPU");
-      matmul(Khat,Twc,Mhat);
-
-      #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split*lambday*dcw_r(rr))*ncxx;
-            }
-          }
-        }
-      }
-      #else
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
+      #pragma omp parallel for
+      for(Index k = 0; k < N_xx[2]; k++){
+        for(Index j = 0; j < N_xx[1]; j++){
+          for(Index i = 0; i < (N_xx[0]/2+1); i++){
+            if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
             if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split*lambday*dcw_r(rr))*ncxx;
-            }
-          }
-        }
-      }
-      #endif
-
-      matmul_transb(Mhat,Twc,Khat);
-
-      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
-
-      //gt::stop("Second split K CPU");
-
-      // Full step --
-
-      //gt::start("Third split K CPU");
-      fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
-
-      matmul(Khat,Tuc,Mhat);
-
-      for(Index jj = 0; jj < nsteps_ee; jj++){
-
-        //gt::start("First stage Third split K CPU");
-        ptw_mult_row(lr_sol.X,efx.begin(),Kex);
-        ptw_mult_row(lr_sol.X,efy.begin(),Key);
-        ptw_mult_row(lr_sol.X,efz.begin(),Kez);
-
-        fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
-        fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
-        fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
-
-        matmul_transb(Kexhat,C2vc,Khat);
-        matmul_transb(Keyhat,C2wc,tmpXhat);
-
-        Khat += tmpXhat;
-
-        matmul_transb(Kezhat,C2uc,tmpXhat);
-
-        Khat += tmpXhat;
-
-        matmul(Khat,Tuc,tmpXhat);
-
-        #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) *= exp(-tau_ee*lambdaz*dcu_r(rr));
-                Mhat(idx,rr) += tau_ee*phi1_im(-tau_ee*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) *= exp(-tau_ee*lambdaz*dcu_r(rr));
-                Mhat(idx,rr) += tau_ee*phi1_im(-tau_ee*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
-              }
-            }
-          }
-        }
-        #endif
-
-        matmul_transb(Mhat,Tuc,Khat);
-
-        Khat *= ncxx;
-
-        fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
-
-        //gt::stop("First stage Third split K CPU");
-
-        // Second stage
-
-        //gt::start("Second stage Third split K CPU");
-
-        ptw_mult_row(lr_sol.X,efx.begin(),Kex);
-        ptw_mult_row(lr_sol.X,efy.begin(),Key);
-        ptw_mult_row(lr_sol.X,efz.begin(),Kez);
-
-        fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
-        fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
-        fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
-
-        matmul_transb(Kexhat,C2vc,Khat);
-        matmul_transb(Keyhat,C2wc,Kexhat);
-
-        Kexhat += Khat;
-
-        matmul_transb(Kezhat,C2uc,Khat);
-
-        Kexhat += Khat;
-
-        matmul(Kexhat,Tuc,Khat);
-
-        Khat -= tmpXhat;
-
-        #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) += tau_ee*phi2_im(-tau_ee*lambdaz*dcu_r(rr))*Khat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) += tau_ee*phi2_im(-tau_ee*lambdaz*dcu_r(rr))*Khat(idx,rr);
-              }
-            }
-          }
-        }
-        #endif
-
-        matmul_transb(Mhat,Tuc,Khat);
-
-        Khat *= ncxx;
-
-        fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
-
-        //gt::stop("Second stage Third split K CPU");
-      }
-
-      //gt::stop("Third split K CPU");
-    }
-
-    gt::stop("K step CPU");
-
-    gt::start("Gram Schmidt K CPU");
-    gram_schmidt(lr_sol.X, lr_sol.S, ip_xx);
-    gt::stop("Gram Schmidt K CPU");
-
-
-    /* S Step */
-
-    gt::start("D coeff CPU");
-    #ifdef __OPENMP__
-    #pragma omp parallel for
-    #endif
-    for(Index j = 0; j < (dxx_mult); j++){
-      we_x(j) = efx(j) * h_xx[0] * h_xx[1] * h_xx[2];
-      we_y(j) = efy(j) * h_xx[0] * h_xx[1] * h_xx[2];
-      we_z(j) = efz(j) * h_xx[0] * h_xx[1] * h_xx[2];
-    }
-
-
-    coeff(lr_sol.X, lr_sol.X, we_x.begin(), D1x);
-    coeff(lr_sol.X, lr_sol.X, we_y.begin(), D1y);
-    coeff(lr_sol.X, lr_sol.X, we_z.begin(), D1z);
-
-
-    fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)tmpXhat.begin());
-
-    ptw_mult_row(tmpXhat,lambdax_n.begin(),dXhat_x);
-    ptw_mult_row(tmpXhat,lambday_n.begin(),dXhat_y);
-    ptw_mult_row(tmpXhat,lambdaz_n.begin(),dXhat_z);
-
-
-    fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_x.begin(),dX_x.begin());
-    fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_y.begin(),dX_y.begin());
-    fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_z.begin(),dX_z.begin());
-
-
-    coeff(lr_sol.X, dX_x, h_xx[0]*h_xx[1]*h_xx[2], D2x);
-    coeff(lr_sol.X, dX_y, h_xx[0]*h_xx[1]*h_xx[2], D2y);
-    coeff(lr_sol.X, dX_z, h_xx[0]*h_xx[1]*h_xx[2], D2z);
-    gt::stop("D coeff CPU");
-
-    gt::start("S step CPU");
-    // Rk4
-    for(Index jj = 0; jj< nsteps_rk4; jj++){
-      matmul_transb(lr_sol.S,C1v,tmpS);
-      matmul(D2x,tmpS,tmpS1);
-      matmul_transb(lr_sol.S,C1w,tmpS);
-      matmul(D2y,tmpS,Tw);
-      tmpS1 += Tw;
-      matmul_transb(lr_sol.S,C1u,tmpS);
-      matmul(D2z,tmpS,Tw);
-      tmpS1 += Tw;
-      matmul_transb(lr_sol.S,C2v,tmpS);
-      matmul(D1x,tmpS,Tw);
-      tmpS1 -= Tw;
-      matmul_transb(lr_sol.S,C2w,tmpS);
-      matmul(D1y,tmpS,Tw);
-      tmpS1 -= Tw;
-      matmul_transb(lr_sol.S,C2u,tmpS);
-      matmul(D1z,tmpS,Tw);
-      tmpS1 -= Tw;
-
-      Tv = tmpS1;
-      Tv *= (tau_rk4/2);
-      Tv += lr_sol.S;
-
-      matmul_transb(Tv,C1v,tmpS);
-      matmul(D2x,tmpS,tmpS2);
-      matmul_transb(Tv,C1w,tmpS);
-      matmul(D2y,tmpS,Tw);
-      tmpS2 += Tw;
-      matmul_transb(Tv,C1u,tmpS);
-      matmul(D2z,tmpS,Tw);
-      tmpS2 += Tw;
-      matmul_transb(Tv,C2v,tmpS);
-      matmul(D1x,tmpS,Tw);
-      tmpS2 -= Tw;
-      matmul_transb(Tv,C2w,tmpS);
-      matmul(D1y,tmpS,Tw);
-      tmpS2 -= Tw;
-      matmul_transb(Tv,C2u,tmpS);
-      matmul(D1z,tmpS,Tw);
-      tmpS2 -= Tw;
-
-      Tv = tmpS2;
-      Tv *= (tau_rk4/2);
-      Tv += lr_sol.S;
-
-      matmul_transb(Tv,C1v,tmpS);
-      matmul(D2x,tmpS,tmpS3);
-      matmul_transb(Tv,C1w,tmpS);
-      matmul(D2y,tmpS,Tw);
-      tmpS3 += Tw;
-      matmul_transb(Tv,C1u,tmpS);
-      matmul(D2z,tmpS,Tw);
-      tmpS3 += Tw;
-      matmul_transb(Tv,C2v,tmpS);
-      matmul(D1x,tmpS,Tw);
-      tmpS3 -= Tw;
-      matmul_transb(Tv,C2w,tmpS);
-      matmul(D1y,tmpS,Tw);
-      tmpS3 -= Tw;
-      matmul_transb(Tv,C2u,tmpS);
-      matmul(D1z,tmpS,Tw);
-      tmpS3 -= Tw;
-
-      Tv = tmpS3;
-      Tv *= tau_rk4;
-      Tv += lr_sol.S;
-
-      matmul_transb(Tv,C1v,tmpS);
-      matmul(D2x,tmpS,tmpS4);
-      matmul_transb(Tv,C1w,tmpS);
-      matmul(D2y,tmpS,Tw);
-      tmpS4 += Tw;
-      matmul_transb(Tv,C1u,tmpS);
-      matmul(D2z,tmpS,Tw);
-      tmpS4 += Tw;
-      matmul_transb(Tv,C2v,tmpS);
-      matmul(D1x,tmpS,Tw);
-      tmpS4 -= Tw;
-      matmul_transb(Tv,C2w,tmpS);
-      matmul(D1y,tmpS,Tw);
-      tmpS4 -= Tw;
-      matmul_transb(Tv,C2u,tmpS);
-      matmul(D1z,tmpS,Tw);
-      tmpS4 -= Tw;
-
-      tmpS2 *= 2.0;
-      tmpS3 *= 2.0;
-
-      tmpS1 += tmpS2;
-      tmpS1 += tmpS3;
-      tmpS1 += tmpS4;
-      tmpS1 *= (tau_rk4/6.0);
-
-      lr_sol.S += tmpS1;
-
-    }
-    gt::stop("S step CPU");
-
-    /* L step */
-
-    tmpV = lr_sol.V;
-
-    matmul_transb(tmpV,lr_sol.S,lr_sol.V);
-
-
-    gt::start("Schur L CPU");
-    schur(D1x, Tx, dd1x_r, lwork);
-    schur(D1y, Ty, dd1y_r, lwork);
-    schur(D1z, Tz, dd1z_r, lwork);
-
-    Tx.to_cplx(Txc);
-    Ty.to_cplx(Tyc);
-    Tz.to_cplx(Tzc);
-    D2x.to_cplx(D2xc);
-    D2y.to_cplx(D2yc);
-    D2z.to_cplx(D2zc);
-
-    gt::stop("Schur L CPU");
-
-    gt::start("L step CPU");
-
-    // Internal splitting
-    for(Index ii = 0; ii < nsteps_split; ii++){
-
-     // gt::start("First split L CPU");
-      // Full step -- Exact solution
-      fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
-
-      matmul(Lhat,Txc,Nhat);
-
-      #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      #endif
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_vv[2]; k++){
-          for(Index j = 0; j < N_vv[1]; j++){
-            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-              complex<double> lambdav = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i);
-              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-              Nhat(idx,rr) *= exp(tau_split*lambdav*dd1x_r(rr));
-            }
-          }
-        }
-      }
-
-
-      matmul_transb(Nhat,Txc,Lhat);
-
-      //gt::stop("First split L CPU");
-
-      //gt::start("Second split L CPU");
-      matmul(Lhat,Tyc,Nhat);
-
-      #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_vv[2]; k++){
-          for(Index j = 0; j < N_vv[1]; j++){
-            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-              if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
-              complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
-              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-              Nhat(idx,rr) *= exp(tau_split*lambdaw*dd1y_r(rr))*ncvv;
-            }
+            complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+            complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+            complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+            Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+            efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
+            efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
+            efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
           }
         }
       }
       #else
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_vv[2]; k++){
-          for(Index j = 0; j < N_vv[1]; j++){
-            if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
-            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-              complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
-              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+      for(Index k = 0; k < N_xx[2]; k++){
+        if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+        for(Index j = 0; j < N_xx[1]; j++){
+          if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+          for(Index i = 0; i < (N_xx[0]/2+1); i++){
+            complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+            complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+            complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
 
-              Nhat(idx,rr) *= exp(tau_split*lambdaw*dd1y_r(rr))*ncvv;
-            }
+            Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+            efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
+            efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
+            efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
           }
         }
       }
       #endif
 
-      matmul_transb(Nhat,Tyc,Lhat);
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
+      for(Index k = 0; k < (N_xx[2]/2 + 1); k += (N_xx[2]/2)){
+        for(Index j = 0; j < (N_xx[1]/2 + 1); j += (N_xx[1]/2)){
+          efhatx(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
+          efhaty(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
+          efhatz(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
+        }
+      }
+      //gt::stop("Electric Field CPU - ptw");
 
-      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
+      fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
+      fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
+      fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatz.begin(),efz.begin());
 
-      //gt::stop("Second split L CPU");
+      gt::stop("Electric Field CPU");
 
-      //gt::start("Third split L CPU");
-      // Full step --
-      fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
+      // Main of K step
 
-      matmul(Lhat,Tzc,Nhat);
+      gt::start("C coeff CPU");
+      coeff(lr_sol.V, lr_sol.V, we_v.begin(), C1v);
+      coeff(lr_sol.V, lr_sol.V, we_w.begin(), C1w);
+      coeff(lr_sol.V, lr_sol.V, we_u.begin(), C1u);
 
-      for(Index jj = 0; jj < nsteps_ee; jj++){
+      fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)tmpVhat.begin());
 
-        //gt::start("First stage Third split L CPU");
-        ptw_mult_row(lr_sol.V,v.begin(),Lv);
-        ptw_mult_row(lr_sol.V,w.begin(),Lw);
-        ptw_mult_row(lr_sol.V,u.begin(),Lu);
+      ptw_mult_row(tmpVhat,lambdav_n.begin(),dVhat_v);
+      ptw_mult_row(tmpVhat,lambdaw_n.begin(),dVhat_w);
+      ptw_mult_row(tmpVhat,lambdau_n.begin(),dVhat_u);
 
-        fftw_execute_dft_r2c(plans_vv[0],Lv.begin(),(fftw_complex*)Lvhat.begin());
-        fftw_execute_dft_r2c(plans_vv[0],Lw.begin(),(fftw_complex*)Lwhat.begin());
-        fftw_execute_dft_r2c(plans_vv[0],Lu.begin(),(fftw_complex*)Luhat.begin());
+      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_v.begin(),dV_v.begin());
+      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_w.begin(),dV_w.begin());
+      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_u.begin(),dV_u.begin());
 
-        matmul_transb(Lvhat,D2xc,Lhat);
+      coeff(lr_sol.V, dV_v, h_vv[0]*h_vv[1]*h_vv[2], C2v);
+      coeff(lr_sol.V, dV_w, h_vv[0]*h_vv[1]*h_vv[2], C2w);
+      coeff(lr_sol.V, dV_u, h_vv[0]*h_vv[1]*h_vv[2], C2u);
+      gt::stop("C coeff CPU");
 
-        matmul_transb(Lwhat,D2yc,tmpVhat);
+      gt::start("Schur C CPU");
+      schur(C1v, Tv, dcv_r, lwork);
+      schur(C1w, Tw, dcw_r, lwork);
+      schur(C1u, Tu, dcu_r, lwork);
 
-        Lhat += tmpVhat;
+      Tv.to_cplx(Tvc);
+      Tw.to_cplx(Twc);
+      Tu.to_cplx(Tuc);
+      C2v.to_cplx(C2vc);
+      C2w.to_cplx(C2wc);
+      C2u.to_cplx(C2uc);
 
-        matmul_transb(Luhat,D2zc,tmpVhat);
+      gt::stop("Schur C CPU");
 
-        Lhat += tmpVhat;
+      gt::start("K step CPU");
 
-        matmul(Lhat,Tzc,tmpVhat);
+      // Internal splitting
+      for(Index ii = 0; ii < nsteps_split; ii++){
+        // Full step -- Exact solution
+
+        //gt::start("First split K CPU");
+        fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
+
+        matmul(Khat,Tvc,Mhat);
+
+        #ifdef __OPENMP__
+        #pragma omp parallel for collapse(2)
+        #endif
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_xx[2]; k++){
+            for(Index j = 0; j < N_xx[1]; j++){
+              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+                Mhat(idx,rr) *= exp(-tau_split*lambdax*dcv_r(rr));
+              }
+            }
+          }
+        }
+
+
+        matmul_transb(Mhat,Tvc,Khat);
+
+        //gt::stop("First split K CPU");
+        // Full step -- Exact solution
+
+        //gt::start("Second split K CPU");
+        matmul(Khat,Twc,Mhat);
+
+        #ifdef __OPENMP__
+        #pragma omp parallel for collapse(2)
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_xx[2]; k++){
+            for(Index j = 0; j < N_xx[1]; j++){
+              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+                complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+                Mhat(idx,rr) *= exp(-tau_split*lambday*dcw_r(rr))*ncxx;
+              }
+            }
+          }
+        }
+        #else
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_xx[2]; k++){
+            for(Index j = 0; j < N_xx[1]; j++){
+              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+                Mhat(idx,rr) *= exp(-tau_split*lambday*dcw_r(rr))*ncxx;
+              }
+            }
+          }
+        }
+        #endif
+
+        matmul_transb(Mhat,Twc,Khat);
+
+        fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
+
+        //gt::stop("Second split K CPU");
+
+        // Full step --
+
+        //gt::start("Third split K CPU");
+        fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
+
+        matmul(Khat,Tuc,Mhat);
+
+        for(Index jj = 0; jj < nsteps_ee; jj++){
+
+          //gt::start("First stage Third split K CPU");
+          ptw_mult_row(lr_sol.X,efx.begin(),Kex);
+          ptw_mult_row(lr_sol.X,efy.begin(),Key);
+          ptw_mult_row(lr_sol.X,efz.begin(),Kez);
+
+          fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
+
+          matmul_transb(Kexhat,C2vc,Khat);
+          matmul_transb(Keyhat,C2wc,tmpXhat);
+
+          Khat += tmpXhat;
+
+          matmul_transb(Kezhat,C2uc,tmpXhat);
+
+          Khat += tmpXhat;
+
+          matmul(Khat,Tuc,tmpXhat);
+
+          #ifdef __OPENMP__
+          #pragma omp parallel for collapse(2)
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                  Mhat(idx,rr) *= exp(-tau_ee*lambdaz*dcu_r(rr));
+                  Mhat(idx,rr) += tau_ee*phi1_im(-tau_ee*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
+                }
+              }
+            }
+          }
+          #else
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                  Mhat(idx,rr) *= exp(-tau_ee*lambdaz*dcu_r(rr));
+                  Mhat(idx,rr) += tau_ee*phi1_im(-tau_ee*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
+                }
+              }
+            }
+          }
+          #endif
+
+          matmul_transb(Mhat,Tuc,Khat);
+
+          Khat *= ncxx;
+
+          fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
+
+          //gt::stop("First stage Third split K CPU");
+
+          // Second stage
+
+          //gt::start("Second stage Third split K CPU");
+
+          ptw_mult_row(lr_sol.X,efx.begin(),Kex);
+          ptw_mult_row(lr_sol.X,efy.begin(),Key);
+          ptw_mult_row(lr_sol.X,efz.begin(),Kez);
+
+          fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
+
+          matmul_transb(Kexhat,C2vc,Khat);
+          matmul_transb(Keyhat,C2wc,Kexhat);
+
+          Kexhat += Khat;
+
+          matmul_transb(Kezhat,C2uc,Khat);
+
+          Kexhat += Khat;
+
+          matmul(Kexhat,Tuc,Khat);
+
+          Khat -= tmpXhat;
+
+          #ifdef __OPENMP__
+          #pragma omp parallel for collapse(2)
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                  Mhat(idx,rr) += tau_ee*phi2_im(-tau_ee*lambdaz*dcu_r(rr))*Khat(idx,rr);
+                }
+              }
+            }
+          }
+          #else
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                  Mhat(idx,rr) += tau_ee*phi2_im(-tau_ee*lambdaz*dcu_r(rr))*Khat(idx,rr);
+                }
+              }
+            }
+          }
+          #endif
+
+          matmul_transb(Mhat,Tuc,Khat);
+
+          Khat *= ncxx;
+
+          fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
+
+          //gt::stop("Second stage Third split K CPU");
+        }
+
+        //gt::stop("Third split K CPU");
+      }
+
+      gt::stop("K step CPU");
+
+      gt::start("Gram Schmidt K CPU");
+      gram_schmidt(lr_sol.X, lr_sol.S, ip_xx);
+      gt::stop("Gram Schmidt K CPU");
+
+
+      /* S Step */
+
+      gt::start("D coeff CPU");
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
+      for(Index j = 0; j < (dxx_mult); j++){
+        we_x(j) = efx(j) * h_xx[0] * h_xx[1] * h_xx[2];
+        we_y(j) = efy(j) * h_xx[0] * h_xx[1] * h_xx[2];
+        we_z(j) = efz(j) * h_xx[0] * h_xx[1] * h_xx[2];
+      }
+
+
+      coeff(lr_sol.X, lr_sol.X, we_x.begin(), D1x);
+      coeff(lr_sol.X, lr_sol.X, we_y.begin(), D1y);
+      coeff(lr_sol.X, lr_sol.X, we_z.begin(), D1z);
+
+
+      fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)tmpXhat.begin());
+
+      ptw_mult_row(tmpXhat,lambdax_n.begin(),dXhat_x);
+      ptw_mult_row(tmpXhat,lambday_n.begin(),dXhat_y);
+      ptw_mult_row(tmpXhat,lambdaz_n.begin(),dXhat_z);
+
+
+      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_x.begin(),dX_x.begin());
+      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_y.begin(),dX_y.begin());
+      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_z.begin(),dX_z.begin());
+
+
+      coeff(lr_sol.X, dX_x, h_xx[0]*h_xx[1]*h_xx[2], D2x);
+      coeff(lr_sol.X, dX_y, h_xx[0]*h_xx[1]*h_xx[2], D2y);
+      coeff(lr_sol.X, dX_z, h_xx[0]*h_xx[1]*h_xx[2], D2z);
+      gt::stop("D coeff CPU");
+
+      gt::start("S step CPU");
+      // Rk4
+      for(Index jj = 0; jj< nsteps_rk4; jj++){
+        matmul_transb(lr_sol.S,C1v,tmpS);
+        matmul(D2x,tmpS,tmpS1);
+        matmul_transb(lr_sol.S,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+        tmpS1 += Tw;
+        matmul_transb(lr_sol.S,C1u,tmpS);
+        matmul(D2z,tmpS,Tw);
+        tmpS1 += Tw;
+        matmul_transb(lr_sol.S,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+        tmpS1 -= Tw;
+        matmul_transb(lr_sol.S,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+        tmpS1 -= Tw;
+        matmul_transb(lr_sol.S,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+        tmpS1 -= Tw;
+
+        Tv = tmpS1;
+        Tv *= (tau_rk4/2);
+        Tv += lr_sol.S;
+
+        matmul_transb(Tv,C1v,tmpS);
+        matmul(D2x,tmpS,tmpS2);
+        matmul_transb(Tv,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+        tmpS2 += Tw;
+        matmul_transb(Tv,C1u,tmpS);
+        matmul(D2z,tmpS,Tw);
+        tmpS2 += Tw;
+        matmul_transb(Tv,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+        tmpS2 -= Tw;
+        matmul_transb(Tv,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+        tmpS2 -= Tw;
+        matmul_transb(Tv,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+        tmpS2 -= Tw;
+
+        Tv = tmpS2;
+        Tv *= (tau_rk4/2);
+        Tv += lr_sol.S;
+
+        matmul_transb(Tv,C1v,tmpS);
+        matmul(D2x,tmpS,tmpS3);
+        matmul_transb(Tv,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+        tmpS3 += Tw;
+        matmul_transb(Tv,C1u,tmpS);
+        matmul(D2z,tmpS,Tw);
+        tmpS3 += Tw;
+        matmul_transb(Tv,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+        tmpS3 -= Tw;
+        matmul_transb(Tv,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+        tmpS3 -= Tw;
+        matmul_transb(Tv,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+        tmpS3 -= Tw;
+
+        Tv = tmpS3;
+        Tv *= tau_rk4;
+        Tv += lr_sol.S;
+
+        matmul_transb(Tv,C1v,tmpS);
+        matmul(D2x,tmpS,tmpS4);
+        matmul_transb(Tv,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+        tmpS4 += Tw;
+        matmul_transb(Tv,C1u,tmpS);
+        matmul(D2z,tmpS,Tw);
+        tmpS4 += Tw;
+        matmul_transb(Tv,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+        tmpS4 -= Tw;
+        matmul_transb(Tv,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+        tmpS4 -= Tw;
+        matmul_transb(Tv,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+        tmpS4 -= Tw;
+
+        tmpS2 *= 2.0;
+        tmpS3 *= 2.0;
+
+        tmpS1 += tmpS2;
+        tmpS1 += tmpS3;
+        tmpS1 += tmpS4;
+        tmpS1 *= (tau_rk4/6.0);
+
+        lr_sol.S += tmpS1;
+
+      }
+      gt::stop("S step CPU");
+
+      /* L step */
+
+      tmpV = lr_sol.V;
+
+      matmul_transb(tmpV,lr_sol.S,lr_sol.V);
+
+
+      gt::start("Schur L CPU");
+      schur(D1x, Tx, dd1x_r, lwork);
+      schur(D1y, Ty, dd1y_r, lwork);
+      schur(D1z, Tz, dd1z_r, lwork);
+
+      Tx.to_cplx(Txc);
+      Ty.to_cplx(Tyc);
+      Tz.to_cplx(Tzc);
+      D2x.to_cplx(D2xc);
+      D2y.to_cplx(D2yc);
+      D2z.to_cplx(D2zc);
+
+      gt::stop("Schur L CPU");
+
+      gt::start("L step CPU");
+
+      // Internal splitting
+      for(Index ii = 0; ii < nsteps_split; ii++){
+
+      // gt::start("First split L CPU");
+        // Full step -- Exact solution
+        fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
+
+        matmul(Lhat,Txc,Nhat);
+
+        #ifdef __OPENMP__
+        #pragma omp parallel for collapse(2)
+        #endif
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_vv[2]; k++){
+            for(Index j = 0; j < N_vv[1]; j++){
+              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                complex<double> lambdav = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i);
+                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                Nhat(idx,rr) *= exp(tau_split*lambdav*dd1x_r(rr));
+              }
+            }
+          }
+        }
+
+
+        matmul_transb(Nhat,Txc,Lhat);
+
+        //gt::stop("First split L CPU");
+
+        //gt::start("Second split L CPU");
+        matmul(Lhat,Tyc,Nhat);
 
         #ifdef __OPENMP__
         #pragma omp parallel for collapse(2)
@@ -1312,13 +1243,11 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
           for(Index k = 0; k < N_vv[2]; k++){
             for(Index j = 0; j < N_vv[1]; j++){
               for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
-
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
+                complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
                 Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
 
-                Nhat(idx,rr) *= exp(tau_ee*lambdau*dd1z_r(rr));
-                Nhat(idx,rr) -= tau_ee*phi1_im(tau_ee*lambdau*dd1z_r(rr))*tmpVhat(idx,rr);
+                Nhat(idx,rr) *= exp(tau_split*lambdaw*dd1y_r(rr))*ncvv;
               }
             }
           }
@@ -1326,163 +1255,231 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
         #else
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_vv[2]; k++){
-            if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
             for(Index j = 0; j < N_vv[1]; j++){
+              if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
               for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
                 Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
 
-                Nhat(idx,rr) *= exp(tau_ee*lambdau*dd1z_r(rr));
-                Nhat(idx,rr) -= tau_ee*phi1_im(tau_ee*lambdau*dd1z_r(rr))*tmpVhat(idx,rr);
+                Nhat(idx,rr) *= exp(tau_split*lambdaw*dd1y_r(rr))*ncvv;
               }
             }
           }
         }
         #endif
 
-        matmul_transb(Nhat,Tzc,Lhat);
-
-        Lhat *= ncvv;
+        matmul_transb(Nhat,Tyc,Lhat);
 
         fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
 
-        //gt::stop("First stage Third split L CPU");
+        //gt::stop("Second split L CPU");
 
-        // Second stage
+        //gt::start("Third split L CPU");
+        // Full step --
+        fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
 
-        //gt::start("Second stage Third split L CPU");
+        matmul(Lhat,Tzc,Nhat);
 
-        ptw_mult_row(lr_sol.V,v.begin(),Lv);
-        ptw_mult_row(lr_sol.V,w.begin(),Lw);
-        ptw_mult_row(lr_sol.V,u.begin(),Lu);
+        for(Index jj = 0; jj < nsteps_ee; jj++){
 
-        fftw_execute_dft_r2c(plans_vv[0],Lv.begin(),(fftw_complex*)Lvhat.begin());
-        fftw_execute_dft_r2c(plans_vv[0],Lw.begin(),(fftw_complex*)Lwhat.begin());
-        fftw_execute_dft_r2c(plans_vv[0],Lu.begin(),(fftw_complex*)Luhat.begin());
+          //gt::start("First stage Third split L CPU");
+          ptw_mult_row(lr_sol.V,v.begin(),Lv);
+          ptw_mult_row(lr_sol.V,w.begin(),Lw);
+          ptw_mult_row(lr_sol.V,u.begin(),Lu);
 
-        matmul_transb(Lvhat,D2xc,Lhat);
-        matmul_transb(Lwhat,D2yc,Lvhat);
+          fftw_execute_dft_r2c(plans_vv[0],Lv.begin(),(fftw_complex*)Lvhat.begin());
+          fftw_execute_dft_r2c(plans_vv[0],Lw.begin(),(fftw_complex*)Lwhat.begin());
+          fftw_execute_dft_r2c(plans_vv[0],Lu.begin(),(fftw_complex*)Luhat.begin());
 
-        Lvhat += Lhat;
+          matmul_transb(Lvhat,D2xc,Lhat);
 
-        matmul_transb(Luhat,D2zc,Lhat);
+          matmul_transb(Lwhat,D2yc,tmpVhat);
 
-        Lvhat += Lhat;
+          Lhat += tmpVhat;
 
-        matmul(Lvhat,Tzc,Lhat);
+          matmul_transb(Luhat,D2zc,tmpVhat);
 
-        Lhat -= tmpVhat;
+          Lhat += tmpVhat;
 
-        #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_vv[2]; k++){
-            for(Index j = 0; j < N_vv[1]; j++){
-              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+          matmul(Lhat,Tzc,tmpVhat);
 
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
-                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+          #ifdef __OPENMP__
+          #pragma omp parallel for collapse(2)
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_vv[2]; k++){
+              for(Index j = 0; j < N_vv[1]; j++){
+                for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                  if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
 
-                Nhat(idx,rr) -= tau_ee*phi2_im(tau_ee*lambdau*dd1z_r(rr))*Lhat(idx,rr);
+                  complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                  Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                  Nhat(idx,rr) *= exp(tau_ee*lambdau*dd1z_r(rr));
+                  Nhat(idx,rr) -= tau_ee*phi1_im(tau_ee*lambdau*dd1z_r(rr))*tmpVhat(idx,rr);
+                }
               }
             }
           }
-        }
-        #else
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_vv[2]; k++){
-            if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
-            for(Index j = 0; j < N_vv[1]; j++){
-              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
-                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+          #else
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_vv[2]; k++){
+              if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+              for(Index j = 0; j < N_vv[1]; j++){
+                for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                  complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                  Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
 
-                Nhat(idx,rr) -= tau_ee*phi2_im(tau_ee*lambdau*dd1z_r(rr))*Lhat(idx,rr);
+                  Nhat(idx,rr) *= exp(tau_ee*lambdau*dd1z_r(rr));
+                  Nhat(idx,rr) -= tau_ee*phi1_im(tau_ee*lambdau*dd1z_r(rr))*tmpVhat(idx,rr);
+                }
               }
             }
           }
+          #endif
+
+          matmul_transb(Nhat,Tzc,Lhat);
+
+          Lhat *= ncvv;
+
+          fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
+
+          //gt::stop("First stage Third split L CPU");
+
+          // Second stage
+
+          //gt::start("Second stage Third split L CPU");
+
+          ptw_mult_row(lr_sol.V,v.begin(),Lv);
+          ptw_mult_row(lr_sol.V,w.begin(),Lw);
+          ptw_mult_row(lr_sol.V,u.begin(),Lu);
+
+          fftw_execute_dft_r2c(plans_vv[0],Lv.begin(),(fftw_complex*)Lvhat.begin());
+          fftw_execute_dft_r2c(plans_vv[0],Lw.begin(),(fftw_complex*)Lwhat.begin());
+          fftw_execute_dft_r2c(plans_vv[0],Lu.begin(),(fftw_complex*)Luhat.begin());
+
+          matmul_transb(Lvhat,D2xc,Lhat);
+          matmul_transb(Lwhat,D2yc,Lvhat);
+
+          Lvhat += Lhat;
+
+          matmul_transb(Luhat,D2zc,Lhat);
+
+          Lvhat += Lhat;
+
+          matmul(Lvhat,Tzc,Lhat);
+
+          Lhat -= tmpVhat;
+
+          #ifdef __OPENMP__
+          #pragma omp parallel for collapse(2)
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_vv[2]; k++){
+              for(Index j = 0; j < N_vv[1]; j++){
+                for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                  if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+
+                  complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                  Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                  Nhat(idx,rr) -= tau_ee*phi2_im(tau_ee*lambdau*dd1z_r(rr))*Lhat(idx,rr);
+                }
+              }
+            }
+          }
+          #else
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_vv[2]; k++){
+              if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+              for(Index j = 0; j < N_vv[1]; j++){
+                for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                  complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                  Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                  Nhat(idx,rr) -= tau_ee*phi2_im(tau_ee*lambdau*dd1z_r(rr))*Lhat(idx,rr);
+                }
+              }
+            }
+          }
+          #endif
+
+          matmul_transb(Nhat,Tzc,Lhat);
+
+          Lhat *= ncvv;
+
+          fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
+
+          //gt::stop("Second stage Third split L CPU");
+
         }
-        #endif
 
-        matmul_transb(Nhat,Tzc,Lhat);
-
-        Lhat *= ncvv;
-
-        fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
-
-        //gt::stop("Second stage Third split L CPU");
+        //gt::stop("Third split L CPU");
 
       }
 
-      //gt::stop("Third split L CPU");
+      gt::stop("L step CPU");
+      
+      gt::start("Gram Schmidt L CPU");
+      gram_schmidt(lr_sol.V, lr_sol.S, ip_vv);
+      gt::stop("Gram Schmidt L CPU");
+
+      //gt::start("Transpose S CPU");
+      transpose_inplace(lr_sol.S);
+      //gt::stop("Transpose S CPU");
+
+      gt::stop("Main loop CPU");
+
+      gt::start("QOI CPU");
+      // Electric energy
+      el_energy = 0.0;
+      #ifdef __OPENMP__
+      #pragma omp parallel for reduction(+:el_energy)
+      #endif
+      for(Index ii = 0; ii < (dxx_mult); ii++){
+        el_energy += 0.5*(pow(efx(ii),2)+pow(efy(ii),2)+pow(efz(ii),2))*h_xx[0]*h_xx[1]*h_xx[2];
+      }
+
+      el_energyf << el_energy << endl;
+
+      // Error Mass
+      coeff_one(lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],int_x);
+      coeff_one(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],int_v);
+
+      matvec(lr_sol.S,int_v,rho);
+
+      mass = 0.0;
+      for(int ii = 0; ii < r; ii++){
+        mass += (int_x(ii)*rho(ii));
+      }
+
+      err_mass = abs(mass0-mass);
+
+      err_massf << err_mass << endl;
+
+      // Error in energy
+
+      coeff_one(lr_sol.V,we_v2,int_v);
+      coeff_one(lr_sol.V,we_w2,int_v2);
+
+      int_v += int_v2;
+
+      coeff_one(lr_sol.V,we_u2,int_v2);
+
+      int_v += int_v2;
+
+      matvec(lr_sol.S,int_v,rho);
+
+      energy = el_energy;
+      for(int ii = 0; ii < r; ii++){
+        energy += 0.5*(int_x(ii)*rho(ii));
+      }
+
+      err_energy = abs(energy0-energy);
+
+      err_energyf << err_energy << endl;
+
+      gt::stop("QOI CPU");
 
     }
-
-    gt::stop("L step CPU");
-    
-    gt::start("Gram Schmidt L CPU");
-    gram_schmidt(lr_sol.V, lr_sol.S, ip_vv);
-    gt::stop("Gram Schmidt L CPU");
-
-    //gt::start("Transpose S CPU");
-    transpose_inplace(lr_sol.S);
-    //gt::stop("Transpose S CPU");
-
-    gt::stop("Main loop CPU");
-
-    gt::start("QOI CPU");
-    // Electric energy
-    el_energy = 0.0;
-    #ifdef __OPENMP__
-    #pragma omp parallel for reduction(+:el_energy)
-    #endif
-    for(Index ii = 0; ii < (dxx_mult); ii++){
-      el_energy += 0.5*(pow(efx(ii),2)+pow(efy(ii),2)+pow(efz(ii),2))*h_xx[0]*h_xx[1]*h_xx[2];
-    }
-
-    el_energyf << el_energy << endl;
-
-    // Error Mass
-    coeff_one(lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],int_x);
-    coeff_one(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],int_v);
-
-    matvec(lr_sol.S,int_v,rho);
-
-    mass = 0.0;
-    for(int ii = 0; ii < r; ii++){
-      mass += (int_x(ii)*rho(ii));
-    }
-
-    err_mass = abs(mass0-mass);
-
-    err_massf << err_mass << endl;
-
-    // Error in energy
-
-    coeff_one(lr_sol.V,we_v2,int_v);
-    coeff_one(lr_sol.V,we_w2,int_v2);
-
-    int_v += int_v2;
-
-    coeff_one(lr_sol.V,we_u2,int_v2);
-
-    int_v += int_v2;
-
-    matvec(lr_sol.S,int_v,rho);
-
-    energy = el_energy;
-    for(int ii = 0; ii < r; ii++){
-      energy += 0.5*(int_x(ii)*rho(ii));
-    }
-
-    err_energy = abs(energy0-energy);
-
-    err_energyf << err_energy << endl;
-
-    gt::stop("QOI CPU");
-
-    #endif
 
     // GPU
 
@@ -2013,64 +2010,62 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
     gt::stop("QOI GPU");
 
     #endif
+  }
 
-    #ifdef __CPU__
+  if(CPU) {
     cout << "Electric energy: " << el_energy << endl;
-    #endif
+  } else {
     #ifdef __CUDACC__
     cout << "Electric energy GPU: " << d_el_energy_CPU << endl;
     #endif
+  }
 
-    #ifdef __CPU__
+  if(CPU) {
     cout << "Error in mass: " << err_mass << endl;
-    #endif
+  } else {
     #ifdef __CUDACC__
     cout << "Error in mass GPU: " << err_mass_CPU << endl;
     #endif
+  }
 
-    #ifdef __CPU__
+  if(CPU) {
     cout << "Error in energy: " << err_energy << endl;
-    #endif
+  } else {
     #ifdef __CUDACC__
     cout << "Error in energy GPU: " << err_energy_CPU << endl;
     #endif
-
-
   }
 
-  #ifdef __CPU__
-  el_energyf.close();
-  err_massf.close();
-  err_energyf.close();
-  #endif
+  if(CPU) {
+    el_energyf.close();
+    err_massf.close();
+    err_energyf.close();
+  } else {
+    #ifdef __CUDACC__
+    cublasDestroy(handle);
+    cublasDestroy(handle_dot);
+
+    destroy_plans(plans_d_e);
+    destroy_plans(d_plans_xx);
+    destroy_plans(d_plans_vv);
+
+    curandDestroyGenerator(gen);
+
+    el_energyGPUf.close();
+    err_massGPUf.close();
+    err_energyGPUf.close();
+    #endif
+  }
 
   #ifdef __CUDACC__
-  cublasDestroy(handle);
-  cublasDestroy(handle_dot);
-
-  destroy_plans(plans_d_e);
-  destroy_plans(d_plans_xx);
-  destroy_plans(d_plans_vv);
-
-  curandDestroyGenerator(gen);
-
-  el_energyGPUf.close();
-  err_massGPUf.close();
-  err_energyGPUf.close();
-  #endif
-
-  #ifdef __CPU__
-  return lr_sol;
-  #else
   lr_sol.X = d_lr_sol.X;
   lr_sol.S = d_lr_sol.S;
   lr_sol.V = d_lr_sol.V;
 
   cudaDeviceSynchronize();
-
-  return lr_sol;
   #endif
 
+  return lr_sol;
 }
 
 lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, int r,double tstar, Index nsteps, int nsteps_split, int nsteps_ee, int nsteps_rk4, array<double,6> lim_xx, array<double,6> lim_vv, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_xx, array<fftw_plan,2> plans_vv){
@@ -2348,13 +2343,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   double mass0 = 0.0;
   double energy0 = 0.0;
 
-  #ifdef __CPU__
   double mass = 0.0;
   double energy = 0.0;
   double el_energy = 0.0;
   double err_mass = 0.0;
   double err_energy = 0.0;
-  #endif
 
   // Initialization
   std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(h_xx[0]*h_xx[1]*h_xx[2], dxx_mult);
@@ -2468,35 +2461,32 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     energy0 += 0.5*(int_x(ii)*rho(ii));
   }
 
-  #ifdef __CPU__
-
   ofstream el_energyf;
   ofstream err_massf;
   ofstream err_energyf;
+  if(CPU) {
+    string str = "../../plots/el_energy_order2_";
+    str += to_string(nsteps);
+    str += "_3d.txt";
+    el_energyf.open(str);
 
-  string str = "../../plots/el_energy_order2_";
-  str += to_string(nsteps);
-  str += "_3d.txt";
-  el_energyf.open(str);
+    str = "../../plots/err_mass_order2_";
+    str += to_string(nsteps);
+    str += "_3d.txt";
+    err_massf.open(str);
 
-  str = "../../plots/err_mass_order2_";
-  str += to_string(nsteps);
-  str += "_3d.txt";
-  err_massf.open(str);
+    str = "../../plots/err_energy_order2_";
+    str += to_string(nsteps);
+    str += "_3d.txt";
+    err_energyf.open(str);
 
-  str = "../../plots/err_energy_order2_";
-  str += to_string(nsteps);
-  str += "_3d.txt";
-  err_energyf.open(str);
+    el_energyf.precision(16);
+    err_massf.precision(16);
+    err_energyf.precision(16);
 
-  el_energyf.precision(16);
-  err_massf.precision(16);
-  err_energyf.precision(16);
-
-  el_energyf << tstar << endl;
-  el_energyf << tau << endl;
-
-  #endif
+    el_energyf << tstar << endl;
+    el_energyf << tau << endl;
+  }
 
   // Additional stuff for second order
   lr2<double> lr_sol_e(r,{dxx_mult,dvv_mult});
@@ -2778,217 +2768,156 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     cout << "Time step " << i + 1 << " on " << nsteps << endl;
 
     // CPU
-    #ifdef __CPU__
+    if(CPU) {
+      gt::start("Total time CPU");
 
-    gt::start("Total time CPU");
+      /* Lie splitting to obtain the electric field */
 
-    /* Lie splitting to obtain the electric field */
+      lr_sol_e.X = lr_sol.X;
+      lr_sol_e.S = lr_sol.S;
+      lr_sol_e.V = lr_sol.V;
 
-    lr_sol_e.X = lr_sol.X;
-    lr_sol_e.S = lr_sol.S;
-    lr_sol_e.V = lr_sol.V;
+      // Full step K until tau/2
 
-    // Full step K until tau/2
+      gt::start("Lie splitting for electric field CPU");
 
-    gt::start("Lie splitting for electric field CPU");
+      tmpX = lr_sol_e.X;
+      matmul(tmpX,lr_sol_e.S,lr_sol_e.X);
 
-    tmpX = lr_sol_e.X;
-    matmul(tmpX,lr_sol_e.S,lr_sol_e.X);
+      // Electric field
 
-    // Electric field
+      coeff_one(lr_sol_e.V,-h_vv[0]*h_vv[1]*h_vv[2],rho);
 
-    coeff_one(lr_sol_e.V,-h_vv[0]*h_vv[1]*h_vv[2],rho);
+      matvec(lr_sol_e.X,rho,ef);
 
-    matvec(lr_sol_e.X,rho,ef);
+      ef += 1.0;
 
-    ef += 1.0;
-
-    fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
-
-    #ifdef __OPENMP__
-    #pragma omp parallel for
-    for(Index k = 0; k < N_xx[2]; k++){
-      for(Index j = 0; j < N_xx[1]; j++){
-        for(Index i = 0; i < (N_xx[0]/2+1); i++){
-          if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-          if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-          complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-          complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-          complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-          Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-          efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
-          efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-          efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-        }
-      }
-    }
-    #else
-    for(Index k = 0; k < N_xx[2]; k++){
-      if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-      for(Index j = 0; j < N_xx[1]; j++){
-        if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-        for(Index i = 0; i < (N_xx[0]/2+1); i++){
-          complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-          complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-          complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-          Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-          efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
-          efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-          efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-        }
-      }
-    }
-    #endif
-
-    #ifdef __OPENMP__
-    #pragma omp parallel for
-    #endif
-    for(Index k = 0; k < (N_xx[2]/2 + 1); k += (N_xx[2]/2)){
-      for(Index j = 0; j < (N_xx[1]/2 + 1); j += (N_xx[1]/2)){
-        efhatx(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
-        efhaty(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
-        efhatz(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
-      }
-    }
-
-    fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
-    fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
-    fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatz.begin(),efz.begin());
-
-    // Electric energy
-    el_energy = 0.0;
-    #ifdef __OPENMP__
-    #pragma omp parallel for reduction(+:el_energy)
-    #endif
-    for(Index ii = 0; ii < (dxx_mult); ii++){
-      el_energy += 0.5*(pow(efx(ii),2)+pow(efy(ii),2)+pow(efz(ii),2))*h_xx[0]*h_xx[1]*h_xx[2];
-    }
-
-    el_energyf << el_energy << endl;
-
-    // Main of K step
-
-    coeff(lr_sol_e.V, lr_sol_e.V, we_v.begin(), C1v);
-    coeff(lr_sol_e.V, lr_sol_e.V, we_w.begin(), C1w);
-    coeff(lr_sol_e.V, lr_sol_e.V, we_u.begin(), C1u);
-
-    fftw_execute_dft_r2c(plans_vv[0],lr_sol_e.V.begin(),(fftw_complex*)tmpVhat.begin());
-
-    ptw_mult_row(tmpVhat,lambdav_n.begin(),dVhat_v);
-    ptw_mult_row(tmpVhat,lambdaw_n.begin(),dVhat_w);
-    ptw_mult_row(tmpVhat,lambdau_n.begin(),dVhat_u);
-
-    fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_v.begin(),dV_v.begin());
-    fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_w.begin(),dV_w.begin());
-    fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_u.begin(),dV_u.begin());
-
-    coeff(lr_sol_e.V, dV_v, h_vv[0]*h_vv[1]*h_vv[2], C2v);
-    coeff(lr_sol_e.V, dV_w, h_vv[0]*h_vv[1]*h_vv[2], C2w);
-    coeff(lr_sol_e.V, dV_u, h_vv[0]*h_vv[1]*h_vv[2], C2u);
-
-    schur(C1v, Tv, dcv_r, lwork);
-    schur(C1w, Tw, dcw_r, lwork);
-    schur(C1u, Tu, dcu_r, lwork);
-
-    Tv.to_cplx(Tvc);
-    Tw.to_cplx(Twc);
-    Tu.to_cplx(Tuc);
-    C2v.to_cplx(C2vc);
-    C2w.to_cplx(C2wc);
-    C2u.to_cplx(C2uc);
-
-    // Internal splitting
-    for(Index ii = 0; ii < nsteps_split; ii++){
-      // Full step -- Exact solution
-
-      fftw_execute_dft_r2c(plans_xx[0],lr_sol_e.X.begin(),(fftw_complex*)Khat.begin());
-
-      matmul(Khat,Tvc,Mhat);
+      fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      #endif
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h*lambdax*dcv_r(rr));
-            }
-          }
-        }
-      }
+      #pragma omp parallel for
+      for(Index k = 0; k < N_xx[2]; k++){
+        for(Index j = 0; j < N_xx[1]; j++){
+          for(Index i = 0; i < (N_xx[0]/2+1); i++){
+            if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+            if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+            complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+            complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+            complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
 
-      matmul_transb(Mhat,Tvc,Khat);
+            Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
 
-      // Full step -- Exact solution
-
-      matmul(Khat,Twc,Mhat);
-
-      #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h*lambday*dcw_r(rr))*ncxx;
-            }
+            efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
+            efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
+            efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
           }
         }
       }
       #else
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h*lambday*dcw_r(rr))*ncxx;
-            }
+      for(Index k = 0; k < N_xx[2]; k++){
+        if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+        for(Index j = 0; j < N_xx[1]; j++){
+          if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+          for(Index i = 0; i < (N_xx[0]/2+1); i++){
+            complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+            complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+            complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+            Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+            efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
+            efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
+            efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
           }
         }
       }
       #endif
 
-      matmul_transb(Mhat,Twc,Khat);
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
+      for(Index k = 0; k < (N_xx[2]/2 + 1); k += (N_xx[2]/2)){
+        for(Index j = 0; j < (N_xx[1]/2 + 1); j += (N_xx[1]/2)){
+          efhatx(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
+          efhaty(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
+          efhatz(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
+        }
+      }
 
-      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol_e.X.begin());
+      fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
+      fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
+      fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatz.begin(),efz.begin());
 
-      // Full step --
+      // Electric energy
+      el_energy = 0.0;
+      #ifdef __OPENMP__
+      #pragma omp parallel for reduction(+:el_energy)
+      #endif
+      for(Index ii = 0; ii < (dxx_mult); ii++){
+        el_energy += 0.5*(pow(efx(ii),2)+pow(efy(ii),2)+pow(efz(ii),2))*h_xx[0]*h_xx[1]*h_xx[2];
+      }
 
-      fftw_execute_dft_r2c(plans_xx[0],lr_sol_e.X.begin(),(fftw_complex*)Khat.begin());
+      el_energyf << el_energy << endl;
 
-      matmul(Khat,Tuc,Mhat);
+      // Main of K step
 
-      for(Index jj = 0; jj < nsteps_ee; jj++){
+      coeff(lr_sol_e.V, lr_sol_e.V, we_v.begin(), C1v);
+      coeff(lr_sol_e.V, lr_sol_e.V, we_w.begin(), C1w);
+      coeff(lr_sol_e.V, lr_sol_e.V, we_u.begin(), C1u);
 
-        ptw_mult_row(lr_sol_e.X,efx.begin(),Kex);
-        ptw_mult_row(lr_sol_e.X,efy.begin(),Key);
-        ptw_mult_row(lr_sol_e.X,efz.begin(),Kez);
+      fftw_execute_dft_r2c(plans_vv[0],lr_sol_e.V.begin(),(fftw_complex*)tmpVhat.begin());
 
-        fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
-        fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
-        fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
+      ptw_mult_row(tmpVhat,lambdav_n.begin(),dVhat_v);
+      ptw_mult_row(tmpVhat,lambdaw_n.begin(),dVhat_w);
+      ptw_mult_row(tmpVhat,lambdau_n.begin(),dVhat_u);
 
-        matmul_transb(Kexhat,C2vc,Khat);
-        matmul_transb(Keyhat,C2wc,tmpXhat);
+      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_v.begin(),dV_v.begin());
+      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_w.begin(),dV_w.begin());
+      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_u.begin(),dV_u.begin());
 
-        Khat += tmpXhat;
+      coeff(lr_sol_e.V, dV_v, h_vv[0]*h_vv[1]*h_vv[2], C2v);
+      coeff(lr_sol_e.V, dV_w, h_vv[0]*h_vv[1]*h_vv[2], C2w);
+      coeff(lr_sol_e.V, dV_u, h_vv[0]*h_vv[1]*h_vv[2], C2u);
 
-        matmul_transb(Kezhat,C2uc,tmpXhat);
+      schur(C1v, Tv, dcv_r, lwork);
+      schur(C1w, Tw, dcw_r, lwork);
+      schur(C1u, Tu, dcu_r, lwork);
 
-        Khat += tmpXhat;
+      Tv.to_cplx(Tvc);
+      Tw.to_cplx(Twc);
+      Tu.to_cplx(Tuc);
+      C2v.to_cplx(C2vc);
+      C2w.to_cplx(C2wc);
+      C2u.to_cplx(C2uc);
 
-        matmul(Khat,Tuc,tmpXhat);
+      // Internal splitting
+      for(Index ii = 0; ii < nsteps_split; ii++){
+        // Full step -- Exact solution
+
+        fftw_execute_dft_r2c(plans_xx[0],lr_sol_e.X.begin(),(fftw_complex*)Khat.begin());
+
+        matmul(Khat,Tvc,Mhat);
+
+        #ifdef __OPENMP__
+        #pragma omp parallel for collapse(2)
+        #endif
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_xx[2]; k++){
+            for(Index j = 0; j < N_xx[1]; j++){
+              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+                Mhat(idx,rr) *= exp(-tau_split_h*lambdax*dcv_r(rr));
+              }
+            }
+          }
+        }
+
+        matmul_transb(Mhat,Tvc,Khat);
+
+        // Full step -- Exact solution
+
+        matmul(Khat,Twc,Mhat);
 
         #ifdef __OPENMP__
         #pragma omp parallel for collapse(2)
@@ -2996,14 +2925,10 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
           for(Index k = 0; k < N_xx[2]; k++){
             for(Index j = 0; j < N_xx[1]; j++){
               for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
+                if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+                complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
                 Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) *= exp(-tau_ee_h*lambdaz*dcu_r(rr));
-                Mhat(idx,rr) += tau_ee_h*phi1_im(-tau_ee_h*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
+                Mhat(idx,rr) *= exp(-tau_split_h*lambday*dcw_r(rr))*ncxx;
               }
             }
           }
@@ -3011,1025 +2936,1027 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
         #else
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_xx[2]; k++){
-            if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
             for(Index j = 0; j < N_xx[1]; j++){
+              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
               for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
+                complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
                 Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) *= exp(-tau_ee_h*lambdaz*dcu_r(rr));
-                Mhat(idx,rr) += tau_ee_h*phi1_im(-tau_ee_h*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
+                Mhat(idx,rr) *= exp(-tau_split_h*lambday*dcw_r(rr))*ncxx;
               }
             }
           }
         }
         #endif
 
-        matmul_transb(Mhat,Tuc,Khat);
-
-        Khat *= ncxx;
+        matmul_transb(Mhat,Twc,Khat);
 
         fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol_e.X.begin());
 
-        // Second stage
+        // Full step --
 
-        ptw_mult_row(lr_sol_e.X,efx.begin(),Kex);
-        ptw_mult_row(lr_sol_e.X,efy.begin(),Key);
-        ptw_mult_row(lr_sol_e.X,efz.begin(),Kez);
+        fftw_execute_dft_r2c(plans_xx[0],lr_sol_e.X.begin(),(fftw_complex*)Khat.begin());
 
-        fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
-        fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
-        fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
+        matmul(Khat,Tuc,Mhat);
 
-        matmul_transb(Kexhat,C2vc,Khat);
-        matmul_transb(Keyhat,C2wc,Kexhat);
+        for(Index jj = 0; jj < nsteps_ee; jj++){
 
-        Kexhat += Khat;
+          ptw_mult_row(lr_sol_e.X,efx.begin(),Kex);
+          ptw_mult_row(lr_sol_e.X,efy.begin(),Key);
+          ptw_mult_row(lr_sol_e.X,efz.begin(),Kez);
 
-        matmul_transb(Kezhat,C2uc,Khat);
+          fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
 
-        Kexhat += Khat;
+          matmul_transb(Kexhat,C2vc,Khat);
+          matmul_transb(Keyhat,C2wc,tmpXhat);
 
-        matmul(Kexhat,Tuc,Khat);
+          Khat += tmpXhat;
 
-        Khat -= tmpXhat;
+          matmul_transb(Kezhat,C2uc,tmpXhat);
+
+          Khat += tmpXhat;
+
+          matmul(Khat,Tuc,tmpXhat);
+
+          #ifdef __OPENMP__
+          #pragma omp parallel for collapse(2)
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                  Mhat(idx,rr) *= exp(-tau_ee_h*lambdaz*dcu_r(rr));
+                  Mhat(idx,rr) += tau_ee_h*phi1_im(-tau_ee_h*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
+                }
+              }
+            }
+          }
+          #else
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                  Mhat(idx,rr) *= exp(-tau_ee_h*lambdaz*dcu_r(rr));
+                  Mhat(idx,rr) += tau_ee_h*phi1_im(-tau_ee_h*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
+                }
+              }
+            }
+          }
+          #endif
+
+          matmul_transb(Mhat,Tuc,Khat);
+
+          Khat *= ncxx;
+
+          fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol_e.X.begin());
+
+          // Second stage
+
+          ptw_mult_row(lr_sol_e.X,efx.begin(),Kex);
+          ptw_mult_row(lr_sol_e.X,efy.begin(),Key);
+          ptw_mult_row(lr_sol_e.X,efz.begin(),Kez);
+
+          fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
+
+          matmul_transb(Kexhat,C2vc,Khat);
+          matmul_transb(Keyhat,C2wc,Kexhat);
+
+          Kexhat += Khat;
+
+          matmul_transb(Kezhat,C2uc,Khat);
+
+          Kexhat += Khat;
+
+          matmul(Kexhat,Tuc,Khat);
+
+          Khat -= tmpXhat;
+
+          #ifdef __OPENMP__
+          #pragma omp parallel for collapse(2)
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                  Mhat(idx,rr) += tau_ee_h*phi2_im(-tau_ee_h*lambdaz*dcu_r(rr))*Khat(idx,rr);
+                }
+              }
+            }
+          }
+          #else
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                  Mhat(idx,rr) += tau_ee_h*phi2_im(-tau_ee_h*lambdaz*dcu_r(rr))*Khat(idx,rr);
+                }
+              }
+            }
+          }
+          #endif
+
+          matmul_transb(Mhat,Tuc,Khat);
+
+          Khat *= ncxx;
+
+          fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol_e.X.begin());
+
+        }
+
+      }
+
+      gram_schmidt(lr_sol_e.X, lr_sol_e.S, ip_xx);
+
+      // Full step S until tau/2
+
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
+      for(Index j = 0; j < (dxx_mult); j++){
+        we_x(j) = efx(j) * h_xx[0] * h_xx[1] * h_xx[2];
+        we_y(j) = efy(j) * h_xx[0] * h_xx[1] * h_xx[2];
+        we_z(j) = efz(j) * h_xx[0] * h_xx[1] * h_xx[2];
+      }
+
+      coeff(lr_sol_e.X, lr_sol_e.X, we_x.begin(), D1x);
+      coeff(lr_sol_e.X, lr_sol_e.X, we_y.begin(), D1y);
+      coeff(lr_sol_e.X, lr_sol_e.X, we_z.begin(), D1z);
+
+      fftw_execute_dft_r2c(plans_xx[0],lr_sol_e.X.begin(),(fftw_complex*)tmpXhat.begin());
+
+      ptw_mult_row(tmpXhat,lambdax_n.begin(),dXhat_x);
+      ptw_mult_row(tmpXhat,lambday_n.begin(),dXhat_y);
+      ptw_mult_row(tmpXhat,lambdaz_n.begin(),dXhat_z);
+
+
+      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_x.begin(),dX_x.begin());
+      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_y.begin(),dX_y.begin());
+      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_z.begin(),dX_z.begin());
+
+
+      coeff(lr_sol_e.X, dX_x, h_xx[0]*h_xx[1]*h_xx[2], D2x);
+      coeff(lr_sol_e.X, dX_y, h_xx[0]*h_xx[1]*h_xx[2], D2y);
+      coeff(lr_sol_e.X, dX_z, h_xx[0]*h_xx[1]*h_xx[2], D2z);
+
+      // RK4
+      for(Index jj = 0; jj< nsteps_rk4; jj++){
+        matmul_transb(lr_sol_e.S,C1v,tmpS);
+        matmul(D2x,tmpS,tmpS1);
+        matmul_transb(lr_sol_e.S,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+        tmpS1 += Tw;
+        matmul_transb(lr_sol_e.S,C1u,tmpS);
+        matmul(D2z,tmpS,Tw);
+        tmpS1 += Tw;
+        matmul_transb(lr_sol_e.S,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+        tmpS1 -= Tw;
+        matmul_transb(lr_sol_e.S,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+        tmpS1 -= Tw;
+        matmul_transb(lr_sol_e.S,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+        tmpS1 -= Tw;
+
+        Tv = tmpS1;
+        Tv *= (tau_rk4_h/2);
+        Tv += lr_sol_e.S;
+
+        matmul_transb(Tv,C1v,tmpS);
+        matmul(D2x,tmpS,tmpS2);
+        matmul_transb(Tv,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+        tmpS2 += Tw;
+        matmul_transb(Tv,C1u,tmpS);
+        matmul(D2z,tmpS,Tw);
+        tmpS2 += Tw;
+        matmul_transb(Tv,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+        tmpS2 -= Tw;
+        matmul_transb(Tv,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+        tmpS2 -= Tw;
+        matmul_transb(Tv,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+        tmpS2 -= Tw;
+
+        Tv = tmpS2;
+        Tv *= (tau_rk4_h/2);
+        Tv += lr_sol_e.S;
+
+        matmul_transb(Tv,C1v,tmpS);
+        matmul(D2x,tmpS,tmpS3);
+        matmul_transb(Tv,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+        tmpS3 += Tw;
+        matmul_transb(Tv,C1u,tmpS);
+        matmul(D2z,tmpS,Tw);
+        tmpS3 += Tw;
+        matmul_transb(Tv,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+        tmpS3 -= Tw;
+        matmul_transb(Tv,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+        tmpS3 -= Tw;
+        matmul_transb(Tv,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+        tmpS3 -= Tw;
+
+        Tv = tmpS3;
+        Tv *= tau_rk4_h;
+        Tv += lr_sol_e.S;
+
+        matmul_transb(Tv,C1v,tmpS);
+        matmul(D2x,tmpS,tmpS4);
+        matmul_transb(Tv,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+        tmpS4 += Tw;
+        matmul_transb(Tv,C1u,tmpS);
+        matmul(D2z,tmpS,Tw);
+        tmpS4 += Tw;
+        matmul_transb(Tv,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+        tmpS4 -= Tw;
+        matmul_transb(Tv,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+        tmpS4 -= Tw;
+        matmul_transb(Tv,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+        tmpS4 -= Tw;
+
+        tmpS2 *= 2.0;
+        tmpS3 *= 2.0;
+
+        tmpS1 += tmpS2;
+        tmpS1 += tmpS3;
+        tmpS1 += tmpS4;
+        tmpS1 *= (tau_rk4_h/6.0);
+
+        lr_sol_e.S += tmpS1;
+
+      }
+
+      // Full step L until tau/2
+
+      tmpV = lr_sol_e.V;
+
+      matmul_transb(tmpV,lr_sol_e.S,lr_sol_e.V);
+
+      schur(D1x, Tx, dd1x_r, lwork);
+      schur(D1y, Ty, dd1y_r, lwork);
+      schur(D1z, Tz, dd1z_r, lwork);
+
+      Tx.to_cplx(Txc);
+      Ty.to_cplx(Tyc);
+      Tz.to_cplx(Tzc);
+      D2x.to_cplx(D2xc);
+      D2y.to_cplx(D2yc);
+      D2z.to_cplx(D2zc);
+
+      // Internal splitting
+      for(Index ii = 0; ii < nsteps_split; ii++){
+
+        // Full step -- Exact solution
+        fftw_execute_dft_r2c(plans_vv[0],lr_sol_e.V.begin(),(fftw_complex*)Lhat.begin());
+
+        matmul(Lhat,Txc,Nhat);
+
+        #ifdef __OPENMP__
+        #pragma omp parallel for collapse(2)
+        #endif
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_vv[2]; k++){
+            for(Index j = 0; j < N_vv[1]; j++){
+              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                complex<double> lambdav = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i);
+                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                Nhat(idx,rr) *= exp(tau_split_h*lambdav*dd1x_r(rr));
+              }
+            }
+          }
+        }
+
+
+        matmul_transb(Nhat,Txc,Lhat);
+
+        matmul(Lhat,Tyc,Nhat);
 
         #ifdef __OPENMP__
         #pragma omp parallel for collapse(2)
         for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+          for(Index k = 0; k < N_vv[2]; k++){
+            for(Index j = 0; j < N_vv[1]; j++){
+              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
+                complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
+                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
 
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) += tau_ee_h*phi2_im(-tau_ee_h*lambdaz*dcu_r(rr))*Khat(idx,rr);
+                Nhat(idx,rr) *= exp(tau_split_h*lambdaw*dd1y_r(rr))*ncvv;
               }
             }
           }
         }
         #else
         for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) += tau_ee_h*phi2_im(-tau_ee_h*lambdaz*dcu_r(rr))*Khat(idx,rr);
-              }
-            }
-          }
-        }
-        #endif
-
-        matmul_transb(Mhat,Tuc,Khat);
-
-        Khat *= ncxx;
-
-        fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol_e.X.begin());
-
-      }
-
-    }
-
-    gram_schmidt(lr_sol_e.X, lr_sol_e.S, ip_xx);
-
-    // Full step S until tau/2
-
-    #ifdef __OPENMP__
-    #pragma omp parallel for
-    #endif
-    for(Index j = 0; j < (dxx_mult); j++){
-      we_x(j) = efx(j) * h_xx[0] * h_xx[1] * h_xx[2];
-      we_y(j) = efy(j) * h_xx[0] * h_xx[1] * h_xx[2];
-      we_z(j) = efz(j) * h_xx[0] * h_xx[1] * h_xx[2];
-    }
-
-    coeff(lr_sol_e.X, lr_sol_e.X, we_x.begin(), D1x);
-    coeff(lr_sol_e.X, lr_sol_e.X, we_y.begin(), D1y);
-    coeff(lr_sol_e.X, lr_sol_e.X, we_z.begin(), D1z);
-
-    fftw_execute_dft_r2c(plans_xx[0],lr_sol_e.X.begin(),(fftw_complex*)tmpXhat.begin());
-
-    ptw_mult_row(tmpXhat,lambdax_n.begin(),dXhat_x);
-    ptw_mult_row(tmpXhat,lambday_n.begin(),dXhat_y);
-    ptw_mult_row(tmpXhat,lambdaz_n.begin(),dXhat_z);
-
-
-    fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_x.begin(),dX_x.begin());
-    fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_y.begin(),dX_y.begin());
-    fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_z.begin(),dX_z.begin());
-
-
-    coeff(lr_sol_e.X, dX_x, h_xx[0]*h_xx[1]*h_xx[2], D2x);
-    coeff(lr_sol_e.X, dX_y, h_xx[0]*h_xx[1]*h_xx[2], D2y);
-    coeff(lr_sol_e.X, dX_z, h_xx[0]*h_xx[1]*h_xx[2], D2z);
-
-    // RK4
-    for(Index jj = 0; jj< nsteps_rk4; jj++){
-      matmul_transb(lr_sol_e.S,C1v,tmpS);
-      matmul(D2x,tmpS,tmpS1);
-      matmul_transb(lr_sol_e.S,C1w,tmpS);
-      matmul(D2y,tmpS,Tw);
-      tmpS1 += Tw;
-      matmul_transb(lr_sol_e.S,C1u,tmpS);
-      matmul(D2z,tmpS,Tw);
-      tmpS1 += Tw;
-      matmul_transb(lr_sol_e.S,C2v,tmpS);
-      matmul(D1x,tmpS,Tw);
-      tmpS1 -= Tw;
-      matmul_transb(lr_sol_e.S,C2w,tmpS);
-      matmul(D1y,tmpS,Tw);
-      tmpS1 -= Tw;
-      matmul_transb(lr_sol_e.S,C2u,tmpS);
-      matmul(D1z,tmpS,Tw);
-      tmpS1 -= Tw;
-
-      Tv = tmpS1;
-      Tv *= (tau_rk4_h/2);
-      Tv += lr_sol_e.S;
-
-      matmul_transb(Tv,C1v,tmpS);
-      matmul(D2x,tmpS,tmpS2);
-      matmul_transb(Tv,C1w,tmpS);
-      matmul(D2y,tmpS,Tw);
-      tmpS2 += Tw;
-      matmul_transb(Tv,C1u,tmpS);
-      matmul(D2z,tmpS,Tw);
-      tmpS2 += Tw;
-      matmul_transb(Tv,C2v,tmpS);
-      matmul(D1x,tmpS,Tw);
-      tmpS2 -= Tw;
-      matmul_transb(Tv,C2w,tmpS);
-      matmul(D1y,tmpS,Tw);
-      tmpS2 -= Tw;
-      matmul_transb(Tv,C2u,tmpS);
-      matmul(D1z,tmpS,Tw);
-      tmpS2 -= Tw;
-
-      Tv = tmpS2;
-      Tv *= (tau_rk4_h/2);
-      Tv += lr_sol_e.S;
-
-      matmul_transb(Tv,C1v,tmpS);
-      matmul(D2x,tmpS,tmpS3);
-      matmul_transb(Tv,C1w,tmpS);
-      matmul(D2y,tmpS,Tw);
-      tmpS3 += Tw;
-      matmul_transb(Tv,C1u,tmpS);
-      matmul(D2z,tmpS,Tw);
-      tmpS3 += Tw;
-      matmul_transb(Tv,C2v,tmpS);
-      matmul(D1x,tmpS,Tw);
-      tmpS3 -= Tw;
-      matmul_transb(Tv,C2w,tmpS);
-      matmul(D1y,tmpS,Tw);
-      tmpS3 -= Tw;
-      matmul_transb(Tv,C2u,tmpS);
-      matmul(D1z,tmpS,Tw);
-      tmpS3 -= Tw;
-
-      Tv = tmpS3;
-      Tv *= tau_rk4_h;
-      Tv += lr_sol_e.S;
-
-      matmul_transb(Tv,C1v,tmpS);
-      matmul(D2x,tmpS,tmpS4);
-      matmul_transb(Tv,C1w,tmpS);
-      matmul(D2y,tmpS,Tw);
-      tmpS4 += Tw;
-      matmul_transb(Tv,C1u,tmpS);
-      matmul(D2z,tmpS,Tw);
-      tmpS4 += Tw;
-      matmul_transb(Tv,C2v,tmpS);
-      matmul(D1x,tmpS,Tw);
-      tmpS4 -= Tw;
-      matmul_transb(Tv,C2w,tmpS);
-      matmul(D1y,tmpS,Tw);
-      tmpS4 -= Tw;
-      matmul_transb(Tv,C2u,tmpS);
-      matmul(D1z,tmpS,Tw);
-      tmpS4 -= Tw;
-
-      tmpS2 *= 2.0;
-      tmpS3 *= 2.0;
-
-      tmpS1 += tmpS2;
-      tmpS1 += tmpS3;
-      tmpS1 += tmpS4;
-      tmpS1 *= (tau_rk4_h/6.0);
-
-      lr_sol_e.S += tmpS1;
-
-    }
-
-    // Full step L until tau/2
-
-    tmpV = lr_sol_e.V;
-
-    matmul_transb(tmpV,lr_sol_e.S,lr_sol_e.V);
-
-    schur(D1x, Tx, dd1x_r, lwork);
-    schur(D1y, Ty, dd1y_r, lwork);
-    schur(D1z, Tz, dd1z_r, lwork);
-
-    Tx.to_cplx(Txc);
-    Ty.to_cplx(Tyc);
-    Tz.to_cplx(Tzc);
-    D2x.to_cplx(D2xc);
-    D2y.to_cplx(D2yc);
-    D2z.to_cplx(D2zc);
-
-    // Internal splitting
-    for(Index ii = 0; ii < nsteps_split; ii++){
-
-      // Full step -- Exact solution
-      fftw_execute_dft_r2c(plans_vv[0],lr_sol_e.V.begin(),(fftw_complex*)Lhat.begin());
-
-      matmul(Lhat,Txc,Nhat);
-
-      #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      #endif
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_vv[2]; k++){
-          for(Index j = 0; j < N_vv[1]; j++){
-            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-              complex<double> lambdav = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i);
-              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-              Nhat(idx,rr) *= exp(tau_split_h*lambdav*dd1x_r(rr));
-            }
-          }
-        }
-      }
-
-
-      matmul_transb(Nhat,Txc,Lhat);
-
-      matmul(Lhat,Tyc,Nhat);
-
-      #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_vv[2]; k++){
-          for(Index j = 0; j < N_vv[1]; j++){
-            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+          for(Index k = 0; k < N_vv[2]; k++){
+            for(Index j = 0; j < N_vv[1]; j++){
               if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
-              complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
-              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-              Nhat(idx,rr) *= exp(tau_split_h*lambdaw*dd1y_r(rr))*ncvv;
-            }
-          }
-        }
-      }
-      #else
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_vv[2]; k++){
-          for(Index j = 0; j < N_vv[1]; j++){
-            if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
-            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-              complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
-              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-              Nhat(idx,rr) *= exp(tau_split_h*lambdaw*dd1y_r(rr))*ncvv;
-            }
-          }
-        }
-      }
-      #endif
-
-      matmul_transb(Nhat,Tyc,Lhat);
-
-      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol_e.V.begin());
-
-      // Full step --
-      fftw_execute_dft_r2c(plans_vv[0],lr_sol_e.V.begin(),(fftw_complex*)Lhat.begin());
-
-      matmul(Lhat,Tzc,Nhat);
-
-      for(Index jj = 0; jj < nsteps_ee; jj++){
-
-        ptw_mult_row(lr_sol_e.V,v.begin(),Lv);
-        ptw_mult_row(lr_sol_e.V,w.begin(),Lw);
-        ptw_mult_row(lr_sol_e.V,u.begin(),Lu);
-
-        fftw_execute_dft_r2c(plans_vv[0],Lv.begin(),(fftw_complex*)Lvhat.begin());
-        fftw_execute_dft_r2c(plans_vv[0],Lw.begin(),(fftw_complex*)Lwhat.begin());
-        fftw_execute_dft_r2c(plans_vv[0],Lu.begin(),(fftw_complex*)Luhat.begin());
-
-        matmul_transb(Lvhat,D2xc,Lhat);
-
-        matmul_transb(Lwhat,D2yc,tmpVhat);
-
-        Lhat += tmpVhat;
-
-        matmul_transb(Luhat,D2zc,tmpVhat);
-
-        Lhat += tmpVhat;
-
-        matmul(Lhat,Tzc,tmpVhat);
-
-        #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_vv[2]; k++){
-            for(Index j = 0; j < N_vv[1]; j++){
               for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
-
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
                 Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
 
-                Nhat(idx,rr) *= exp(tau_ee_h*lambdau*dd1z_r(rr));
-                Nhat(idx,rr) -= tau_ee_h*phi1_im(tau_ee_h*lambdau*dd1z_r(rr))*tmpVhat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_vv[2]; k++){
-            if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
-            for(Index j = 0; j < N_vv[1]; j++){
-              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
-                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-                Nhat(idx,rr) *= exp(tau_ee_h*lambdau*dd1z_r(rr));
-                Nhat(idx,rr) -= tau_ee_h*phi1_im(tau_ee_h*lambdau*dd1z_r(rr))*tmpVhat(idx,rr);
+                Nhat(idx,rr) *= exp(tau_split_h*lambdaw*dd1y_r(rr))*ncvv;
               }
             }
           }
         }
         #endif
 
-        matmul_transb(Nhat,Tzc,Lhat);
-
-        Lhat *= ncvv;
+        matmul_transb(Nhat,Tyc,Lhat);
 
         fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol_e.V.begin());
 
-        // Second stage
+        // Full step --
+        fftw_execute_dft_r2c(plans_vv[0],lr_sol_e.V.begin(),(fftw_complex*)Lhat.begin());
 
-        ptw_mult_row(lr_sol_e.V,v.begin(),Lv);
-        ptw_mult_row(lr_sol_e.V,w.begin(),Lw);
-        ptw_mult_row(lr_sol_e.V,u.begin(),Lu);
+        matmul(Lhat,Tzc,Nhat);
 
-        fftw_execute_dft_r2c(plans_vv[0],Lv.begin(),(fftw_complex*)Lvhat.begin());
-        fftw_execute_dft_r2c(plans_vv[0],Lw.begin(),(fftw_complex*)Lwhat.begin());
-        fftw_execute_dft_r2c(plans_vv[0],Lu.begin(),(fftw_complex*)Luhat.begin());
+        for(Index jj = 0; jj < nsteps_ee; jj++){
 
-        matmul_transb(Lvhat,D2xc,Lhat);
-        matmul_transb(Lwhat,D2yc,Lvhat);
+          ptw_mult_row(lr_sol_e.V,v.begin(),Lv);
+          ptw_mult_row(lr_sol_e.V,w.begin(),Lw);
+          ptw_mult_row(lr_sol_e.V,u.begin(),Lu);
 
-        Lvhat += Lhat;
+          fftw_execute_dft_r2c(plans_vv[0],Lv.begin(),(fftw_complex*)Lvhat.begin());
+          fftw_execute_dft_r2c(plans_vv[0],Lw.begin(),(fftw_complex*)Lwhat.begin());
+          fftw_execute_dft_r2c(plans_vv[0],Lu.begin(),(fftw_complex*)Luhat.begin());
 
-        matmul_transb(Luhat,D2zc,Lhat);
+          matmul_transb(Lvhat,D2xc,Lhat);
 
-        Lvhat += Lhat;
+          matmul_transb(Lwhat,D2yc,tmpVhat);
 
-        matmul(Lvhat,Tzc,Lhat);
+          Lhat += tmpVhat;
 
-        Lhat -= tmpVhat;
+          matmul_transb(Luhat,D2zc,tmpVhat);
 
-        #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_vv[2]; k++){
-            for(Index j = 0; j < N_vv[1]; j++){
-              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+          Lhat += tmpVhat;
 
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
-                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+          matmul(Lhat,Tzc,tmpVhat);
 
-                Nhat(idx,rr) -= tau_ee_h*phi2_im(tau_ee_h*lambdau*dd1z_r(rr))*Lhat(idx,rr);
+          #ifdef __OPENMP__
+          #pragma omp parallel for collapse(2)
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_vv[2]; k++){
+              for(Index j = 0; j < N_vv[1]; j++){
+                for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                  if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+
+                  complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                  Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                  Nhat(idx,rr) *= exp(tau_ee_h*lambdau*dd1z_r(rr));
+                  Nhat(idx,rr) -= tau_ee_h*phi1_im(tau_ee_h*lambdau*dd1z_r(rr))*tmpVhat(idx,rr);
+                }
               }
             }
           }
-        }
-        #else
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_vv[2]; k++){
-            if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
-            for(Index j = 0; j < N_vv[1]; j++){
-              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
-                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+          #else
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_vv[2]; k++){
+              if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+              for(Index j = 0; j < N_vv[1]; j++){
+                for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                  complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                  Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
 
-                Nhat(idx,rr) -= tau_ee_h*phi2_im(tau_ee_h*lambdau*dd1z_r(rr))*Lhat(idx,rr);
+                  Nhat(idx,rr) *= exp(tau_ee_h*lambdau*dd1z_r(rr));
+                  Nhat(idx,rr) -= tau_ee_h*phi1_im(tau_ee_h*lambdau*dd1z_r(rr))*tmpVhat(idx,rr);
+                }
               }
             }
           }
+          #endif
+
+          matmul_transb(Nhat,Tzc,Lhat);
+
+          Lhat *= ncvv;
+
+          fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol_e.V.begin());
+
+          // Second stage
+
+          ptw_mult_row(lr_sol_e.V,v.begin(),Lv);
+          ptw_mult_row(lr_sol_e.V,w.begin(),Lw);
+          ptw_mult_row(lr_sol_e.V,u.begin(),Lu);
+
+          fftw_execute_dft_r2c(plans_vv[0],Lv.begin(),(fftw_complex*)Lvhat.begin());
+          fftw_execute_dft_r2c(plans_vv[0],Lw.begin(),(fftw_complex*)Lwhat.begin());
+          fftw_execute_dft_r2c(plans_vv[0],Lu.begin(),(fftw_complex*)Luhat.begin());
+
+          matmul_transb(Lvhat,D2xc,Lhat);
+          matmul_transb(Lwhat,D2yc,Lvhat);
+
+          Lvhat += Lhat;
+
+          matmul_transb(Luhat,D2zc,Lhat);
+
+          Lvhat += Lhat;
+
+          matmul(Lvhat,Tzc,Lhat);
+
+          Lhat -= tmpVhat;
+
+          #ifdef __OPENMP__
+          #pragma omp parallel for collapse(2)
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_vv[2]; k++){
+              for(Index j = 0; j < N_vv[1]; j++){
+                for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                  if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+
+                  complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                  Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                  Nhat(idx,rr) -= tau_ee_h*phi2_im(tau_ee_h*lambdau*dd1z_r(rr))*Lhat(idx,rr);
+                }
+              }
+            }
+          }
+          #else
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_vv[2]; k++){
+              if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+              for(Index j = 0; j < N_vv[1]; j++){
+                for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                  complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                  Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                  Nhat(idx,rr) -= tau_ee_h*phi2_im(tau_ee_h*lambdau*dd1z_r(rr))*Lhat(idx,rr);
+                }
+              }
+            }
+          }
+          #endif
+
+          matmul_transb(Nhat,Tzc,Lhat);
+
+          Lhat *= ncvv;
+
+          fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol_e.V.begin());
+
         }
-        #endif
-
-        matmul_transb(Nhat,Tzc,Lhat);
-
-        Lhat *= ncvv;
-
-        fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol_e.V.begin());
 
       }
 
-    }
+      gt::stop("Lie splitting for electric field CPU");
 
-    gt::stop("Lie splitting for electric field CPU");
+      gt::start("Restarted integration CPU");
 
-    gt::start("Restarted integration CPU");
+      gt::start("Electric field CPU");
 
-    gt::start("Electric field CPU");
+      // Electric field at time tau/2
 
-    // Electric field at time tau/2
+      coeff_one(lr_sol_e.V,-h_vv[0]*h_vv[1]*h_vv[2],rho);
 
-    coeff_one(lr_sol_e.V,-h_vv[0]*h_vv[1]*h_vv[2],rho);
+      matvec(lr_sol_e.X,rho,ef);
 
-    matvec(lr_sol_e.X,rho,ef);
+      ef += 1.0;
 
-    ef += 1.0;
-
-    fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
-
-    #ifdef __OPENMP__
-    #pragma omp parallel for
-    for(Index k = 0; k < N_xx[2]; k++){
-      for(Index j = 0; j < N_xx[1]; j++){
-        for(Index i = 0; i < (N_xx[0]/2+1); i++){
-          if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-          if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-          complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-          complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-          complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-          Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-          efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
-          efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-          efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-        }
-      }
-    }
-    #else
-    for(Index k = 0; k < N_xx[2]; k++){
-      if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-      for(Index j = 0; j < N_xx[1]; j++){
-        if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-        for(Index i = 0; i < (N_xx[0]/2+1); i++){
-          complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-          complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-          complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-          Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-          efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
-          efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-          efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
-        }
-      }
-    }
-    #endif
-
-    #ifdef __OPENMP__
-    #pragma omp parallel for
-    #endif
-    for(Index k = 0; k < (N_xx[2]/2 + 1); k += (N_xx[2]/2)){
-      for(Index j = 0; j < (N_xx[1]/2 + 1); j += (N_xx[1]/2)){
-        efhatx(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
-        efhaty(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
-        efhatz(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
-      }
-    }
-
-    fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
-    fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
-    fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatz.begin(),efz.begin());
-
-    gt::stop("Electric field CPU");
-
-    // Here I have the electric field at time tau/2, so restart integration
-
-    // Half step K (until tau/2)
-
-    tmpX = lr_sol.X;
-    matmul(tmpX,lr_sol.S,lr_sol.X);
-
-    gt::start("First half step K step CPU");
-
-    // Internal splitting
-    for(Index ii = 0; ii < nsteps_split; ii++){
-      // Half step -- Exact solution
-
-      fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
-
-      matmul(Khat,Tvc,Mhat);
+      fftw_execute_dft_r2c(plans_e[0],ef.begin(),(fftw_complex*)efhat.begin());
 
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      #endif
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambdax*dcv_r(rr));
-            }
-          }
-        }
-      }
-
-      matmul_transb(Mhat,Tvc,Khat);
-
-      // Half step -- Exact solution
-
-      matmul(Khat,Twc,Mhat);
-
-      #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr))*ncxx;
-            }
-          }
-        }
-      }
-      #else
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr))*ncxx;
-            }
-          }
-        }
-      }
-      #endif
-
-      matmul_transb(Mhat,Twc,Khat);
-
-      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
-
-      // Full step -- exponential integrator
-
-      fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
-
-      matmul(Khat,Tuc,Mhat);
-
-      for(Index jj = 0; jj < nsteps_ee; jj++){
-
-        ptw_mult_row(lr_sol.X,efx.begin(),Kex);
-        ptw_mult_row(lr_sol.X,efy.begin(),Key);
-        ptw_mult_row(lr_sol.X,efz.begin(),Kez);
-
-        fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
-        fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
-        fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
-
-        matmul_transb(Kexhat,C2vc,Khat);
-        matmul_transb(Keyhat,C2wc,tmpXhat);
-
-        Khat += tmpXhat;
-
-        matmul_transb(Kezhat,C2uc,tmpXhat);
-
-        Khat += tmpXhat;
-
-        matmul(Khat,Tuc,tmpXhat);
-
-        #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) *= exp(-tau_ee_h*lambdaz*dcu_r(rr));
-                Mhat(idx,rr) += tau_ee_h*phi1_im(-tau_ee_h*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
-              }
-            }
-          }
-        }
-        #else
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
+      #pragma omp parallel for
+      for(Index k = 0; k < N_xx[2]; k++){
+        for(Index j = 0; j < N_xx[1]; j++){
+          for(Index i = 0; i < (N_xx[0]/2+1); i++){
             if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+            if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+            complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+            complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+            complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+            Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+            efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
+            efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
+            efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
+          }
+        }
+      }
+      #else
+      for(Index k = 0; k < N_xx[2]; k++){
+        if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+        for(Index j = 0; j < N_xx[1]; j++){
+          if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+          for(Index i = 0; i < (N_xx[0]/2+1); i++){
+            complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+            complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+            complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+            Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+            efhatx(idx) = efhat(idx) * lambdax / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx;
+            efhaty(idx) = efhat(idx) * lambday / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
+            efhatz(idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
+          }
+        }
+      }
+      #endif
+
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
+      for(Index k = 0; k < (N_xx[2]/2 + 1); k += (N_xx[2]/2)){
+        for(Index j = 0; j < (N_xx[1]/2 + 1); j += (N_xx[1]/2)){
+          efhatx(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
+          efhaty(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
+          efhatz(j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1])) = complex<double>(0.0,0.0);
+        }
+      }
+
+      fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatx.begin(),efx.begin());
+      fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhaty.begin(),efy.begin());
+      fftw_execute_dft_c2r(plans_e[1],(fftw_complex*)efhatz.begin(),efz.begin());
+
+      gt::stop("Electric field CPU");
+
+      // Here I have the electric field at time tau/2, so restart integration
+
+      // Half step K (until tau/2)
+
+      tmpX = lr_sol.X;
+      matmul(tmpX,lr_sol.S,lr_sol.X);
+
+      gt::start("First half step K step CPU");
+
+      // Internal splitting
+      for(Index ii = 0; ii < nsteps_split; ii++){
+        // Half step -- Exact solution
+
+        fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
+
+        matmul(Khat,Tvc,Mhat);
+
+        #ifdef __OPENMP__
+        #pragma omp parallel for collapse(2)
+        #endif
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_xx[2]; k++){
             for(Index j = 0; j < N_xx[1]; j++){
               for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
+                complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
                 Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+                Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambdax*dcv_r(rr));
+              }
+            }
+          }
+        }
 
-                Mhat(idx,rr) *= exp(-tau_ee_h*lambdaz*dcu_r(rr));
-                Mhat(idx,rr) += tau_ee_h*phi1_im(-tau_ee_h*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
+        matmul_transb(Mhat,Tvc,Khat);
+
+        // Half step -- Exact solution
+
+        matmul(Khat,Twc,Mhat);
+
+        #ifdef __OPENMP__
+        #pragma omp parallel for collapse(2)
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_xx[2]; k++){
+            for(Index j = 0; j < N_xx[1]; j++){
+              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+                complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+                Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr))*ncxx;
+              }
+            }
+          }
+        }
+        #else
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_xx[2]; k++){
+            for(Index j = 0; j < N_xx[1]; j++){
+              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+                Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr))*ncxx;
               }
             }
           }
         }
         #endif
 
-        matmul_transb(Mhat,Tuc,Khat);
-
-        Khat *= ncxx;
+        matmul_transb(Mhat,Twc,Khat);
 
         fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
 
-        // Second stage
+        // Full step -- exponential integrator
 
-        ptw_mult_row(lr_sol.X,efx.begin(),Kex);
-        ptw_mult_row(lr_sol.X,efy.begin(),Key);
-        ptw_mult_row(lr_sol.X,efz.begin(),Kez);
+        fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
-        fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
-        fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
-        fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
+        matmul(Khat,Tuc,Mhat);
 
-        matmul_transb(Kexhat,C2vc,Khat);
-        matmul_transb(Keyhat,C2wc,Kexhat);
+        for(Index jj = 0; jj < nsteps_ee; jj++){
 
-        Kexhat += Khat;
+          ptw_mult_row(lr_sol.X,efx.begin(),Kex);
+          ptw_mult_row(lr_sol.X,efy.begin(),Key);
+          ptw_mult_row(lr_sol.X,efz.begin(),Kez);
 
-        matmul_transb(Kezhat,C2uc,Khat);
+          fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
 
-        Kexhat += Khat;
+          matmul_transb(Kexhat,C2vc,Khat);
+          matmul_transb(Keyhat,C2wc,tmpXhat);
 
-        matmul(Kexhat,Tuc,Khat);
+          Khat += tmpXhat;
 
-        Khat -= tmpXhat;
+          matmul_transb(Kezhat,C2uc,tmpXhat);
 
-        #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+          Khat += tmpXhat;
 
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+          matmul(Khat,Tuc,tmpXhat);
 
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+          #ifdef __OPENMP__
+          #pragma omp parallel for collapse(2)
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
 
-                Mhat(idx,rr) += tau_ee_h*phi2_im(-tau_ee_h*lambdaz*dcu_r(rr))*Khat(idx,rr);
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                  Mhat(idx,rr) *= exp(-tau_ee_h*lambdaz*dcu_r(rr));
+                  Mhat(idx,rr) += tau_ee_h*phi1_im(-tau_ee_h*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
+                }
               }
             }
           }
-        }
-        #else
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_xx[2]; k++){
-            if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-            for(Index j = 0; j < N_xx[1]; j++){
-              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+          #else
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
 
-                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
 
-                Mhat(idx,rr) += tau_ee_h*phi2_im(-tau_ee_h*lambdaz*dcu_r(rr))*Khat(idx,rr);
+                  Mhat(idx,rr) *= exp(-tau_ee_h*lambdaz*dcu_r(rr));
+                  Mhat(idx,rr) += tau_ee_h*phi1_im(-tau_ee_h*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
+                }
               }
             }
           }
-        }
-        #endif
+          #endif
 
-        matmul_transb(Mhat,Tuc,Khat);
+          matmul_transb(Mhat,Tuc,Khat);
 
-        if(jj != (nsteps_ee -1)){
           Khat *= ncxx;
+
           fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
+
+          // Second stage
+
+          ptw_mult_row(lr_sol.X,efx.begin(),Kex);
+          ptw_mult_row(lr_sol.X,efy.begin(),Key);
+          ptw_mult_row(lr_sol.X,efz.begin(),Kez);
+
+          fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
+
+          matmul_transb(Kexhat,C2vc,Khat);
+          matmul_transb(Keyhat,C2wc,Kexhat);
+
+          Kexhat += Khat;
+
+          matmul_transb(Kezhat,C2uc,Khat);
+
+          Kexhat += Khat;
+
+          matmul(Kexhat,Tuc,Khat);
+
+          Khat -= tmpXhat;
+
+          #ifdef __OPENMP__
+          #pragma omp parallel for collapse(2)
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                  Mhat(idx,rr) += tau_ee_h*phi2_im(-tau_ee_h*lambdaz*dcu_r(rr))*Khat(idx,rr);
+                }
+              }
+            }
+          }
+          #else
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                  Mhat(idx,rr) += tau_ee_h*phi2_im(-tau_ee_h*lambdaz*dcu_r(rr))*Khat(idx,rr);
+                }
+              }
+            }
+          }
+          #endif
+
+          matmul_transb(Mhat,Tuc,Khat);
+
+          if(jj != (nsteps_ee -1)){
+            Khat *= ncxx;
+            fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
+          }
         }
-      }
 
-      // Half step -- exact solution
+        // Half step -- exact solution
 
-      matmul(Khat,Twc,Mhat);
+        matmul(Khat,Twc,Mhat);
 
-      #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+        #ifdef __OPENMP__
+        #pragma omp parallel for collapse(2)
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_xx[2]; k++){
+            for(Index j = 0; j < N_xx[1]; j++){
+              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+                complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+                Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr));
+              }
+            }
+          }
+        }
+        #else
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_xx[2]; k++){
+            for(Index j = 0; j < N_xx[1]; j++){
               if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr));
+              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
+                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+                Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr));
+              }
             }
           }
         }
-      }
-      #else
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr));
+        #endif
+
+        matmul_transb(Mhat,Twc,Khat);
+
+        // Half step -- Exact solution
+
+        matmul(Khat,Tvc,Mhat);
+
+        #ifdef __OPENMP__
+        #pragma omp parallel for collapse(2)
+        #endif
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_xx[2]; k++){
+            for(Index j = 0; j < N_xx[1]; j++){
+              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+                Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambdax*dcv_r(rr))*ncxx;
+              }
             }
           }
         }
+
+        matmul_transb(Mhat,Tvc,Khat);
+
+        fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
+
       }
-      #endif
 
-      matmul_transb(Mhat,Twc,Khat);
 
-      // Half step -- Exact solution
+      gram_schmidt(lr_sol.X, lr_sol.S, ip_xx);
 
-      matmul(Khat,Tvc,Mhat);
+      gt::stop("First half step K step CPU");
 
+      // Half step S (until tau/2)
+
+      gt::start("D coeff CPU");
       #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
+      #pragma omp parallel for
       #endif
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambdax*dcv_r(rr))*ncxx;
-            }
-          }
-        }
-      }
-
-      matmul_transb(Mhat,Tvc,Khat);
-
-      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
-
-    }
-
-
-    gram_schmidt(lr_sol.X, lr_sol.S, ip_xx);
-
-    gt::stop("First half step K step CPU");
-
-    // Half step S (until tau/2)
-
-    gt::start("D coeff CPU");
-    #ifdef __OPENMP__
-    #pragma omp parallel for
-    #endif
-    for(Index j = 0; j < (dxx_mult); j++){
-      we_x(j) = efx(j) * h_xx[0] * h_xx[1] * h_xx[2];
-      we_y(j) = efy(j) * h_xx[0] * h_xx[1] * h_xx[2];
-      we_z(j) = efz(j) * h_xx[0] * h_xx[1] * h_xx[2];
-    }
-
-
-    coeff(lr_sol.X, lr_sol.X, we_x.begin(), D1x);
-    coeff(lr_sol.X, lr_sol.X, we_y.begin(), D1y);
-    coeff(lr_sol.X, lr_sol.X, we_z.begin(), D1z);
-
-    fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)tmpXhat.begin());
-
-    ptw_mult_row(tmpXhat,lambdax_n.begin(),dXhat_x);
-    ptw_mult_row(tmpXhat,lambday_n.begin(),dXhat_y);
-    ptw_mult_row(tmpXhat,lambdaz_n.begin(),dXhat_z);
-
-
-    fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_x.begin(),dX_x.begin());
-    fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_y.begin(),dX_y.begin());
-    fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_z.begin(),dX_z.begin());
-
-
-    coeff(lr_sol.X, dX_x, h_xx[0]*h_xx[1]*h_xx[2], D2x);
-    coeff(lr_sol.X, dX_y, h_xx[0]*h_xx[1]*h_xx[2], D2y);
-    coeff(lr_sol.X, dX_z, h_xx[0]*h_xx[1]*h_xx[2], D2z);
-
-    gt::stop("D coeff CPU");
-
-    gt::start("First half step S step CPU");
-
-    // Rk4
-    for(Index jj = 0; jj< nsteps_rk4; jj++){
-      matmul_transb(lr_sol.S,C1v,tmpS);
-      matmul(D2x,tmpS,tmpS1);
-      matmul_transb(lr_sol.S,C1w,tmpS);
-      matmul(D2y,tmpS,Tw);
-      tmpS1 += Tw;
-      matmul_transb(lr_sol.S,C1u,tmpS);
-      matmul(D2z,tmpS,Tw);
-      tmpS1 += Tw;
-      matmul_transb(lr_sol.S,C2v,tmpS);
-      matmul(D1x,tmpS,Tw);
-      tmpS1 -= Tw;
-      matmul_transb(lr_sol.S,C2w,tmpS);
-      matmul(D1y,tmpS,Tw);
-      tmpS1 -= Tw;
-      matmul_transb(lr_sol.S,C2u,tmpS);
-      matmul(D1z,tmpS,Tw);
-      tmpS1 -= Tw;
-
-      Tv = tmpS1;
-      Tv *= (tau_rk4_h/2);
-      Tv += lr_sol.S;
-
-      matmul_transb(Tv,C1v,tmpS);
-      matmul(D2x,tmpS,tmpS2);
-      matmul_transb(Tv,C1w,tmpS);
-      matmul(D2y,tmpS,Tw);
-      tmpS2 += Tw;
-      matmul_transb(Tv,C1u,tmpS);
-      matmul(D2z,tmpS,Tw);
-      tmpS2 += Tw;
-      matmul_transb(Tv,C2v,tmpS);
-      matmul(D1x,tmpS,Tw);
-      tmpS2 -= Tw;
-      matmul_transb(Tv,C2w,tmpS);
-      matmul(D1y,tmpS,Tw);
-      tmpS2 -= Tw;
-      matmul_transb(Tv,C2u,tmpS);
-      matmul(D1z,tmpS,Tw);
-      tmpS2 -= Tw;
-
-      Tv = tmpS2;
-      Tv *= (tau_rk4_h/2);
-      Tv += lr_sol.S;
-
-      matmul_transb(Tv,C1v,tmpS);
-      matmul(D2x,tmpS,tmpS3);
-      matmul_transb(Tv,C1w,tmpS);
-      matmul(D2y,tmpS,Tw);
-      tmpS3 += Tw;
-      matmul_transb(Tv,C1u,tmpS);
-      matmul(D2z,tmpS,Tw);
-      tmpS3 += Tw;
-      matmul_transb(Tv,C2v,tmpS);
-      matmul(D1x,tmpS,Tw);
-      tmpS3 -= Tw;
-      matmul_transb(Tv,C2w,tmpS);
-      matmul(D1y,tmpS,Tw);
-      tmpS3 -= Tw;
-      matmul_transb(Tv,C2u,tmpS);
-      matmul(D1z,tmpS,Tw);
-      tmpS3 -= Tw;
-
-      Tv = tmpS3;
-      Tv *= tau_rk4_h;
-      Tv += lr_sol.S;
-
-      matmul_transb(Tv,C1v,tmpS);
-      matmul(D2x,tmpS,tmpS4);
-      matmul_transb(Tv,C1w,tmpS);
-      matmul(D2y,tmpS,Tw);
-      tmpS4 += Tw;
-      matmul_transb(Tv,C1u,tmpS);
-      matmul(D2z,tmpS,Tw);
-      tmpS4 += Tw;
-      matmul_transb(Tv,C2v,tmpS);
-      matmul(D1x,tmpS,Tw);
-      tmpS4 -= Tw;
-      matmul_transb(Tv,C2w,tmpS);
-      matmul(D1y,tmpS,Tw);
-      tmpS4 -= Tw;
-      matmul_transb(Tv,C2u,tmpS);
-      matmul(D1z,tmpS,Tw);
-      tmpS4 -= Tw;
-
-      tmpS2 *= 2.0;
-      tmpS3 *= 2.0;
-
-      tmpS1 += tmpS2;
-      tmpS1 += tmpS3;
-      tmpS1 += tmpS4;
-      tmpS1 *= (tau_rk4_h/6.0);
-
-      lr_sol.S += tmpS1;
-
-    }
-
-    gt::stop("First half step S step CPU");
-
-    tmpV = lr_sol.V;
-    matmul_transb(tmpV,lr_sol.S,lr_sol.V);
-
-    schur(D1x, Tx, dd1x_r, lwork);
-    schur(D1y, Ty, dd1y_r, lwork);
-    schur(D1z, Tz, dd1z_r, lwork);
-
-    Tx.to_cplx(Txc);
-    Ty.to_cplx(Tyc);
-    Tz.to_cplx(Tzc);
-    D2x.to_cplx(D2xc);
-    D2y.to_cplx(D2yc);
-    D2z.to_cplx(D2zc);
-
-    gt::start("Full step L step CPU");
-
-    // Internal splitting
-    for(Index ii = 0; ii < nsteps_split; ii++){
-
-      // Half step -- Exact solution
-      fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
-
-      matmul(Lhat,Txc,Nhat);
-
-      #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      #endif
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_vv[2]; k++){
-          for(Index j = 0; j < N_vv[1]; j++){
-            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-              complex<double> lambdav = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i);
-              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
-
-              Nhat(idx,rr) *= exp(tau_split_h*lambdav*dd1x_r(rr));
-            }
-          }
-        }
+      for(Index j = 0; j < (dxx_mult); j++){
+        we_x(j) = efx(j) * h_xx[0] * h_xx[1] * h_xx[2];
+        we_y(j) = efy(j) * h_xx[0] * h_xx[1] * h_xx[2];
+        we_z(j) = efz(j) * h_xx[0] * h_xx[1] * h_xx[2];
       }
 
 
-      matmul_transb(Nhat,Txc,Lhat);
+      coeff(lr_sol.X, lr_sol.X, we_x.begin(), D1x);
+      coeff(lr_sol.X, lr_sol.X, we_y.begin(), D1y);
+      coeff(lr_sol.X, lr_sol.X, we_z.begin(), D1z);
 
-      // Half step -- Exact solution
+      fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)tmpXhat.begin());
 
-      matmul(Lhat,Tyc,Nhat);
+      ptw_mult_row(tmpXhat,lambdax_n.begin(),dXhat_x);
+      ptw_mult_row(tmpXhat,lambday_n.begin(),dXhat_y);
+      ptw_mult_row(tmpXhat,lambdaz_n.begin(),dXhat_z);
 
-      #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_vv[2]; k++){
-          for(Index j = 0; j < N_vv[1]; j++){
-            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-              if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
-              complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
-              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
 
-              Nhat(idx,rr) *= exp(tau_split_h*lambdaw*dd1y_r(rr))*ncvv;
+      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_x.begin(),dX_x.begin());
+      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_y.begin(),dX_y.begin());
+      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_z.begin(),dX_z.begin());
+
+
+      coeff(lr_sol.X, dX_x, h_xx[0]*h_xx[1]*h_xx[2], D2x);
+      coeff(lr_sol.X, dX_y, h_xx[0]*h_xx[1]*h_xx[2], D2y);
+      coeff(lr_sol.X, dX_z, h_xx[0]*h_xx[1]*h_xx[2], D2z);
+
+      gt::stop("D coeff CPU");
+
+      gt::start("First half step S step CPU");
+
+      // Rk4
+      for(Index jj = 0; jj< nsteps_rk4; jj++){
+        matmul_transb(lr_sol.S,C1v,tmpS);
+        matmul(D2x,tmpS,tmpS1);
+        matmul_transb(lr_sol.S,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+        tmpS1 += Tw;
+        matmul_transb(lr_sol.S,C1u,tmpS);
+        matmul(D2z,tmpS,Tw);
+        tmpS1 += Tw;
+        matmul_transb(lr_sol.S,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+        tmpS1 -= Tw;
+        matmul_transb(lr_sol.S,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+        tmpS1 -= Tw;
+        matmul_transb(lr_sol.S,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+        tmpS1 -= Tw;
+
+        Tv = tmpS1;
+        Tv *= (tau_rk4_h/2);
+        Tv += lr_sol.S;
+
+        matmul_transb(Tv,C1v,tmpS);
+        matmul(D2x,tmpS,tmpS2);
+        matmul_transb(Tv,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+        tmpS2 += Tw;
+        matmul_transb(Tv,C1u,tmpS);
+        matmul(D2z,tmpS,Tw);
+        tmpS2 += Tw;
+        matmul_transb(Tv,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+        tmpS2 -= Tw;
+        matmul_transb(Tv,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+        tmpS2 -= Tw;
+        matmul_transb(Tv,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+        tmpS2 -= Tw;
+
+        Tv = tmpS2;
+        Tv *= (tau_rk4_h/2);
+        Tv += lr_sol.S;
+
+        matmul_transb(Tv,C1v,tmpS);
+        matmul(D2x,tmpS,tmpS3);
+        matmul_transb(Tv,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+        tmpS3 += Tw;
+        matmul_transb(Tv,C1u,tmpS);
+        matmul(D2z,tmpS,Tw);
+        tmpS3 += Tw;
+        matmul_transb(Tv,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+        tmpS3 -= Tw;
+        matmul_transb(Tv,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+        tmpS3 -= Tw;
+        matmul_transb(Tv,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+        tmpS3 -= Tw;
+
+        Tv = tmpS3;
+        Tv *= tau_rk4_h;
+        Tv += lr_sol.S;
+
+        matmul_transb(Tv,C1v,tmpS);
+        matmul(D2x,tmpS,tmpS4);
+        matmul_transb(Tv,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+        tmpS4 += Tw;
+        matmul_transb(Tv,C1u,tmpS);
+        matmul(D2z,tmpS,Tw);
+        tmpS4 += Tw;
+        matmul_transb(Tv,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+        tmpS4 -= Tw;
+        matmul_transb(Tv,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+        tmpS4 -= Tw;
+        matmul_transb(Tv,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+        tmpS4 -= Tw;
+
+        tmpS2 *= 2.0;
+        tmpS3 *= 2.0;
+
+        tmpS1 += tmpS2;
+        tmpS1 += tmpS3;
+        tmpS1 += tmpS4;
+        tmpS1 *= (tau_rk4_h/6.0);
+
+        lr_sol.S += tmpS1;
+
+      }
+
+      gt::stop("First half step S step CPU");
+
+      tmpV = lr_sol.V;
+      matmul_transb(tmpV,lr_sol.S,lr_sol.V);
+
+      schur(D1x, Tx, dd1x_r, lwork);
+      schur(D1y, Ty, dd1y_r, lwork);
+      schur(D1z, Tz, dd1z_r, lwork);
+
+      Tx.to_cplx(Txc);
+      Ty.to_cplx(Tyc);
+      Tz.to_cplx(Tzc);
+      D2x.to_cplx(D2xc);
+      D2y.to_cplx(D2yc);
+      D2z.to_cplx(D2zc);
+
+      gt::start("Full step L step CPU");
+
+      // Internal splitting
+      for(Index ii = 0; ii < nsteps_split; ii++){
+
+        // Half step -- Exact solution
+        fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
+
+        matmul(Lhat,Txc,Nhat);
+
+        #ifdef __OPENMP__
+        #pragma omp parallel for collapse(2)
+        #endif
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_vv[2]; k++){
+            for(Index j = 0; j < N_vv[1]; j++){
+              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                complex<double> lambdav = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i);
+                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                Nhat(idx,rr) *= exp(tau_split_h*lambdav*dd1x_r(rr));
+              }
             }
           }
         }
-      }
-      #else
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_vv[2]; k++){
-          for(Index j = 0; j < N_vv[1]; j++){
-            if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
-            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-              complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
-              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
 
-              Nhat(idx,rr) *= exp(tau_split_h*lambdaw*dd1y_r(rr))*ncvv;
-            }
-          }
-        }
-      }
-      #endif
 
-      matmul_transb(Nhat,Tyc,Lhat);
+        matmul_transb(Nhat,Txc,Lhat);
 
-      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
+        // Half step -- Exact solution
 
-      // Full step -- exponential integrator
-      fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
-
-      matmul(Lhat,Tzc,Nhat);
-
-      for(Index jj = 0; jj < nsteps_ee; jj++){
-
-        ptw_mult_row(lr_sol.V,v.begin(),Lv);
-        ptw_mult_row(lr_sol.V,w.begin(),Lw);
-        ptw_mult_row(lr_sol.V,u.begin(),Lu);
-
-        fftw_execute_dft_r2c(plans_vv[0],Lv.begin(),(fftw_complex*)Lvhat.begin());
-        fftw_execute_dft_r2c(plans_vv[0],Lw.begin(),(fftw_complex*)Lwhat.begin());
-        fftw_execute_dft_r2c(plans_vv[0],Lu.begin(),(fftw_complex*)Luhat.begin());
-
-        matmul_transb(Lvhat,D2xc,Lhat);
-
-        matmul_transb(Lwhat,D2yc,tmpVhat);
-
-        Lhat += tmpVhat;
-
-        matmul_transb(Luhat,D2zc,tmpVhat);
-
-        Lhat += tmpVhat;
-
-        matmul(Lhat,Tzc,tmpVhat);
+        matmul(Lhat,Tyc,Nhat);
 
         #ifdef __OPENMP__
         #pragma omp parallel for collapse(2)
@@ -4037,13 +3964,11 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
           for(Index k = 0; k < N_vv[2]; k++){
             for(Index j = 0; j < N_vv[1]; j++){
               for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
-
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
+                complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
                 Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
 
-                Nhat(idx,rr) *= exp(tau_ee*lambdau*dd1z_r(rr));
-                Nhat(idx,rr) -= tau_ee*phi1_im(tau_ee*lambdau*dd1z_r(rr))*tmpVhat(idx,rr);
+                Nhat(idx,rr) *= exp(tau_split_h*lambdaw*dd1y_r(rr))*ncvv;
               }
             }
           }
@@ -4051,388 +3976,391 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
         #else
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_vv[2]; k++){
-            if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
             for(Index j = 0; j < N_vv[1]; j++){
+              if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
               for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
                 Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
 
-                Nhat(idx,rr) *= exp(tau_ee*lambdau*dd1z_r(rr));
-                Nhat(idx,rr) -= tau_ee*phi1_im(tau_ee*lambdau*dd1z_r(rr))*tmpVhat(idx,rr);
+                Nhat(idx,rr) *= exp(tau_split_h*lambdaw*dd1y_r(rr))*ncvv;
               }
             }
           }
         }
         #endif
 
-        matmul_transb(Nhat,Tzc,Lhat);
-
-        Lhat *= ncvv;
+        matmul_transb(Nhat,Tyc,Lhat);
 
         fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
 
-        // Second stage
+        // Full step -- exponential integrator
+        fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
 
-        ptw_mult_row(lr_sol.V,v.begin(),Lv);
-        ptw_mult_row(lr_sol.V,w.begin(),Lw);
-        ptw_mult_row(lr_sol.V,u.begin(),Lu);
+        matmul(Lhat,Tzc,Nhat);
 
-        fftw_execute_dft_r2c(plans_vv[0],Lv.begin(),(fftw_complex*)Lvhat.begin());
-        fftw_execute_dft_r2c(plans_vv[0],Lw.begin(),(fftw_complex*)Lwhat.begin());
-        fftw_execute_dft_r2c(plans_vv[0],Lu.begin(),(fftw_complex*)Luhat.begin());
+        for(Index jj = 0; jj < nsteps_ee; jj++){
 
-        matmul_transb(Lvhat,D2xc,Lhat);
-        matmul_transb(Lwhat,D2yc,Lvhat);
+          ptw_mult_row(lr_sol.V,v.begin(),Lv);
+          ptw_mult_row(lr_sol.V,w.begin(),Lw);
+          ptw_mult_row(lr_sol.V,u.begin(),Lu);
 
-        Lvhat += Lhat;
+          fftw_execute_dft_r2c(plans_vv[0],Lv.begin(),(fftw_complex*)Lvhat.begin());
+          fftw_execute_dft_r2c(plans_vv[0],Lw.begin(),(fftw_complex*)Lwhat.begin());
+          fftw_execute_dft_r2c(plans_vv[0],Lu.begin(),(fftw_complex*)Luhat.begin());
 
-        matmul_transb(Luhat,D2zc,Lhat);
+          matmul_transb(Lvhat,D2xc,Lhat);
 
-        Lvhat += Lhat;
+          matmul_transb(Lwhat,D2yc,tmpVhat);
 
-        matmul(Lvhat,Tzc,Lhat);
+          Lhat += tmpVhat;
 
-        Lhat -= tmpVhat;
+          matmul_transb(Luhat,D2zc,tmpVhat);
 
-        #ifdef __OPENMP__
-        #pragma omp parallel for collapse(2)
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_vv[2]; k++){
-            for(Index j = 0; j < N_vv[1]; j++){
-              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+          Lhat += tmpVhat;
 
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
-                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+          matmul(Lhat,Tzc,tmpVhat);
 
-                Nhat(idx,rr) -= tau_ee*phi2_im(tau_ee*lambdau*dd1z_r(rr))*Lhat(idx,rr);
+          #ifdef __OPENMP__
+          #pragma omp parallel for collapse(2)
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_vv[2]; k++){
+              for(Index j = 0; j < N_vv[1]; j++){
+                for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                  if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+
+                  complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                  Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                  Nhat(idx,rr) *= exp(tau_ee*lambdau*dd1z_r(rr));
+                  Nhat(idx,rr) -= tau_ee*phi1_im(tau_ee*lambdau*dd1z_r(rr))*tmpVhat(idx,rr);
+                }
               }
             }
           }
-        }
-        #else
-        for(int rr = 0; rr < r; rr++){
-          for(Index k = 0; k < N_vv[2]; k++){
-            if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
-            for(Index j = 0; j < N_vv[1]; j++){
-              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-                complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
-                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+          #else
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_vv[2]; k++){
+              if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+              for(Index j = 0; j < N_vv[1]; j++){
+                for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                  complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                  Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
 
-                Nhat(idx,rr) -= tau_ee*phi2_im(tau_ee*lambdau*dd1z_r(rr))*Lhat(idx,rr);
+                  Nhat(idx,rr) *= exp(tau_ee*lambdau*dd1z_r(rr));
+                  Nhat(idx,rr) -= tau_ee*phi1_im(tau_ee*lambdau*dd1z_r(rr))*tmpVhat(idx,rr);
+                }
               }
             }
           }
-        }
-        #endif
+          #endif
 
-        matmul_transb(Nhat,Tzc,Lhat);
+          matmul_transb(Nhat,Tzc,Lhat);
 
-        if(jj != (nsteps_ee - 1)){
           Lhat *= ncvv;
+
           fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
+
+          // Second stage
+
+          ptw_mult_row(lr_sol.V,v.begin(),Lv);
+          ptw_mult_row(lr_sol.V,w.begin(),Lw);
+          ptw_mult_row(lr_sol.V,u.begin(),Lu);
+
+          fftw_execute_dft_r2c(plans_vv[0],Lv.begin(),(fftw_complex*)Lvhat.begin());
+          fftw_execute_dft_r2c(plans_vv[0],Lw.begin(),(fftw_complex*)Lwhat.begin());
+          fftw_execute_dft_r2c(plans_vv[0],Lu.begin(),(fftw_complex*)Luhat.begin());
+
+          matmul_transb(Lvhat,D2xc,Lhat);
+          matmul_transb(Lwhat,D2yc,Lvhat);
+
+          Lvhat += Lhat;
+
+          matmul_transb(Luhat,D2zc,Lhat);
+
+          Lvhat += Lhat;
+
+          matmul(Lvhat,Tzc,Lhat);
+
+          Lhat -= tmpVhat;
+
+          #ifdef __OPENMP__
+          #pragma omp parallel for collapse(2)
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_vv[2]; k++){
+              for(Index j = 0; j < N_vv[1]; j++){
+                for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                  if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+
+                  complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                  Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                  Nhat(idx,rr) -= tau_ee*phi2_im(tau_ee*lambdau*dd1z_r(rr))*Lhat(idx,rr);
+                }
+              }
+            }
+          }
+          #else
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_vv[2]; k++){
+              if(k < (N_vv[2]/2)) { mult_k = k; } else if(k == (N_vv[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_vv[2]); }
+              for(Index j = 0; j < N_vv[1]; j++){
+                for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                  complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(lim_vv[5]-lim_vv[4])*mult_k);
+                  Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                  Nhat(idx,rr) -= tau_ee*phi2_im(tau_ee*lambdau*dd1z_r(rr))*Lhat(idx,rr);
+                }
+              }
+            }
+          }
+          #endif
+
+          matmul_transb(Nhat,Tzc,Lhat);
+
+          if(jj != (nsteps_ee - 1)){
+            Lhat *= ncvv;
+            fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
+          }
         }
-      }
 
-      // Half step -- exact solution
+        // Half step -- exact solution
 
-      matmul(Lhat,Tyc,Nhat);
+        matmul(Lhat,Tyc,Nhat);
 
-      #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_vv[2]; k++){
-          for(Index j = 0; j < N_vv[1]; j++){
-            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+        #ifdef __OPENMP__
+        #pragma omp parallel for collapse(2)
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_vv[2]; k++){
+            for(Index j = 0; j < N_vv[1]; j++){
+              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
+                complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
+                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                Nhat(idx,rr) *= exp(tau_split_h*lambdaw*dd1y_r(rr));
+              }
+            }
+          }
+        }
+        #else
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_vv[2]; k++){
+            for(Index j = 0; j < N_vv[1]; j++){
               if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
-              complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
-              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
+                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
 
-              Nhat(idx,rr) *= exp(tau_split_h*lambdaw*dd1y_r(rr));
+                Nhat(idx,rr) *= exp(tau_split_h*lambdaw*dd1y_r(rr));
+              }
             }
           }
         }
-      }
-      #else
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_vv[2]; k++){
-          for(Index j = 0; j < N_vv[1]; j++){
-            if(j < (N_vv[1]/2)) { mult_j = j; } else if(j == (N_vv[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_vv[1]); }
-            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-              complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(lim_vv[3]-lim_vv[2])*mult_j);
-              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+        #endif
 
-              Nhat(idx,rr) *= exp(tau_split_h*lambdaw*dd1y_r(rr));
+        matmul_transb(Nhat,Tyc,Lhat);
+
+        matmul(Lhat,Txc,Nhat);
+
+        #ifdef __OPENMP__
+        #pragma omp parallel for collapse(2)
+        #endif
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_vv[2]; k++){
+            for(Index j = 0; j < N_vv[1]; j++){
+              for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
+                complex<double> lambdav = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i);
+                Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+
+                Nhat(idx,rr) *= exp(tau_split_h*lambdav*dd1x_r(rr))*ncvv;
+              }
             }
           }
         }
+
+        matmul_transb(Nhat,Txc,Lhat);
+
+        fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
+
       }
-      #endif
 
-      matmul_transb(Nhat,Tyc,Lhat);
+      gram_schmidt(lr_sol.V, lr_sol.S, ip_vv);
+      transpose_inplace(lr_sol.S);
 
-      matmul(Lhat,Txc,Nhat);
+      gt::stop("Full step L step CPU");
 
-      #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      #endif
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_vv[2]; k++){
-          for(Index j = 0; j < N_vv[1]; j++){
-            for(Index i = 0; i < (N_vv[0]/2 + 1); i++){
-              complex<double> lambdav = complex<double>(0.0,2.0*M_PI/(lim_vv[1]-lim_vv[0])*i);
-              Index idx = i+j*(N_vv[0]/2+1) + k*((N_vv[0]/2+1)*N_vv[1]);
+      // Half step S (until tau/2)
 
-              Nhat(idx,rr) *= exp(tau_split_h*lambdav*dd1x_r(rr))*ncvv;
+      gt::start("C coeff CPU");
+      coeff(lr_sol.V, lr_sol.V, we_v.begin(), C1v);
+      coeff(lr_sol.V, lr_sol.V, we_w.begin(), C1w);
+      coeff(lr_sol.V, lr_sol.V, we_u.begin(), C1u);
+
+      fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)tmpVhat.begin());
+
+      ptw_mult_row(tmpVhat,lambdav_n.begin(),dVhat_v);
+      ptw_mult_row(tmpVhat,lambdaw_n.begin(),dVhat_w);
+      ptw_mult_row(tmpVhat,lambdau_n.begin(),dVhat_u);
+
+      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_v.begin(),dV_v.begin());
+      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_w.begin(),dV_w.begin());
+      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_u.begin(),dV_u.begin());
+
+      coeff(lr_sol.V, dV_v, h_vv[0]*h_vv[1]*h_vv[2], C2v);
+      coeff(lr_sol.V, dV_w, h_vv[0]*h_vv[1]*h_vv[2], C2w);
+      coeff(lr_sol.V, dV_u, h_vv[0]*h_vv[1]*h_vv[2], C2u);
+
+      gt::stop("C coeff CPU");
+
+      gt::start("Second half step S step CPU");
+
+      // Rk4
+      for(Index jj = 0; jj< nsteps_rk4; jj++){
+        matmul_transb(lr_sol.S,C1v,tmpS);
+        matmul(D2x,tmpS,tmpS1);
+        matmul_transb(lr_sol.S,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+        tmpS1 += Tw;
+        matmul_transb(lr_sol.S,C1u,tmpS);
+        matmul(D2z,tmpS,Tw);
+        tmpS1 += Tw;
+        matmul_transb(lr_sol.S,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+        tmpS1 -= Tw;
+        matmul_transb(lr_sol.S,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+        tmpS1 -= Tw;
+        matmul_transb(lr_sol.S,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+        tmpS1 -= Tw;
+
+        Tv = tmpS1;
+        Tv *= (tau_rk4_h/2);
+        Tv += lr_sol.S;
+
+        matmul_transb(Tv,C1v,tmpS);
+        matmul(D2x,tmpS,tmpS2);
+        matmul_transb(Tv,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+        tmpS2 += Tw;
+        matmul_transb(Tv,C1u,tmpS);
+        matmul(D2z,tmpS,Tw);
+        tmpS2 += Tw;
+        matmul_transb(Tv,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+        tmpS2 -= Tw;
+        matmul_transb(Tv,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+        tmpS2 -= Tw;
+        matmul_transb(Tv,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+        tmpS2 -= Tw;
+
+        Tv = tmpS2;
+        Tv *= (tau_rk4_h/2);
+        Tv += lr_sol.S;
+
+        matmul_transb(Tv,C1v,tmpS);
+        matmul(D2x,tmpS,tmpS3);
+        matmul_transb(Tv,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+        tmpS3 += Tw;
+        matmul_transb(Tv,C1u,tmpS);
+        matmul(D2z,tmpS,Tw);
+        tmpS3 += Tw;
+        matmul_transb(Tv,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+        tmpS3 -= Tw;
+        matmul_transb(Tv,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+        tmpS3 -= Tw;
+        matmul_transb(Tv,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+        tmpS3 -= Tw;
+
+        Tv = tmpS3;
+        Tv *= tau_rk4_h;
+        Tv += lr_sol.S;
+
+        matmul_transb(Tv,C1v,tmpS);
+        matmul(D2x,tmpS,tmpS4);
+        matmul_transb(Tv,C1w,tmpS);
+        matmul(D2y,tmpS,Tw);
+        tmpS4 += Tw;
+        matmul_transb(Tv,C1u,tmpS);
+        matmul(D2z,tmpS,Tw);
+        tmpS4 += Tw;
+        matmul_transb(Tv,C2v,tmpS);
+        matmul(D1x,tmpS,Tw);
+        tmpS4 -= Tw;
+        matmul_transb(Tv,C2w,tmpS);
+        matmul(D1y,tmpS,Tw);
+        tmpS4 -= Tw;
+        matmul_transb(Tv,C2u,tmpS);
+        matmul(D1z,tmpS,Tw);
+        tmpS4 -= Tw;
+
+        tmpS2 *= 2.0;
+        tmpS3 *= 2.0;
+
+        tmpS1 += tmpS2;
+        tmpS1 += tmpS3;
+        tmpS1 += tmpS4;
+        tmpS1 *= (tau_rk4_h/6.0);
+
+        lr_sol.S += tmpS1;
+
+      }
+
+      gt::stop("Second half step S step CPU");
+
+      // Half step K (until tau/2)
+
+      tmpX = lr_sol.X;
+      matmul(tmpX,lr_sol.S,lr_sol.X);
+
+      //gt::start("Schur K CPU");
+      schur(C1v, Tv, dcv_r, lwork);
+      schur(C1w, Tw, dcw_r, lwork);
+      schur(C1u, Tu, dcu_r, lwork);
+
+      Tv.to_cplx(Tvc);
+      Tw.to_cplx(Twc);
+      Tu.to_cplx(Tuc);
+      C2v.to_cplx(C2vc);
+      C2w.to_cplx(C2wc);
+      C2u.to_cplx(C2uc);
+
+      gt::start("Second half step K step CPU");
+
+      // Internal splitting
+      for(Index ii = 0; ii < nsteps_split; ii++){
+        // Half step -- Exact solution
+
+        fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
+
+        matmul(Khat,Tvc,Mhat);
+
+        #ifdef __OPENMP__
+        #pragma omp parallel for collapse(2)
+        #endif
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_xx[2]; k++){
+            for(Index j = 0; j < N_xx[1]; j++){
+              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+                Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambdax*dcv_r(rr));
+              }
             }
           }
         }
-      }
 
-      matmul_transb(Nhat,Txc,Lhat);
+        matmul_transb(Mhat,Tvc,Khat);
 
-      fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)Lhat.begin(),lr_sol.V.begin());
+        // Half step -- Exact solution
 
-    }
-
-    gram_schmidt(lr_sol.V, lr_sol.S, ip_vv);
-    transpose_inplace(lr_sol.S);
-
-    gt::stop("Full step L step CPU");
-
-    // Half step S (until tau/2)
-
-    gt::start("C coeff CPU");
-    coeff(lr_sol.V, lr_sol.V, we_v.begin(), C1v);
-    coeff(lr_sol.V, lr_sol.V, we_w.begin(), C1w);
-    coeff(lr_sol.V, lr_sol.V, we_u.begin(), C1u);
-
-    fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)tmpVhat.begin());
-
-    ptw_mult_row(tmpVhat,lambdav_n.begin(),dVhat_v);
-    ptw_mult_row(tmpVhat,lambdaw_n.begin(),dVhat_w);
-    ptw_mult_row(tmpVhat,lambdau_n.begin(),dVhat_u);
-
-    fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_v.begin(),dV_v.begin());
-    fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_w.begin(),dV_w.begin());
-    fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_u.begin(),dV_u.begin());
-
-    coeff(lr_sol.V, dV_v, h_vv[0]*h_vv[1]*h_vv[2], C2v);
-    coeff(lr_sol.V, dV_w, h_vv[0]*h_vv[1]*h_vv[2], C2w);
-    coeff(lr_sol.V, dV_u, h_vv[0]*h_vv[1]*h_vv[2], C2u);
-
-    gt::stop("C coeff CPU");
-
-    gt::start("Second half step S step CPU");
-
-    // Rk4
-    for(Index jj = 0; jj< nsteps_rk4; jj++){
-      matmul_transb(lr_sol.S,C1v,tmpS);
-      matmul(D2x,tmpS,tmpS1);
-      matmul_transb(lr_sol.S,C1w,tmpS);
-      matmul(D2y,tmpS,Tw);
-      tmpS1 += Tw;
-      matmul_transb(lr_sol.S,C1u,tmpS);
-      matmul(D2z,tmpS,Tw);
-      tmpS1 += Tw;
-      matmul_transb(lr_sol.S,C2v,tmpS);
-      matmul(D1x,tmpS,Tw);
-      tmpS1 -= Tw;
-      matmul_transb(lr_sol.S,C2w,tmpS);
-      matmul(D1y,tmpS,Tw);
-      tmpS1 -= Tw;
-      matmul_transb(lr_sol.S,C2u,tmpS);
-      matmul(D1z,tmpS,Tw);
-      tmpS1 -= Tw;
-
-      Tv = tmpS1;
-      Tv *= (tau_rk4_h/2);
-      Tv += lr_sol.S;
-
-      matmul_transb(Tv,C1v,tmpS);
-      matmul(D2x,tmpS,tmpS2);
-      matmul_transb(Tv,C1w,tmpS);
-      matmul(D2y,tmpS,Tw);
-      tmpS2 += Tw;
-      matmul_transb(Tv,C1u,tmpS);
-      matmul(D2z,tmpS,Tw);
-      tmpS2 += Tw;
-      matmul_transb(Tv,C2v,tmpS);
-      matmul(D1x,tmpS,Tw);
-      tmpS2 -= Tw;
-      matmul_transb(Tv,C2w,tmpS);
-      matmul(D1y,tmpS,Tw);
-      tmpS2 -= Tw;
-      matmul_transb(Tv,C2u,tmpS);
-      matmul(D1z,tmpS,Tw);
-      tmpS2 -= Tw;
-
-      Tv = tmpS2;
-      Tv *= (tau_rk4_h/2);
-      Tv += lr_sol.S;
-
-      matmul_transb(Tv,C1v,tmpS);
-      matmul(D2x,tmpS,tmpS3);
-      matmul_transb(Tv,C1w,tmpS);
-      matmul(D2y,tmpS,Tw);
-      tmpS3 += Tw;
-      matmul_transb(Tv,C1u,tmpS);
-      matmul(D2z,tmpS,Tw);
-      tmpS3 += Tw;
-      matmul_transb(Tv,C2v,tmpS);
-      matmul(D1x,tmpS,Tw);
-      tmpS3 -= Tw;
-      matmul_transb(Tv,C2w,tmpS);
-      matmul(D1y,tmpS,Tw);
-      tmpS3 -= Tw;
-      matmul_transb(Tv,C2u,tmpS);
-      matmul(D1z,tmpS,Tw);
-      tmpS3 -= Tw;
-
-      Tv = tmpS3;
-      Tv *= tau_rk4_h;
-      Tv += lr_sol.S;
-
-      matmul_transb(Tv,C1v,tmpS);
-      matmul(D2x,tmpS,tmpS4);
-      matmul_transb(Tv,C1w,tmpS);
-      matmul(D2y,tmpS,Tw);
-      tmpS4 += Tw;
-      matmul_transb(Tv,C1u,tmpS);
-      matmul(D2z,tmpS,Tw);
-      tmpS4 += Tw;
-      matmul_transb(Tv,C2v,tmpS);
-      matmul(D1x,tmpS,Tw);
-      tmpS4 -= Tw;
-      matmul_transb(Tv,C2w,tmpS);
-      matmul(D1y,tmpS,Tw);
-      tmpS4 -= Tw;
-      matmul_transb(Tv,C2u,tmpS);
-      matmul(D1z,tmpS,Tw);
-      tmpS4 -= Tw;
-
-      tmpS2 *= 2.0;
-      tmpS3 *= 2.0;
-
-      tmpS1 += tmpS2;
-      tmpS1 += tmpS3;
-      tmpS1 += tmpS4;
-      tmpS1 *= (tau_rk4_h/6.0);
-
-      lr_sol.S += tmpS1;
-
-    }
-
-    gt::stop("Second half step S step CPU");
-
-    // Half step K (until tau/2)
-
-    tmpX = lr_sol.X;
-    matmul(tmpX,lr_sol.S,lr_sol.X);
-
-    //gt::start("Schur K CPU");
-    schur(C1v, Tv, dcv_r, lwork);
-    schur(C1w, Tw, dcw_r, lwork);
-    schur(C1u, Tu, dcu_r, lwork);
-
-    Tv.to_cplx(Tvc);
-    Tw.to_cplx(Twc);
-    Tu.to_cplx(Tuc);
-    C2v.to_cplx(C2vc);
-    C2w.to_cplx(C2wc);
-    C2u.to_cplx(C2uc);
-
-    gt::start("Second half step K step CPU");
-
-    // Internal splitting
-    for(Index ii = 0; ii < nsteps_split; ii++){
-      // Half step -- Exact solution
-
-      fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
-
-      matmul(Khat,Tvc,Mhat);
-
-      #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      #endif
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambdax*dcv_r(rr));
-            }
-          }
-        }
-      }
-
-      matmul_transb(Mhat,Tvc,Khat);
-
-      // Half step -- Exact solution
-
-      matmul(Khat,Twc,Mhat);
-
-      #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr))*ncxx;
-            }
-          }
-        }
-      }
-      #else
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr))*ncxx;
-            }
-          }
-        }
-      }
-      #endif
-
-      matmul_transb(Mhat,Twc,Khat);
-
-      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
-
-      // Full step -- exponential integrator
-
-      fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
-
-      matmul(Khat,Tuc,Mhat);
-
-      for(Index jj = 0; jj < nsteps_ee; jj++){
-
-        ptw_mult_row(lr_sol.X,efx.begin(),Kex);
-        ptw_mult_row(lr_sol.X,efy.begin(),Key);
-        ptw_mult_row(lr_sol.X,efz.begin(),Kez);
-
-        fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
-        fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
-        fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
-
-        matmul_transb(Kexhat,C2vc,Khat);
-        matmul_transb(Keyhat,C2wc,tmpXhat);
-
-        Khat += tmpXhat;
-
-        matmul_transb(Kezhat,C2uc,tmpXhat);
-
-        Khat += tmpXhat;
-
-        //gt::start("EE Third split K CPU");
-        matmul(Khat,Tuc,tmpXhat);
+        matmul(Khat,Twc,Mhat);
 
         #ifdef __OPENMP__
         #pragma omp parallel for collapse(2)
@@ -4440,14 +4368,10 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
           for(Index k = 0; k < N_xx[2]; k++){
             for(Index j = 0; j < N_xx[1]; j++){
               for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
+                if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+                complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
                 Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) *= exp(-tau_ee_h*lambdaz*dcu_r(rr));
-                Mhat(idx,rr) += tau_ee_h*phi1_im(-tau_ee_h*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
+                Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr))*ncxx;
               }
             }
           }
@@ -4455,49 +4379,160 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
         #else
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_xx[2]; k++){
-            if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
             for(Index j = 0; j < N_xx[1]; j++){
+              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
               for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
+                complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
                 Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) *= exp(-tau_ee_h*lambdaz*dcu_r(rr));
-                Mhat(idx,rr) += tau_ee_h*phi1_im(-tau_ee_h*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
+                Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr))*ncxx;
               }
             }
           }
         }
         #endif
 
-        matmul_transb(Mhat,Tuc,Khat);
-
-        Khat *= ncxx;
+        matmul_transb(Mhat,Twc,Khat);
 
         fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
 
-        // Second stage
+        // Full step -- exponential integrator
 
-        ptw_mult_row(lr_sol.X,efx.begin(),Kex);
-        ptw_mult_row(lr_sol.X,efy.begin(),Key);
-        ptw_mult_row(lr_sol.X,efz.begin(),Kez);
+        fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
-        fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
-        fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
-        fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
+        matmul(Khat,Tuc,Mhat);
 
-        matmul_transb(Kexhat,C2vc,Khat);
-        matmul_transb(Keyhat,C2wc,Kexhat);
+        for(Index jj = 0; jj < nsteps_ee; jj++){
 
-        Kexhat += Khat;
+          ptw_mult_row(lr_sol.X,efx.begin(),Kex);
+          ptw_mult_row(lr_sol.X,efy.begin(),Key);
+          ptw_mult_row(lr_sol.X,efz.begin(),Kez);
 
-        matmul_transb(Kezhat,C2uc,Khat);
+          fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
 
-        Kexhat += Khat;
+          matmul_transb(Kexhat,C2vc,Khat);
+          matmul_transb(Keyhat,C2wc,tmpXhat);
 
-        matmul(Kexhat,Tuc,Khat);
+          Khat += tmpXhat;
 
-        Khat -= tmpXhat;
+          matmul_transb(Kezhat,C2uc,tmpXhat);
+
+          Khat += tmpXhat;
+
+          //gt::start("EE Third split K CPU");
+          matmul(Khat,Tuc,tmpXhat);
+
+          #ifdef __OPENMP__
+          #pragma omp parallel for collapse(2)
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                  Mhat(idx,rr) *= exp(-tau_ee_h*lambdaz*dcu_r(rr));
+                  Mhat(idx,rr) += tau_ee_h*phi1_im(-tau_ee_h*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
+                }
+              }
+            }
+          }
+          #else
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                  Mhat(idx,rr) *= exp(-tau_ee_h*lambdaz*dcu_r(rr));
+                  Mhat(idx,rr) += tau_ee_h*phi1_im(-tau_ee_h*lambdaz*dcu_r(rr))*tmpXhat(idx,rr);
+                }
+              }
+            }
+          }
+          #endif
+
+          matmul_transb(Mhat,Tuc,Khat);
+
+          Khat *= ncxx;
+
+          fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
+
+          // Second stage
+
+          ptw_mult_row(lr_sol.X,efx.begin(),Kex);
+          ptw_mult_row(lr_sol.X,efy.begin(),Key);
+          ptw_mult_row(lr_sol.X,efz.begin(),Kez);
+
+          fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
+          fftw_execute_dft_r2c(plans_xx[0],Kez.begin(),(fftw_complex*)Kezhat.begin());
+
+          matmul_transb(Kexhat,C2vc,Khat);
+          matmul_transb(Keyhat,C2wc,Kexhat);
+
+          Kexhat += Khat;
+
+          matmul_transb(Kezhat,C2uc,Khat);
+
+          Kexhat += Khat;
+
+          matmul(Kexhat,Tuc,Khat);
+
+          Khat -= tmpXhat;
+
+          #ifdef __OPENMP__
+          #pragma omp parallel for collapse(2)
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                  Mhat(idx,rr) += tau_ee_h*phi2_im(-tau_ee_h*lambdaz*dcu_r(rr))*Khat(idx,rr);
+                }
+              }
+            }
+          }
+          #else
+          for(int rr = 0; rr < r; rr++){
+            for(Index k = 0; k < N_xx[2]; k++){
+              if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
+              for(Index j = 0; j < N_xx[1]; j++){
+                for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                  complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
+
+                  Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+
+                  Mhat(idx,rr) += tau_ee_h*phi2_im(-tau_ee_h*lambdaz*dcu_r(rr))*Khat(idx,rr);
+                }
+              }
+            }
+          }
+          #endif
+
+          matmul_transb(Mhat,Tuc,Khat);
+
+          if(jj != (nsteps_ee -1)){
+            Khat *= ncxx;
+            fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
+          }
+        }
+
+        // Half step -- exact solution
+
+        matmul(Khat,Twc,Mhat);
 
         #ifdef __OPENMP__
         #pragma omp parallel for collapse(2)
@@ -4505,13 +4540,10 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
           for(Index k = 0; k < N_xx[2]; k++){
             for(Index j = 0; j < N_xx[1]; j++){
               for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
-
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
+                if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
+                complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
                 Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) += tau_ee_h*phi2_im(-tau_ee_h*lambdaz*dcu_r(rr))*Khat(idx,rr);
+                Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr));
               }
             }
           }
@@ -4519,133 +4551,89 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
         #else
         for(int rr = 0; rr < r; rr++){
           for(Index k = 0; k < N_xx[2]; k++){
-            if(k < (N_xx[2]/2)) { mult_k = k; } else if(k == (N_xx[2]/2)) { mult_k = 0.0; } else { mult_k = (k-N_xx[2]); }
             for(Index j = 0; j < N_xx[1]; j++){
+              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
               for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-                complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(lim_xx[5]-lim_xx[4])*mult_k);
-
+                complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
                 Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-
-                Mhat(idx,rr) += tau_ee_h*phi2_im(-tau_ee_h*lambdaz*dcu_r(rr))*Khat(idx,rr);
+                Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr));
               }
             }
           }
         }
         #endif
 
-        matmul_transb(Mhat,Tuc,Khat);
+        matmul_transb(Mhat,Twc,Khat);
 
-        if(jj != (nsteps_ee -1)){
-          Khat *= ncxx;
-          fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
-        }
-      }
+        // Half step -- Exact solution
 
-      // Half step -- exact solution
+        matmul(Khat,Tvc,Mhat);
 
-      matmul(Khat,Twc,Mhat);
-
-      #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr));
+        #ifdef __OPENMP__
+        #pragma omp parallel for collapse(2)
+        #endif
+        for(int rr = 0; rr < r; rr++){
+          for(Index k = 0; k < N_xx[2]; k++){
+            for(Index j = 0; j < N_xx[1]; j++){
+              for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
+                complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
+                Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
+                Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambdax*dcv_r(rr))*ncxx;
+              }
             }
           }
         }
-      }
-      #else
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            if(j < (N_xx[1]/2)) { mult_j = j; } else if(j == (N_xx[1]/2)) { mult_j = 0.0; } else { mult_j = (j-N_xx[1]); }
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              complex<double> lambday = complex<double>(0.0,2.0*M_PI/(lim_xx[3]-lim_xx[2])*mult_j);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambday*dcw_r(rr));
-            }
-          }
-        }
-      }
-      #endif
 
-      matmul_transb(Mhat,Twc,Khat);
+        matmul_transb(Mhat,Tvc,Khat);
 
-      // Half step -- Exact solution
+        fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
 
-      matmul(Khat,Tvc,Mhat);
-
-      #ifdef __OPENMP__
-      #pragma omp parallel for collapse(2)
-      #endif
-      for(int rr = 0; rr < r; rr++){
-        for(Index k = 0; k < N_xx[2]; k++){
-          for(Index j = 0; j < N_xx[1]; j++){
-            for(Index i = 0; i < (N_xx[0]/2 + 1); i++){
-              complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(lim_xx[1]-lim_xx[0])*i);
-              Index idx = i+j*(N_xx[0]/2+1) + k*((N_xx[0]/2+1)*N_xx[1]);
-              Mhat(idx,rr) *= exp(-tau_split_h/2.0*lambdax*dcv_r(rr))*ncxx;
-            }
-          }
-        }
       }
 
-      matmul_transb(Mhat,Tvc,Khat);
+      gram_schmidt(lr_sol.X, lr_sol.S, ip_xx);
 
-      fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
+      gt::stop("Second half step K step CPU");
 
+      gt::stop("Restarted integration CPU");
+
+      gt::stop("Total time CPU");
+      // Error Mass
+      coeff_one(lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],int_x);
+      coeff_one(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],int_v);
+
+      matvec(lr_sol.S,int_v,rho);
+
+      mass = 0.0;
+      for(int ii = 0; ii < r; ii++){
+        mass += (int_x(ii)*rho(ii));
+      }
+
+      err_mass = abs(mass0-mass);
+
+      err_massf << err_mass << endl;
+
+      // Error in energy
+
+      coeff_one(lr_sol.V,we_v2,int_v);
+      coeff_one(lr_sol.V,we_w2,int_v2);
+
+      int_v += int_v2;
+
+      coeff_one(lr_sol.V,we_u2,int_v2);
+
+      int_v += int_v2;
+
+      matvec(lr_sol.S,int_v,rho);
+
+      energy = el_energy;
+      for(int ii = 0; ii < r; ii++){
+        energy += 0.5*(int_x(ii)*rho(ii));
+      }
+
+      err_energy = abs(energy0-energy);
+
+      err_energyf << err_energy << endl;
     }
-
-    gram_schmidt(lr_sol.X, lr_sol.S, ip_xx);
-
-    gt::stop("Second half step K step CPU");
-
-    gt::stop("Restarted integration CPU");
-
-    gt::stop("Total time CPU");
-    // Error Mass
-    coeff_one(lr_sol.X,h_xx[0]*h_xx[1]*h_xx[2],int_x);
-    coeff_one(lr_sol.V,h_vv[0]*h_vv[1]*h_vv[2],int_v);
-
-    matvec(lr_sol.S,int_v,rho);
-
-    mass = 0.0;
-    for(int ii = 0; ii < r; ii++){
-      mass += (int_x(ii)*rho(ii));
-    }
-
-    err_mass = abs(mass0-mass);
-
-    err_massf << err_mass << endl;
-
-    // Error in energy
-
-    coeff_one(lr_sol.V,we_v2,int_v);
-    coeff_one(lr_sol.V,we_w2,int_v2);
-
-    int_v += int_v2;
-
-    coeff_one(lr_sol.V,we_u2,int_v2);
-
-    int_v += int_v2;
-
-    matvec(lr_sol.S,int_v,rho);
-
-    energy = el_energy;
-    for(int ii = 0; ii < r; ii++){
-      energy += 0.5*(int_x(ii)*rho(ii));
-    }
-
-    err_energy = abs(energy0-energy);
-
-    err_energyf << err_energy << endl;
-
-    #endif
 
     // GPU
 
@@ -5753,34 +5741,31 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
     err_energyGPUf << err_energy_CPU << endl;
 
-    cout << "INITIAL MASS" << endl;
-    cout << mass0 << endl;
-
-    cout << "INITIAL ENERGY" << endl;
-    cout << energy0 << endl;
-    exit(1);
     #endif
 
-    #ifdef __CPU__
-    cout << "Electric energy: " << el_energy << endl;
-    #endif
-    #ifdef __CUDACC__
-    cout << "Electric energy GPU: " << d_el_energy_CPU << endl;
-    #endif
+    if(CPU) {
+      cout << "Electric energy: " << el_energy << endl;
+    } else {
+      #ifdef __CUDACC__
+      cout << "Electric energy GPU: " << d_el_energy_CPU << endl;
+      #endif
+    }
 
-    #ifdef __CPU__
+    if(CPU) {
     cout << "Error in mass: " << err_mass << endl;
-    #endif
-    #ifdef __CUDACC__
-    cout << "Error in mass GPU: " << err_mass_CPU << endl;
-    #endif
+    } else {
+      #ifdef __CUDACC__
+      cout << "Error in mass GPU: " << err_mass_CPU << endl;
+      #endif
+    }
 
-    #ifdef __CPU__
+    if(CPU) {
     cout << "Error in energy: " << err_energy << endl;
-    #endif
-    #ifdef __CUDACC__
-    cout << "Error in energy GPU: " << err_energy_CPU << endl;
-    #endif
+    } else {
+      #ifdef __CUDACC__
+      cout << "Error in energy GPU: " << err_energy_CPU << endl;
+      #endif
+    }
 
   }
 
@@ -5799,21 +5784,36 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   err_energyGPUf.close();
   #endif
 
-  #ifdef __CPU__
-  return lr_sol;
-  #else
-
+  #ifdef __CUDACC__
   lr_sol.X = d_lr_sol.X;
   lr_sol.S = d_lr_sol.S;
   lr_sol.V = d_lr_sol.V;
   cudaDeviceSynchronize();
+  #endif
 
   return lr_sol;
-  #endif
 }
 
 
-int main(){
+int main(int argc, char** argv){
+
+  cxxopts::Options options("linear_landau_3d", "3+3 dimensional simulation of linear Landau damping");
+  options.add_options()
+  ("cpu", "Run the simulation on the CPU", cxxopts::value<bool>()->default_value("false"))
+  ("h,help", "Help message")
+  ;
+  auto result = options.parse(argc, argv);
+
+  if(result.count("help")) {
+    cout << options.help() << endl;
+    exit(0);
+  }
+
+  #ifndef __CUDACC__
+  CPU = true;
+  #else
+  CPU = result["cpu"].as<bool>();
+  #endif
 
   #ifdef __OPENMP__
   omp_set_num_threads(n_threads_omp);
@@ -5827,7 +5827,7 @@ int main(){
   #endif
 
   array<Index,3> N_xx = {64,64,64}; // Sizes in space 20
-  array<Index,3> N_vv = {128,128,128}; // Sizes in velocity 20
+  array<Index,3> N_vv = {32,32,32}; // Sizes in velocity 20
 
   int r = 20; // rank desired 10
 

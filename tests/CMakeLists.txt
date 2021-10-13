@@ -1,3 +1,6 @@
+#
+# storage test
+#
 if(${CUDA_ENABLED})
     cuda_add_executable(storage storage.cu ../src/generic/utility.cu ../src/generic/kernels.cu)
     cuda_add_cublas_to_target(storage)
@@ -7,6 +10,9 @@ endif()
 target_link_libraries(storage Catch2::Catch2)
 add_test(NAME storage COMMAND storage)
 
+#
+# matrix test
+#
 if(${CUDA_ENABLED})
     cuda_add_executable(matrix matrix.cu ../src/generic/matrix.cu ../src/generic/utility.cu ../src/generic/kernels.cu)
     cuda_add_cublas_to_target(matrix)
@@ -17,6 +23,9 @@ endif()
 target_link_libraries(matrix Catch2::Catch2)
 add_test(NAME matrix COMMAND matrix)
 
+#
+# coefficient test
+#
 if(${CUDA_ENABLED})
     cuda_add_executable(coefficients coefficients.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/kernels.cu)
     cuda_add_cublas_to_target(coefficients)
@@ -27,6 +36,9 @@ endif()
 target_link_libraries(coefficients Catch2::Catch2)
 add_test(NAME coefficients COMMAND coefficients)
 
+#
+# low-rank test
+#
 if(${CUDA_ENABLED})
     cuda_add_executable(lr lr.cu ../src/lr/lr.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/kernels.cu)
     cuda_add_cublas_to_target(lr)
@@ -36,42 +48,21 @@ else()
     add_executable(lr lr.cpp ../src/lr/lr.cpp ../src/generic/utility.cpp ../src/generic/matrix.cpp ../src/generic/timer.cpp)
 endif()
 target_link_libraries(lr Catch2::Catch2)
-
 add_test(NAME lr COMMAND lr)
 
-if(${FFTW_SERVER})
-  target_link_libraries(matrix ${FFTW_LIBRARIES})
-  target_link_libraries(coefficients ${FFTW_LIBRARIES})
-  target_link_libraries(lr ${FFTW_LIBRARIES})
-else()
-  target_link_libraries(matrix fftw3)
-  target_link_libraries(coefficients fftw3)
-  target_link_libraries(lr fftw3)
-endif()
+#
+# Add common libraries to all tests
+#
+target_link_libraries(matrix ${FFTW_LIBRARIES})
+target_link_libraries(coefficients ${FFTW_LIBRARIES})
+target_link_libraries(lr ${FFTW_LIBRARIES})
 
 if(${MKL_ENABLED})
-  target_link_libraries(matrix ${MKL_LIBRARIES})
+  target_link_libraries(matrix       ${MKL_LIBRARIES})
   target_link_libraries(coefficients ${MKL_LIBRARIES})
-  target_link_libraries(lr ${MKL_LIBRARIES})
+  target_link_libraries(lr           ${MKL_LIBRARIES})
 else()
-  include(FindBLAS)
-  include(FindLAPACK)
-
-  if (BLAS_FOUND AND LAPACK_FOUND)
-      target_compile_options(matrix PRIVATE ${BLAS_LINKER_FLAGS})
-      target_link_libraries(matrix ${BLAS_LIBRARIES})
-      target_compile_options(matrix PRIVATE ${LAPACK_LINKER_FLAGS})
-      target_link_libraries(matrix ${LAPACK_LIBRARIES})
-
-      target_compile_options(coefficients PRIVATE ${BLAS_LINKER_FLAGS})
-      target_link_libraries(coefficients ${BLAS_LIBRARIES})
-      target_compile_options(coefficients PRIVATE ${LAPACK_LINKER_FLAGS})
-      target_link_libraries(coefficients ${LAPACK_LIBRARIES})
-
-      target_compile_options(lr PRIVATE ${BLAS_LINKER_FLAGS})
-      target_link_libraries(lr ${BLAS_LIBRARIES})
-      target_compile_options(lr PRIVATE ${LAPACK_LINKER_FLAGS})
-      target_link_libraries(lr ${LAPACK_LIBRARIES})
-  endif()
-
+  target_link_libraries(matrix       ${OPENBLAS_LIBRARIES} Threads::Threads "-lgfortran")
+  target_link_libraries(coefficients ${OPENBLAS_LIBRARIES} Threads::Threads "-lgfortran")
+  target_link_libraries(lr           ${OPENBLAS_LIBRARIES} Threads::Threads "-lgfortran")
 endif()
