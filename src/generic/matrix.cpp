@@ -154,12 +154,18 @@ template void transpose_inplace(multi_array<double,2>&);
 blas_ops::blas_ops() {
   #ifdef __CUDACC__
   cublasCreate(&handle);
+
+
+  cublasCreate (&handle_devres);
+  cublasSetPointerMode(handle_devres, CUBLAS_POINTER_MODE_DEVICE);
   #endif
 }
 
 blas_ops::~blas_ops() {
   #ifdef __CUDACC__
   cublasDestroy(handle);
+  
+  cublasDestroy(handle_devres);
   #endif
 }
 

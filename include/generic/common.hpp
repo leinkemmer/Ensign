@@ -48,7 +48,6 @@ enum class stloc { host, device };
 
 #ifdef __CUDACC__
   const int n_threads = 128;
-  extern cublasHandle_t handle_dot;
 #endif
 
 #ifdef __OPENMP__

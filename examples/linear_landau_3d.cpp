@@ -8,11 +8,6 @@
 
 #include <cxxopts.hpp>
 
-#ifdef __CUDACC__
-cublasHandle_t  handle;
-cublasHandle_t handle_dot;
-#endif
-
 bool CPU;
 
 lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int r,double tstar, Index nsteps, int nsteps_split, int nsteps_ee, int nsteps_rk4, array<double,6> lim_xx, array<double,6> lim_vv, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_xx, array<fftw_plan,2> plans_vv, const blas_ops& blas){
@@ -436,13 +431,6 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
   gt::start("Initialization GPU");
 
-  gt::start("Initialization GPU - Handles");
-  cublasCreate(&handle);
-  cublasCreate(&handle_dot);
-  cublasSetPointerMode(handle_dot, CUBLAS_POINTER_MODE_DEVICE);
-  cudaDeviceSynchronize();
-  gt::stop("Initialization GPU - Handles");
-
   lr2<double> d_lr_sol(r,{dxx_mult,dvv_mult},stloc::device);
   d_lr_sol.X = lr_sol.X;
   d_lr_sol.V = lr_sol.V;
@@ -630,7 +618,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   multi_array<cuDoubleComplex,2> d_tmpVhat({dvvh_mult,r},stloc::device);
 
   // For random values generation
-  gram_schmidt gs;
+  gram_schmidt gs(&blas);
 
   // Quantities of interest
 
@@ -1952,9 +1940,9 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
     // Electric energy
 
-    cublasDdot (handle_dot, d_efx.num_elements(), d_efx.begin(), 1, d_efx.begin(), 1, d_el_energy_x);
-    cublasDdot (handle_dot, d_efy.num_elements(), d_efy.begin(), 1, d_efy.begin(), 1, d_el_energy_y);
-    cublasDdot (handle_dot, d_efz.num_elements(), d_efz.begin(), 1, d_efz.begin(), 1, d_el_energy_z);
+    cublasDdot (blas.handle_devres, d_efx.num_elements(), d_efx.begin(), 1, d_efx.begin(), 1, d_el_energy_x);
+    cublasDdot (blas.handle_devres, d_efy.num_elements(), d_efy.begin(), 1, d_efy.begin(), 1, d_el_energy_y);
+    cublasDdot (blas.handle_devres, d_efz.num_elements(), d_efz.begin(), 1, d_efz.begin(), 1, d_el_energy_z);
     cudaDeviceSynchronize();
     ptw_sum<<<1,1>>>(1,d_el_energy_x,d_el_energy_y);
     ptw_sum<<<1,1>>>(1,d_el_energy_x,d_el_energy_z);
@@ -1972,7 +1960,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
     blas.matvec(d_lr_sol.S,d_int_v,d_rho);
 
-    cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_rho.begin(), 1,d_mass);
+    cublasDdot (blas.handle_devres, r, d_int_x.begin(), 1, d_rho.begin(), 1,d_mass);
     cudaDeviceSynchronize();
 
     cudaMemcpy(&d_mass_CPU,d_mass,sizeof(double),cudaMemcpyDeviceToHost);
@@ -1991,7 +1979,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
 
     blas.matvec(d_lr_sol.S,d_int_v,d_rho);
 
-    cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_rho.begin(), 1, d_energy);
+    cublasDdot (blas.handle_devres, r, d_int_x.begin(), 1, d_rho.begin(), 1, d_energy);
     cudaDeviceSynchronize();
     scale_unique<<<1,1>>>(d_energy,0.5);
     cudaMemcpy(&d_energy_CPU,d_energy,sizeof(double),cudaMemcpyDeviceToHost);
@@ -2036,9 +2024,6 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
     err_energyf.close();
   } else {
     #ifdef __CUDACC__
-    cublasDestroy(handle);
-    cublasDestroy(handle_dot);
-
     destroy_plans(plans_d_e);
     destroy_plans(d_plans_xx);
     destroy_plans(d_plans_vv);
@@ -2482,11 +2467,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
   #ifdef __CUDACC__
 
-  cublasCreate(&handle);
-  cublasCreate(&handle_dot);
-  cublasSetPointerMode(handle_dot, CUBLAS_POINTER_MODE_DEVICE);
-  cudaDeviceSynchronize();
-
   lr2<double> d_lr_sol(r,{dxx_mult,dvv_mult},stloc::device);
   d_lr_sol.X = lr_sol.X;
   d_lr_sol.V = lr_sol.V;
@@ -2665,7 +2645,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   multi_array<cuDoubleComplex,2> d_tmpXhat({dxxh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_tmpVhat({dvvh_mult,r},stloc::device);
 
-  gram_schmidt gs;
+  gram_schmidt gs(&blas);
 
   // Quantities of interest
 
@@ -4653,9 +4633,9 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
     // Electric energy
 
-    cublasDdot (handle_dot, d_efx.num_elements(), d_efx.begin(), 1, d_efx.begin(), 1, d_el_energy_x);
-    cublasDdot (handle_dot, d_efy.num_elements(), d_efy.begin(), 1, d_efy.begin(), 1, d_el_energy_y);
-    cublasDdot (handle_dot, d_efz.num_elements(), d_efz.begin(), 1, d_efz.begin(), 1, d_el_energy_z);
+    cublasDdot (blas.handle_devres, d_efx.num_elements(), d_efx.begin(), 1, d_efx.begin(), 1, d_el_energy_x);
+    cublasDdot (blas.handle_devres, d_efy.num_elements(), d_efy.begin(), 1, d_efy.begin(), 1, d_el_energy_y);
+    cublasDdot (blas.handle_devres, d_efz.num_elements(), d_efz.begin(), 1, d_efz.begin(), 1, d_el_energy_z);
     cudaDeviceSynchronize();
     ptw_sum<<<1,1>>>(1,d_el_energy_x,d_el_energy_y);
     ptw_sum<<<1,1>>>(1,d_el_energy_x,d_el_energy_z);
@@ -5696,7 +5676,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
     blas.matvec(d_lr_sol.S,d_int_v,d_rho);
 
-    cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_rho.begin(), 1,d_mass);
+    cublasDdot (blas.handle_devres, r, d_int_x.begin(), 1, d_rho.begin(), 1,d_mass);
     cudaDeviceSynchronize();
 
     cudaMemcpy(&d_mass_CPU,d_mass,sizeof(double),cudaMemcpyDeviceToHost);
@@ -5715,7 +5695,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
 
     blas.matvec(d_lr_sol.S,d_int_v,d_rho);
 
-    cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_rho.begin(), 1, d_energy);
+    cublasDdot (blas.handle_devres, r, d_int_x.begin(), 1, d_rho.begin(), 1, d_energy);
     cudaDeviceSynchronize();
     scale_unique<<<1,1>>>(d_energy,0.5); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
     cudaMemcpy(&d_energy_CPU,d_energy,sizeof(double),cudaMemcpyDeviceToHost);
@@ -5753,9 +5733,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   }
 
   #ifdef __CUDACC__
-  cublasDestroy(handle);
-  cublasDestroy(handle_dot);
-
   destroy_plans(plans_d_e);
   destroy_plans(d_plans_xx);
   destroy_plans(d_plans_vv);

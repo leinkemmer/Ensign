@@ -76,7 +76,7 @@ void gram_schmidt_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, std::f
 };
 
 #ifdef __CUDACC__
-void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, curandGenerator_t gen) { //with constant weight for inner product
+void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, curandGenerator_t gen, cublasHandle_t handle_devres) { //with constant weight for inner product
   Index n = Q.shape()[0];
   int r = Q.shape()[1];
   double* nrm;
@@ -84,14 +84,14 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
 
   for(Index j=0;j<r;j++) {
     for(Index k=0;k<j;k++) {
-      cublasDdot (handle_dot, n, &Q(0,j), 1, &Q(0,k), 1,&R(k,j));
+      cublasDdot (handle_devres, n, &Q(0,j), 1, &Q(0,k), 1, &R(k,j));
       cudaDeviceSynchronize();
       scale_unique<<<1,1>>>(&R(k,j),w); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
       dmaxpy<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &R(k,j), &Q(0,k), &Q(0,j));
       scale_unique<<<1,1>>>(&R(j,k),0.0);
     }
 
-      cublasDdot (handle_dot, n, &Q(0,j), 1, &Q(0,j), 1, &R(j,j));
+      cublasDdot (handle_devres, n, &Q(0,j), 1, &Q(0,j), 1, &R(j,j));
       cudaDeviceSynchronize();
       scale_sqrt_unique<<<1,1>>>(&R(j,j),w);
 
@@ -106,13 +106,13 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
         curandGenerateNormalDouble(gen, &Q(0,j), n, 0.0, 1.0);
 
         for(Index k=0;k<j;k++) {
-          cublasDdot (handle_dot, n, &Q(0,j), 1, &Q(0,k), 1, nrm);
+          cublasDdot (handle_devres, n, &Q(0,j), 1, &Q(0,k), 1, nrm);
           cudaDeviceSynchronize();
           scale_unique<<<1,1>>>(nrm,w); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
           dmaxpy<<<(n+n_threads-1)/n_threads,n_threads>>>(n, nrm, &Q(0,k), &Q(0,j));
         }
 
-          cublasDdot (handle_dot, n, &Q(0,j), 1, &Q(0,j), 1, nrm);
+          cublasDdot (handle_devres, n, &Q(0,j), 1, &Q(0,j), 1, nrm);
           cudaDeviceSynchronize();
           scale_sqrt_unique<<<1,1>>>(nrm,w);
           ptw_div_gs<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j), nrm);
@@ -133,13 +133,13 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
   for(Index j=0;j<r;j++) {
     for(Index k=0;k<j;k++) {
       ptw_mult<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j),w,tmp.begin());
-      cublasDdot (handle_dot, n, tmp.begin(), 1, &Q(0,k), 1,&R(k,j));
+      cublasDdot (handle_devres, n, tmp.begin(), 1, &Q(0,k), 1,&R(k,j));
       cudaDeviceSynchronize();
       dmaxpy<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &R(k,j), &Q(0,k), &Q(0,j));
       scale_unique<<<1,1>>>(&R(j,k),0.0);
     }
       ptw_mult<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j),w,tmp.begin());
-      cublasDdot (handle_dot, n, &Q(0,j), 1, tmp.begin(), 1,&R(j,j));
+      cublasDdot (handle_devres, n, &Q(0,j), 1, tmp.begin(), 1,&R(j,j));
       cudaDeviceSynchronize();
       ptw_div_gs<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j), &R(j,j));
 
@@ -150,7 +150,9 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
 #endif
 
 
-gram_schmidt::gram_schmidt() {
+gram_schmidt::gram_schmidt(const blas_ops* _blas) {
+  blas = _blas;
+
   #ifdef __CUDACC__
   curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
   curandSetPseudoRandomGeneratorSeed(gen,time(0));
@@ -178,7 +180,7 @@ void gram_schmidt::operator()(multi_array<double,2>& Q, multi_array<double,2>& R
     exit(1);
   } else {
     #ifdef __CUDACC__
-    gram_schmidt_gpu(Q, R, w, gen);
+    gram_schmidt_gpu(Q, R, w, gen, blas->handle_devres);
     #else
     cout << "ERROR: gram_schmidt_gpu called but not GPU support available." << endl;
     exit(1);
@@ -247,11 +249,11 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, std::functio
         lr.V(i, k) = distribution(generator);
       }
     }
-  }
+    }
 
   multi_array<T, 2> X_R(lr.S.shape()), V_R(lr.S.shape());
 
-  gram_schmidt gs;
+  gram_schmidt gs(&blas);
   gs(lr.X, X_R, inner_product_X);
   gs(lr.V, V_R, inner_product_V);
 

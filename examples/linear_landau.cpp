@@ -6,11 +6,6 @@
 #include <generic/timer.hpp>
 #include <generic/fft.hpp>
 
-#ifdef __CUDACC__
-cublasHandle_t  handle;
-cublasHandle_t handle_dot;
-#endif
-
 lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index nsteps, int nsteps_ee, int nsteps_rk4, double ax, double bx, double av, double bv, double alpha, double kappa, bool ee_flag, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_x, array<fftw_plan,2> plans_v, const blas_ops& blas){
 
   double tau = tstar/nsteps;
@@ -208,10 +203,6 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
   #endif
   //// FOR GPU ////
   #ifdef __CUDACC__
-  cublasCreate (&handle);
-  cublasCreate (&handle_dot);
-  cublasSetPointerMode(handle_dot, CUBLAS_POINTER_MODE_DEVICE);
-
   // To be substituted if we initialize in GPU
 
   lr2<double> d_lr_sol(r,{Nx,Nv}, stloc::device);
@@ -324,7 +315,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
   #endif
 
-  gram_schmidt gs;
+  gram_schmidt gs(&blas);
 
 //  nsteps = 1;
   for(Index i = 0; i < nsteps; i++){
@@ -871,7 +862,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
     cudaDeviceSynchronize();
     gt::stop("Main loop GPU");
 
-    cublasDdot (handle_dot, Nx, d_ef.begin(), 1, d_ef.begin(), 1, d_el_energy);
+    cublasDdot (blas.handle_devres, Nx, d_ef.begin(), 1, d_ef.begin(), 1, d_el_energy);
     cudaDeviceSynchronize();
     scale_unique<<<1,1>>>(d_el_energy,0.5*hx); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
 
@@ -886,7 +877,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     blas.matvec(d_lr_sol.S,d_int_v,d_tmp_vec);
 
-    cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_mass);
+    cublasDdot (blas.handle_devres, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_mass);
     cudaDeviceSynchronize();
     cudaMemcpy(&d_mass_CPU,d_mass,sizeof(double),cudaMemcpyDeviceToHost);
 
@@ -898,7 +889,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     blas.matvec(d_lr_sol.S,d_int_v,d_tmp_vec);
 
-    cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_energy);
+    cublasDdot (blas.handle_devres, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_energy);
     cudaDeviceSynchronize();
     scale_unique<<<1,1>>>(d_energy,0.5); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
 
@@ -935,9 +926,6 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
   err_energyf.close();
   #endif
   #ifdef __CUDACC__
-  cublasDestroy(handle);
-  cublasDestroy(handle_dot);
-
   destroy_plans(plans_d_e);
   destroy_plans(plans_d_x);
   destroy_plans(plans_d_v);
@@ -1165,10 +1153,6 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
   //// FOR GPU ////
   #ifdef __CUDACC__
-  cublasCreate (&handle);
-  cublasCreate (&handle_dot);
-  cublasSetPointerMode(handle_dot, CUBLAS_POINTER_MODE_DEVICE);
-
   lr2<double> d_lr_sol(r,{Nx,Nv}, stloc::device);
   d_lr_sol.X = lr_sol.X;
   d_lr_sol.S = lr_sol.S;
@@ -1289,7 +1273,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
   // For random values generation
   #endif
 
-  gram_schmidt gs;
+  gram_schmidt gs(&blas);
 
   for(Index i = 0; i < nsteps; i++){
 
@@ -2033,7 +2017,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     // Electric energy
 
-    cublasDdot (handle_dot, Nx, d_ef.begin(), 1, d_ef.begin(), 1, d_el_energy);
+    cublasDdot (blas.handle_devres, Nx, d_ef.begin(), 1, d_ef.begin(), 1, d_el_energy);
     cudaDeviceSynchronize();
     scale_unique<<<1,1>>>(d_el_energy,0.5*hx); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
 
@@ -2492,7 +2476,6 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     }
 
-    gs(d_lr_sol.X, d_lr_sol.S, hx);
 
     cudaDeviceSynchronize();
     gt::stop("Restarted integration GPU");
@@ -2504,7 +2487,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     blas.matvec(d_lr_sol.S,d_int_v,d_tmp_vec);
 
-    cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_mass);
+    cublasDdot (blas.handle_devres, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_mass);
     cudaDeviceSynchronize();
     cudaMemcpy(&d_mass_CPU,d_mass,sizeof(double),cudaMemcpyDeviceToHost);
 
@@ -2516,7 +2499,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     blas.matvec(d_lr_sol.S,d_int_v,d_tmp_vec);
 
-    cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_energy);
+    cublasDdot (blas.handle_devres, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_energy);
     cudaDeviceSynchronize();
     scale_unique<<<1,1>>>(d_energy,0.5); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
 
@@ -2553,9 +2536,6 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
   err_energyf.close();
   #endif
   #ifdef __CUDACC__
-  cublasDestroy(handle);
-  cublasDestroy(handle_dot);
-
   destroy_plans(plans_d_e);
   destroy_plans(plans_d_x);
   destroy_plans(plans_d_v);

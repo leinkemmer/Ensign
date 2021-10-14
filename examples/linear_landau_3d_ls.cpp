@@ -6,10 +6,6 @@
 #include <generic/timer.hpp>
 #include <generic/fft.hpp>
 
-#ifdef __CUDACC__
- cublasHandle_t handle_dot;
-#endif
-
 double tot_gpu_mem = 0.0;
 
 
@@ -380,12 +376,6 @@ int main(){
   array<cufftHandle,2> plans_d_e = create_plans_3d(N_xx,1);
   array<cufftHandle,2> d_plans_xx = create_plans_3d(N_xx, r);
   array<cufftHandle,2> d_plans_vv = create_plans_3d(N_vv, r);
-
-  gt::start("Initialization GPU - Handles");
-  cublasCreate(&handle_dot);
-  cublasSetPointerMode(handle_dot, CUBLAS_POINTER_MODE_DEVICE);
-  cudaDeviceSynchronize();
-  gt::stop("Initialization GPU - Handles");
 
   gt::start("Initialization GPU");
 
@@ -1476,9 +1466,9 @@ int main(){
    // Electric energy
 
     //gt::start("Quantities GPU - El en");
-    cublasDdot (handle_dot, d_efx.num_elements(), d_efx.begin(), 1, d_efx.begin(), 1, d_el_energy_x);
-    cublasDdot (handle_dot, d_efy.num_elements(), d_efy.begin(), 1, d_efy.begin(), 1, d_el_energy_y);
-    cublasDdot (handle_dot, d_efz.num_elements(), d_efz.begin(), 1, d_efz.begin(), 1, d_el_energy_z);
+    cublasDdot (blas.handle_devres, d_efx.num_elements(), d_efx.begin(), 1, d_efx.begin(), 1, d_el_energy_x);
+    cublasDdot (blas.handle_devres, d_efy.num_elements(), d_efy.begin(), 1, d_efy.begin(), 1, d_el_energy_y);
+    cublasDdot (blas.handle_devres, d_efz.num_elements(), d_efz.begin(), 1, d_efz.begin(), 1, d_el_energy_z);
     cudaDeviceSynchronize();
     ptw_sum<<<1,1>>>(1,d_el_energy_x,d_el_energy_y);
     ptw_sum<<<1,1>>>(1,d_el_energy_x,d_el_energy_z);
@@ -1502,7 +1492,7 @@ int main(){
     //gt::stop("Quantities GPU - mass - coeff");
     blas.matvec(d_lr_sol.S,d_int_v,d_rho);
 
-    cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_rho.begin(), 1,d_mass);
+    cublasDdot (blas.handle_devres, r, d_int_x.begin(), 1, d_rho.begin(), 1,d_mass);
     cudaDeviceSynchronize();
 
     cudaMemcpy(&d_mass_CPU,d_mass,sizeof(double),cudaMemcpyDeviceToHost);
@@ -1527,7 +1517,7 @@ int main(){
 
     blas.matvec(d_lr_sol.S,d_int_v,d_rho);
 
-    cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_rho.begin(), 1, d_energy);
+    cublasDdot (blas.handle_devres, r, d_int_x.begin(), 1, d_rho.begin(), 1, d_energy);
     cudaDeviceSynchronize();
     scale_unique<<<1,1>>>(d_energy,0.5); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
     cudaMemcpy(&d_energy_CPU,d_energy,sizeof(double),cudaMemcpyDeviceToHost);
@@ -1570,8 +1560,6 @@ int main(){
   //err_energyf.close();
 
   #ifdef __CUDACC__
-  cublasDestroy(handle_dot);
-
   destroy_plans(plans_d_e);
   destroy_plans(d_plans_xx);
   destroy_plans(d_plans_vv);

@@ -4,11 +4,9 @@
 #include <lr/lr.hpp>
 #include <generic/matrix.hpp>
 
-#ifdef __CUDACC__
-  cublasHandle_t handle_dot;
-#endif
-
 TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
+
+  blas_ops blas;
 
   SECTION("Gram-Schmidt"){
     multi_array<double,2> A({4,3});
@@ -24,7 +22,7 @@ TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
 
     std::function<double(double*,double*)> ip = inner_product_from_const_weight(1.0, 4);
 
-    gram_schmidt gs;
+    gram_schmidt gs(&blas);
     gs(A, R, ip);
 
     multi_array<double,2> id({3,3});

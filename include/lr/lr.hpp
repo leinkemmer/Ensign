@@ -62,13 +62,14 @@ std::function<T(T*,T*)> inner_product_from_weight(const T* w, Index N);
 */
 struct gram_schmidt {
 
-  gram_schmidt();
+  gram_schmidt(const blas_ops* _blas);
   ~gram_schmidt();
 
   void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product);
   void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, double w);
-
+  
 private:
+  const blas_ops* blas;
   #ifdef __CUDACC__
   curandGenerator_t gen;
   #endif
