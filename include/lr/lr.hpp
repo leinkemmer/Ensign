@@ -59,14 +59,26 @@ std::function<T(T*,T*)> inner_product_from_weight(const T* w, Index N);
 *
 * Note that the inputs are overwritten.
 */
+struct gram_schmidt {
+
+  gram_schmidt();
+  ~gram_schmidt();
+
+  void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product);
+  void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, double w);
+
+private:
+  #ifdef __CUDACC__
+  curandGenerator_t gen;
+  #endif
+};
+
+/*
 template<class T>
 void gram_schmidt(multi_array<T,2>& Q, multi_array<T,2>& R,
   std::function<T(T*,T*)> inner_product);
 
 #ifdef __CUDACC__
-  /* Orthogonalizes Q and returns the corresponding upper triangular matrix R.
-  *
-  * Note that the inputs are overwritten.
-  */
   void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, curandGenerator_t gen);
 #endif
+*/

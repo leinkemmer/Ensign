@@ -1,24 +1,29 @@
+set(LR_SOURCES ../src/lr/lr.cpp ../src/lr/coefficients.cpp ../src/generic/utility.cpp ../src/generic/matrix.cpp ../src/generic/timer.cpp ../src/generic/fft.cpp)
+set(LR_SOURCES_GPU ../src/lr/lr.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/timer.cu ../src/generic/fft.cu ../src/generic/kernels.cu)
+#message(${LR_SOURCES})
+
 if(${CUDA_ENABLED})
-  cuda_add_executable(linear_landau linear_landau.cu ../src/lr/lr.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/timer.cu ../src/generic/kernels.cu)
+  message("linear_landau.cpp ${LR_SOURCES_GPU}")
+  cuda_add_executable(linear_landau linear_landau.cu ${LR_SOURCES_GPU})
   cuda_add_cublas_to_target(linear_landau)
   cuda_add_cufft_to_target(linear_landau)
   target_link_libraries(linear_landau ${CUDA_curand_LIBRARY})
 
-  cuda_add_executable(linear_landau_2d linear_landau_2d.cu ../src/lr/lr.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/timer.cu ../src/generic/kernels.cu)
+  cuda_add_executable(linear_landau_2d linear_landau_2d.cu ${LR_SOURCES_GPU})
   cuda_add_cublas_to_target(linear_landau_2d)
   cuda_add_cufft_to_target(linear_landau_2d)
   target_link_libraries(linear_landau_2d ${CUDA_curand_LIBRARY})
 
-  cuda_add_executable(linear_landau_3d linear_landau_3d.cu ../src/lr/lr.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/timer.cu ../src/generic/kernels.cu)
+  cuda_add_executable(linear_landau_3d linear_landau_3d.cu ${LR_SOURCES_GPU})
   cuda_add_cublas_to_target(linear_landau_3d)
   cuda_add_cufft_to_target(linear_landau_3d)
   target_link_libraries(linear_landau_3d ${CUDA_curand_LIBRARY})
 else()
-  add_executable(linear_landau linear_landau.cpp ../src/lr/lr.cpp ../src/lr/coefficients.cpp ../src/generic/utility.cpp ../src/generic/matrix.cpp ../src/generic/timer.cpp)
+  add_executable(linear_landau linear_landau.cpp ${LR_SOURCES})
 
-  add_executable(linear_landau_2d linear_landau_2d.cpp ../src/lr/lr.cpp ../src/lr/coefficients.cpp ../src/generic/utility.cpp ../src/generic/matrix.cpp ../src/generic/timer.cpp)
+  add_executable(linear_landau_2d linear_landau_2d.cpp ${LR_SOURCES})
 
-  add_executable(linear_landau_3d linear_landau_3d.cpp ../src/lr/lr.cpp ../src/lr/coefficients.cpp ../src/generic/utility.cpp ../src/generic/matrix.cpp ../src/generic/timer.cpp)
+  add_executable(linear_landau_3d linear_landau_3d.cpp ${LR_SOURCES})
 endif()
 
 target_link_libraries(linear_landau    ${FFTW_LIBRARIES} cxxopts::cxxopts)

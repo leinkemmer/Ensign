@@ -24,7 +24,7 @@ template<class T>
 void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, const multi_array<T,1>& w, multi_array<T,2>& out) {
   multi_array<T,2> tmp(b.shape(),b.sl);
   if(b.sl == stloc::host){
-    ptw_mult_row(b,w.begin(),tmp);
+    ptw_mult_row(b,w,tmp);
   }else{
     #ifdef __CUDACC__
       ptw_mult_row_k<<<(b.num_elements()+n_threads-1)/n_threads,n_threads>>>(b.num_elements(), b.shape()[0], b.begin(), w.begin(), tmp.begin());

@@ -4,77 +4,73 @@
 #include <generic/storage.hpp>
 #include <generic/kernels.hpp>
 
-#ifndef __MKL__
-extern "C" {
-  extern int dgees_(char*,char*,void*,int*,double*,int*, int*, double*, double*, double*, int*, double*, int*, bool*,int*);
-}
-#endif
-
-#ifdef __CUDACC__
-//array<cufftHandle,2> create_plans_1d(Index dims_);
-array<cufftHandle,2> create_plans_1d(Index dims_, int howmany);
-//array<cufftHandle,2> create_plans_2d(array<Index,2> dims_);
-array<cufftHandle,2> create_plans_2d(array<Index,2> dims_, int howmany);
-//array<cufftHandle,2> create_plans_3d(array<Index,3> dims_);
-array<cufftHandle,2> create_plans_3d(array<Index,3> dims_, int howmany);
-void destroy_plans(array<cufftHandle,2>& plans);
-#endif
-
+/* Set matrix to zero
+*/
 template<class T>
 void set_zero(multi_array<T,2>& a);
 
+/* Set matrix to identity
+*/
 template<class T>
 void set_identity(multi_array<T,2>& a);
 
-template<class T>
-void set_const(multi_array<T,1>& a, T alpha);
+/* Set vector or matrix to a constant value
+*/
+template<class T, size_t d>
+void set_const(multi_array<T,d>& a, T alpha);
 
-template<class T>
-void set_const2(multi_array<T,2>& a, T alpha);
 
+/* Multiply every row of a matrix with a vector (i.e. diag(w)a)  
+*/
 template<class T>
-void ptw_mult_row(const multi_array<T,2>& a, const T* w, multi_array<T,2>& out);
+void ptw_mult_row(const multi_array<T,2>& a, const multi_array<T,1>& w, multi_array<T,2>& out);
 
+/* Transpose a square matrix inplace (intended for small matrices)
+*/
 template<class T>
 void transpose_inplace(multi_array<T,2>& a);
 
+/* Matrix multiplication (computes c = a b)
+*/
 template<class T>
 void matmul(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c);
 
+/* Matrix multiplication with first matrix transposed (computes c = a^T b)
+*/
 template<class T>
 void matmul_transa(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c);
 
-template<class T>
-void matmul_transa(const T* a, const T* b, T* c);
-
+/* Matrix multiplication with second matrix transposed (computes c = a b^T)
+*/
 template<class T>
 void matmul_transb(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c);
 
+/* Matrix multiplication with both matrices transposed (computes c = a^T b^T)
+*/
 template<class T>
 void matmul_transab(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c);
 
+/* Matrix vector multiplication (c = a b)
+*/
 template<class T>
 void matvec(const multi_array<T,2>& a, const multi_array<T,1>& b, multi_array<T,1>& c);
 
+/* Matrix vector multiplication with matrix transposed (c = a^T b)
+*/
 template<class T>
 void matvec_trans(const multi_array<T,2>& a, const multi_array<T,1>& b, multi_array<T,1>& c);
 
+/* Helper class to perform diagonalization of a symmetric matrix (also known as the Schur decomposition)
+*/
+struct diagonalization {
+  diagonalization(Index m);
 
-array<fftw_plan,2> create_plans_1d(Index dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq);
-array<fftw_plan,2> create_plans_1d(Index dims_, multi_array<double,1>& real, multi_array<complex<double>,1>& freq);
+  void operator()(const multi_array<double,2>& CC, multi_array<double,2>& TT, multi_array<double,1>& diag_r);
 
-array<fftw_plan,2> create_plans_2d(array<Index,2> dims_, multi_array<double,1>& real, multi_array<complex<double>,1>& freq);
-array<fftw_plan,2> create_plans_2d(array<Index,2> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq);
-
-array<fftw_plan,2> create_plans_3d(array<Index,3> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq);
-array<fftw_plan,2> create_plans_3d(array<Index,3> dims_, multi_array<double,1>& real, multi_array<complex<double>,1>& freq);
-
-void destroy_plans(array<fftw_plan,2>& plans);
-
-#ifdef __MKL__
-void schur(multi_array<double,2>& CC, multi_array<double,2>& TT, multi_array<double,1>& diag_r, MKL_INT& lwork);
-#else
-void schur(multi_array<double,2>& CC, multi_array<double,2>& TT, multi_array<double,1>& diag_r, int& lwork);
-#endif
-//template<class T>
-//void transpose(const multi_array<T,2>& a, multi_array<T,2>& b);
+private:
+  #ifdef __MKL__
+  MKL_INT lwork;
+  #else
+  int lwork; 
+  #endif
+};

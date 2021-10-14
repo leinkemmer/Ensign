@@ -11,33 +11,19 @@ T prod(array<T,d> a) {
   return p;
 }
 
-// phi1 of scalar (complex float or double)
-/*
-template<class T>
-T phi1(T a) {
-  T p = T(1.0);
-  T fact = 1.0;
-  if (abs(a)<1){
-    for(int i = 1; i < 18; i++){
-      fact *= (i+1);
-      p += (1.0/fact)*pow(a,i);
-    }
-  } else{
-  if(a == complex<double>(0.0,0.0)){
-    p = 1.0;
-  }else{
-    p = (exp(a) - 1.0) / a;
-  }
-  }
-  return p;
-}
+/* Computes (exp(z)-1)/z
+*
+* There is a removeable singularity at z=0.
 */
-
 template<class T>
 T phi1(T a) {
   return (abs(a) < 1e-7) ? complex<double>(1.0 + a.real(), a.imag()) : exp(a/2.0)*sinh(a/2.0)/(a/2.0);
 }
 
+/* Computes (exp(i a)-1)/(i a)
+*
+* There is a removeable singularity at a=0.
+*/
 template<class T>
 T phi1_im(T a) { // use it only for purely imaginary
   if(abs(a.imag()) < 1e-7){
@@ -47,6 +33,10 @@ T phi1_im(T a) { // use it only for purely imaginary
   }
 }
 
+/* Computes (exp(i a)-1-i a)/((i a)^2)
+*
+* There is a removeable singularity at a=0.
+*/
 template<class T>
 T phi2_im(T a) { // use it only for purely imaginary
   if(abs(a.imag()) < 1e-7){
@@ -57,11 +47,14 @@ T phi2_im(T a) { // use it only for purely imaginary
 }
 
 #ifdef __CUDACC__
+/* Typesafe wrapper for cudaMalloc
+*/
 void* gpu_malloc(size_t size);
 #endif
 
 
-// parser for command line arguments separated by whitespace
+/* Parser for command line arguments separated by whitespaces
+*/
 template<size_t d>
 array<Index,d> parse(string s) {
     array<Index,d> out;

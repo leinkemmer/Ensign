@@ -4,7 +4,7 @@
 #include <lr/coefficients.hpp>
 #include <generic/kernels.hpp>
 #include <generic/timer.hpp>
-
+#include <generic/fft.hpp>
 
 #ifdef __CUDACC__
  cublasHandle_t  handle;
@@ -228,12 +228,7 @@ int main(){
   multi_array<complex<double>,2> Twc({r,r});
   multi_array<complex<double>,2> Tuc({r,r});
 
-  #ifdef __MKL__
-    MKL_INT lwork = -1;
-  #else
-    int lwork = -1;
-  #endif
-  schur(Tv, Tv, dcv_r, lwork); // dumb call to obtain optimal value to work
+  diagonalization schur(Tv.shape()[0]); // dumb call to obtain optimal value to work
 
   // For K step
 
@@ -616,9 +611,9 @@ int main(){
 
     fftw_execute_dft_r2c(plans_vv[0],lr_sol.V.begin(),(fftw_complex*)tmpVhat.begin());
 
-    ptw_mult_row(tmpVhat,lambdav_n.begin(),dVhat_v);
-    ptw_mult_row(tmpVhat,lambdaw_n.begin(),dVhat_w);
-    ptw_mult_row(tmpVhat,lambdau_n.begin(),dVhat_u);
+    ptw_mult_row(tmpVhat,lambdav_n,dVhat_v);
+    ptw_mult_row(tmpVhat,lambdaw_n,dVhat_w);
+    ptw_mult_row(tmpVhat,lambdau_n,dVhat_u);
 
 
     fftw_execute_dft_c2r(plans_vv[1],(fftw_complex*)dVhat_v.begin(),dV_v.begin());
@@ -635,9 +630,9 @@ int main(){
     gt::start("K step CPU");
 
     gt::start("Schur K CPU");
-    schur(C1v, Tv, dcv_r, lwork);
-    schur(C1w, Tw, dcw_r, lwork);
-    schur(C1u, Tu, dcu_r, lwork);
+    schur(C1v, Tv, dcv_r);
+    schur(C1w, Tw, dcw_r);
+    schur(C1u, Tu, dcu_r);
 
     Tv.to_cplx(Tvc);
     Tw.to_cplx(Twc);
@@ -705,9 +700,9 @@ int main(){
 
       for(Index jj = 0; jj < nsteps_ee; jj++){
 
-        ptw_mult_row(lr_sol.X,efx.begin(),Kex);
-        ptw_mult_row(lr_sol.X,efy.begin(),Key);
-        ptw_mult_row(lr_sol.X,efz.begin(),Kez);
+        ptw_mult_row(lr_sol.X,efx,Kex);
+        ptw_mult_row(lr_sol.X,efy,Key);
+        ptw_mult_row(lr_sol.X,efz,Kez);
 
         fftw_execute_dft_r2c(plans_xx[0],Kex.begin(),(fftw_complex*)Kexhat.begin());
         fftw_execute_dft_r2c(plans_xx[0],Key.begin(),(fftw_complex*)Keyhat.begin());
@@ -778,9 +773,9 @@ int main(){
 
     fftw_execute_dft_r2c(plans_xx[0],lr_sol.X.begin(),(fftw_complex*)tmpXhat.begin());
 
-    ptw_mult_row(tmpXhat,lambdax_n.begin(),dXhat_x);
-    ptw_mult_row(tmpXhat,lambday_n.begin(),dXhat_y);
-    ptw_mult_row(tmpXhat,lambdaz_n.begin(),dXhat_z);
+    ptw_mult_row(tmpXhat,lambdax_n,dXhat_x);
+    ptw_mult_row(tmpXhat,lambday_n,dXhat_y);
+    ptw_mult_row(tmpXhat,lambdaz_n,dXhat_z);
 
 
     fftw_execute_dft_c2r(plans_xx[1],(fftw_complex*)dXhat_x.begin(),dX_x.begin());
@@ -847,9 +842,9 @@ int main(){
     gt::start("L step CPU");
 
     gt::start("Schur L CPU");
-    schur(D1x, Tv, dcv_r, lwork);
-    schur(D1y, Tw, dcw_r, lwork);
-    schur(D1z, Tu, dcu_r, lwork);
+    schur(D1x, Tv, dcv_r);
+    schur(D1y, Tw, dcw_r);
+    schur(D1z, Tu, dcu_r);
 
 
     Tv.to_cplx(Tvc);
@@ -918,9 +913,9 @@ int main(){
 
       for(Index jj = 0; jj < nsteps_ee; jj++){
 
-        ptw_mult_row(lr_sol.V,v.begin(),Lv);
-        ptw_mult_row(lr_sol.V,w.begin(),Lw);
-        ptw_mult_row(lr_sol.V,u.begin(),Lu);
+        ptw_mult_row(lr_sol.V,v,Lv);
+        ptw_mult_row(lr_sol.V,w,Lw);
+        ptw_mult_row(lr_sol.V,u,Lu);
 
         fftw_execute_dft_r2c(plans_vv[0],Lv.begin(),(fftw_complex*)Lvhat.begin());
         fftw_execute_dft_r2c(plans_vv[0],Lw.begin(),(fftw_complex*)Lwhat.begin());
@@ -1120,21 +1115,21 @@ int main(){
 
     C1v_gpu = d_C1v;
 
-    schur(C1v_gpu, Tv_gpu, dcv_r_gpu, lwork);
+    schur(C1v_gpu, Tv_gpu, dcv_r_gpu);
 
     d_Tv = Tv_gpu;
     d_dcv_r = dcv_r_gpu;
 
     C1w_gpu = d_C1w;
 
-    schur(C1w_gpu, Tw_gpu, dcw_r_gpu, lwork);
+    schur(C1w_gpu, Tw_gpu, dcw_r_gpu);
 
     d_Tw = Tw_gpu;
     d_dcw_r = dcw_r_gpu;
 
     C1u_gpu = d_C1u;
 
-    schur(C1u_gpu, Tu_gpu, dcu_r_gpu, lwork);
+    schur(C1u_gpu, Tu_gpu, dcu_r_gpu);
 
     d_Tu = Tu_gpu;
     d_dcu_r = dcu_r_gpu;
@@ -1344,21 +1339,21 @@ int main(){
 
     D1x_gpu = d_D1x;
 
-    schur(D1x_gpu, Tv_gpu, dcv_r_gpu, lwork);
+    schur(D1x_gpu, Tv_gpu, dcv_r_gpu);
 
     d_Tv = Tv_gpu;
     d_dcv_r = dcv_r_gpu;
 
     D1y_gpu = d_D1y;
 
-    schur(D1y_gpu, Tw_gpu, dcw_r_gpu, lwork);
+    schur(D1y_gpu, Tw_gpu, dcw_r_gpu);
 
     d_Tw = Tw_gpu;
     d_dcw_r = dcw_r_gpu;
 
     D1z_gpu = d_D1z;
 
-    schur(D1z_gpu, Tu_gpu, dcu_r_gpu, lwork);
+    schur(D1z_gpu, Tu_gpu, dcu_r_gpu);
 
     d_Tu = Tu_gpu;
     d_dcu_r = dcu_r_gpu;
@@ -1468,7 +1463,8 @@ int main(){
     gt::stop("Gram Schmidt L GPU");
 
     gt::start("Transpose S GPU");
-    transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
+    //transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
+    transpose_inplace(d_lr_sol.S);
     cudaDeviceSynchronize();
 
     gt::stop("Transpose S GPU");

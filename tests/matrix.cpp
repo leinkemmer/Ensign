@@ -109,24 +109,26 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
   SECTION("Pointwise multiplication"){
     multi_array<double,2> A({3,2});
     multi_array<double,2> R({3,2});
-    array<double,3> w = {2.0,3.0,4.0};
+    multi_array<double,1> w({3});
+    w(0) = 2.0; w(1) = 3.0; w(2) = 4.0;
 
     multi_array<float,2> Af({3,2});
     multi_array<float,2> Rf({3,2});
-    array<float,3> wf = {2.0,3.0,4.0};
+    multi_array<float,1> wf({3});
+    wf(0) = 2.0; wf(1) = 3.0; wf(2) = 4.0;
 
 
     for(int i = 0; i < 3; i++){
       for(int j = 0; j < 2; j++){
         A(i,j) = 1.0;
-        R(i,j) = w[i];
+        R(i,j) = w(i);
         Af(i,j) = 1.0;
-        Rf(i,j) = w[i];
+        Rf(i,j) = wf(i);
       }
     }
 
-    ptw_mult_row(A,w.begin(),A);
-    ptw_mult_row(Af,wf.begin(),Af);
+    ptw_mult_row(A,w,A);
+    ptw_mult_row(Af,wf,Af);
 
     REQUIRE(bool(A==R));
     REQUIRE(bool(Af==Rf));

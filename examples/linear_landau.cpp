@@ -4,6 +4,7 @@
 #include <lr/coefficients.hpp>
 #include <generic/kernels.hpp>
 #include <generic/timer.hpp>
+#include <generic/fft.hpp>
 
 #ifdef __CUDACC__
 cublasHandle_t  handle;
@@ -98,13 +99,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
   multi_array<complex<double>,2> Nhat({Nv/2 + 1,r});
   multi_array<complex<double>,2> Tc({r,r});
 
-  #ifdef __MKL__
-  MKL_INT lwork = -1;
-  #else
-  int lwork = -1;
-  #endif
-
-  schur(T, T, dc_r, lwork);
+  diagonalization schur(T.shape()[0]);
 
   // For D coefficients
 
@@ -327,14 +322,9 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
   multi_array<double,2> d_tmpS3({r,r},stloc::device);
   multi_array<double,2> d_tmpS4({r,r},stloc::device);
 
-  // For random values generation
-  curandGenerator_t gen;
-
-  curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
-  curandSetPseudoRandomGeneratorSeed(gen,time(0));
-
   #endif
 
+  gram_schmidt gs;
 
 //  nsteps = 1;
   for(Index i = 0; i < nsteps; i++){
@@ -378,13 +368,13 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     fftw_execute_dft_r2c(plans_v[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
 
-    ptw_mult_row(Lhat,lambdav_n.begin(),Lhat);
+    ptw_mult_row(Lhat,lambdav_n,Lhat);
 
     fftw_execute_dft_c2r(plans_v[1],(fftw_complex*)Lhat.begin(),dV.begin());
 
     coeff(lr_sol.V, dV, hv, C2);
 
-    schur(C1, T, dc_r, lwork);
+    schur(C1, T, dc_r);
 
     T.to_cplx(Tc);
 
@@ -396,7 +386,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
-      ptw_mult_row(lr_sol.X,ef.begin(),lr_sol.X);
+      ptw_mult_row(lr_sol.X,ef,lr_sol.X);
 
       fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Kehat.begin());
 
@@ -424,7 +414,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
       // Second stage
 
-      ptw_mult_row(lr_sol.X,ef.begin(),lr_sol.X);
+      ptw_mult_row(lr_sol.X,ef,lr_sol.X);
 
       fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Kehat.begin());
 
@@ -452,7 +442,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
       fftw_execute_dft_c2r(plans_x[1],(fftw_complex*)Khat.begin(),lr_sol.X.begin());
 
     }
-    gram_schmidt(lr_sol.X, lr_sol.S, ip_x);
+    gs(lr_sol.X, lr_sol.S, ip_x);
 
     /* S step */
 
@@ -467,7 +457,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
-    ptw_mult_row(Khat,lambdax_n.begin(),Khat);
+    ptw_mult_row(Khat,lambdax_n,Khat);
 
     fftw_execute_dft_c2r(plans_x[1],(fftw_complex*)Khat.begin(),dX.begin());
 
@@ -551,7 +541,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
     tmpV = lr_sol.V;
     matmul_transb(tmpV,lr_sol.S,lr_sol.V);
 
-    schur(D1, T, dc_r, lwork);
+    schur(D1, T, dc_r);
 
     T.to_cplx(Tc);
     D2.to_cplx(C2c);
@@ -562,7 +552,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
-      ptw_mult_row(lr_sol.V,v.begin(),lr_sol.V);
+      ptw_mult_row(lr_sol.V,v,lr_sol.V);
 
       fftw_execute_dft_r2c(plans_v[0],lr_sol.V.begin(),(fftw_complex*)Lvhat.begin());
 
@@ -590,7 +580,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
       // Second stage
 
-      ptw_mult_row(lr_sol.V,v.begin(),lr_sol.V);
+      ptw_mult_row(lr_sol.V,v,lr_sol.V);
 
       fftw_execute_dft_r2c(plans_v[0],lr_sol.V.begin(),(fftw_complex*)Lvhat.begin());
 
@@ -620,7 +610,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     }
 
-    gram_schmidt(lr_sol.V, lr_sol.S, ip_v);
+    gs(lr_sol.V, lr_sol.S, ip_v);
 
     transpose_inplace(lr_sol.S);
 
@@ -700,7 +690,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
     coeff(d_lr_sol.V, d_dV, hv, d_C2);
 
     C1_gpu = d_C1;
-    schur(C1_gpu, T_gpu, dc_r_gpu, lwork);
+    schur(C1_gpu, T_gpu, dc_r_gpu);
     d_T = T_gpu;
     d_dc_r = dc_r_gpu;
 
@@ -751,7 +741,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
     }
 
 
-    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, hx, gen);
+    gs(d_lr_sol.X, d_lr_sol.S, hx);
 
 
     // S step
@@ -823,7 +813,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
     matmul_transb(d_tmpV,d_lr_sol.S,d_lr_sol.V);
 
     D1_gpu = d_D1;
-    schur(D1_gpu, T_gpu, dc_r_gpu, lwork);
+    schur(D1_gpu, T_gpu, dc_r_gpu);
     d_T = T_gpu;
     d_dc_r = dc_r_gpu;
 
@@ -873,9 +863,10 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     }
 
-    gram_schmidt_gpu(d_lr_sol.V, d_lr_sol.S, hv, gen);
+    gs(d_lr_sol.V, d_lr_sol.S, hv);
 
-    transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
+    //transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
+    transpose_inplace(d_lr_sol.S);
 
     cudaDeviceSynchronize();
     gt::stop("Main loop GPU");
@@ -950,8 +941,6 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
   destroy_plans(plans_d_e);
   destroy_plans(plans_d_x);
   destroy_plans(plans_d_v);
-
-  curandDestroyGenerator(gen);
 
   el_energyGPUf.close();
   err_massGPUf.close();
@@ -1063,13 +1052,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
   multi_array<complex<double>,2> Tc({r,r});
   multi_array<complex<double>,2> Wc({r,r});
 
-  #ifdef __MKL__
-  MKL_INT lwork = -1;
-  #else
-  int lwork = -1;
-  #endif
-
-  schur(T, T, dc_r, lwork);
+  diagonalization schur(T.shape()[0]);
 
   // For D coefficients
 
@@ -1304,13 +1287,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
   lr2<double> d_lr_sol_e(r,{Nx,Nv}, stloc::device);
 
   // For random values generation
-  curandGenerator_t gen;
-
-  curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
-  curandSetPseudoRandomGeneratorSeed(gen,time(0));
-
-
   #endif
+
+  gram_schmidt gs;
 
   for(Index i = 0; i < nsteps; i++){
 
@@ -1370,13 +1349,13 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     fftw_execute_dft_r2c(plans_v[0],lr_sol_e.V.begin(),(fftw_complex*)Lhat.begin());
 
-    ptw_mult_row(Lhat,lambdav_n.begin(),Lhat);
+    ptw_mult_row(Lhat,lambdav_n,Lhat);
 
     fftw_execute_dft_c2r(plans_v[1],(fftw_complex*)Lhat.begin(),dV.begin());
 
     coeff(lr_sol_e.V, dV, hv, C2);
 
-    schur(C1, T, dc_r, lwork);
+    schur(C1, T, dc_r);
 
     T.to_cplx(Tc);
 
@@ -1388,7 +1367,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
-      ptw_mult_row(lr_sol_e.X,ef.begin(),lr_sol_e.X);
+      ptw_mult_row(lr_sol_e.X,ef,lr_sol_e.X);
 
       fftw_execute_dft_r2c(plans_x[0],lr_sol_e.X.begin(),(fftw_complex*)Kehat.begin());
 
@@ -1416,7 +1395,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       // Second stage
 
-      ptw_mult_row(lr_sol_e.X,ef.begin(),lr_sol_e.X);
+      ptw_mult_row(lr_sol_e.X,ef,lr_sol_e.X);
 
       fftw_execute_dft_r2c(plans_x[0],lr_sol_e.X.begin(),(fftw_complex*)Kehat.begin());
 
@@ -1445,7 +1424,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     }
 
-    gram_schmidt(lr_sol_e.X, lr_sol_e.S, ip_x);
+    gs(lr_sol_e.X, lr_sol_e.S, ip_x);
 
 
     /* Half step S */
@@ -1460,7 +1439,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     fftw_execute_dft_r2c(plans_x[0],lr_sol_e.X.begin(),(fftw_complex*)Khat.begin());
 
-    ptw_mult_row(Khat,lambdax_n.begin(),Khat);
+    ptw_mult_row(Khat,lambdax_n,Khat);
 
     fftw_execute_dft_c2r(plans_x[1],(fftw_complex*)Khat.begin(),dX.begin());
 
@@ -1528,7 +1507,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     tmpV = lr_sol_e.V;
     matmul_transb(tmpV,lr_sol_e.S,lr_sol_e.V);
 
-    schur(D1, W, dd_r, lwork);
+    schur(D1, W, dd_r);
 
     W.to_cplx(Wc);
     D2.to_cplx(D2c);
@@ -1539,7 +1518,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
-      ptw_mult_row(lr_sol_e.V,v.begin(),lr_sol_e.V);
+      ptw_mult_row(lr_sol_e.V,v,lr_sol_e.V);
 
       fftw_execute_dft_r2c(plans_v[0],lr_sol_e.V.begin(),(fftw_complex*)Lvhat.begin());
 
@@ -1567,7 +1546,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       // Second stage
 
-      ptw_mult_row(lr_sol_e.V,v.begin(),lr_sol_e.V);
+      ptw_mult_row(lr_sol_e.V,v,lr_sol_e.V);
 
       fftw_execute_dft_r2c(plans_v[0],lr_sol_e.V.begin(),(fftw_complex*)Lvhat.begin());
 
@@ -1635,7 +1614,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
-      ptw_mult_row(lr_sol.X,ef.begin(),lr_sol.X);
+      ptw_mult_row(lr_sol.X,ef,lr_sol.X);
 
       fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Kehat.begin());
 
@@ -1663,7 +1642,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       // Second stage
 
-      ptw_mult_row(lr_sol.X,ef.begin(),lr_sol.X);
+      ptw_mult_row(lr_sol.X,ef,lr_sol.X);
 
       fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Kehat.begin());
 
@@ -1692,7 +1671,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     }
 
-    gram_schmidt(lr_sol.X, lr_sol.S, ip_x);
+    gs(lr_sol.X, lr_sol.S, ip_x);
 
     /* Half step S */
 
@@ -1707,7 +1686,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
-    ptw_mult_row(Khat,lambdax_n.begin(),Khat);
+    ptw_mult_row(Khat,lambdax_n,Khat);
 
     fftw_execute_dft_c2r(plans_x[1],(fftw_complex*)Khat.begin(),dX.begin());
 
@@ -1775,7 +1754,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     tmpV = lr_sol.V;
     matmul_transb(tmpV,lr_sol.S,lr_sol.V);
 
-    schur(D1, W, dd_r, lwork);
+    schur(D1, W, dd_r);
 
     W.to_cplx(Wc);
     D2.to_cplx(D2c);
@@ -1786,7 +1765,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
-      ptw_mult_row(lr_sol.V,v.begin(),lr_sol.V);
+      ptw_mult_row(lr_sol.V,v,lr_sol.V);
 
       fftw_execute_dft_r2c(plans_v[0],lr_sol.V.begin(),(fftw_complex*)Lvhat.begin());
 
@@ -1814,7 +1793,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       // Second stage
 
-      ptw_mult_row(lr_sol.V,v.begin(),lr_sol.V);
+      ptw_mult_row(lr_sol.V,v,lr_sol.V);
 
       fftw_execute_dft_r2c(plans_v[0],lr_sol.V.begin(),(fftw_complex*)Lvhat.begin());
 
@@ -1843,7 +1822,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     }
 
-    gram_schmidt(lr_sol.V, lr_sol.S, ip_v);
+    gs(lr_sol.V, lr_sol.S, ip_v);
     transpose_inplace(lr_sol.S);
 
     /* Half step S */
@@ -1852,7 +1831,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     fftw_execute_dft_r2c(plans_v[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
 
-    ptw_mult_row(Lhat,lambdav_n.begin(),Lhat);
+    ptw_mult_row(Lhat,lambdav_n,Lhat);
 
     fftw_execute_dft_c2r(plans_v[1],(fftw_complex*)Lhat.begin(),dV.begin());
 
@@ -1920,7 +1899,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     tmpX = lr_sol.X;
     matmul(tmpX,lr_sol.S,lr_sol.X);
 
-    schur(C1, T, dc_r, lwork);
+    schur(C1, T, dc_r);
     T.to_cplx(Tc);
     C2.to_cplx(C2c);
 
@@ -1930,7 +1909,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
-      ptw_mult_row(lr_sol.X,ef.begin(),lr_sol.X);
+      ptw_mult_row(lr_sol.X,ef,lr_sol.X);
 
       fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Kehat.begin());
 
@@ -1958,7 +1937,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       // Second stage
 
-      ptw_mult_row(lr_sol.X,ef.begin(),lr_sol.X);
+      ptw_mult_row(lr_sol.X,ef,lr_sol.X);
 
       fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Kehat.begin());
 
@@ -1987,7 +1966,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     }
 
-    gram_schmidt(lr_sol.X, lr_sol.S, ip_x);
+    gs(lr_sol.X, lr_sol.S, ip_x);
 
     gt::stop("Restarted integration CPU");
 
@@ -2075,7 +2054,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     coeff(d_lr_sol_e.V, d_dV, hv, d_C2);
 
     C1_gpu = d_C1;
-    schur(C1_gpu, T_gpu, dc_r_gpu, lwork);
+    schur(C1_gpu, T_gpu, dc_r_gpu);
     d_T = T_gpu;
     d_dc_r = dc_r_gpu;
 
@@ -2125,7 +2104,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     }
 
-    gram_schmidt_gpu(d_lr_sol_e.X, d_lr_sol_e.S, hx, gen);
+    gs(d_lr_sol_e.X, d_lr_sol_e.S, hx);
 
     /* Half step S */
 
@@ -2182,7 +2161,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     matmul_transb(d_tmpV,d_lr_sol_e.S,d_lr_sol_e.V);
 
     D1_gpu = d_D1;
-    schur(D1_gpu, W_gpu, dd_r_gpu, lwork);
+    schur(D1_gpu, W_gpu, dd_r_gpu);
     d_W = W_gpu;
     d_dd_r = dd_r_gpu;
 
@@ -2301,7 +2280,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     }
 
-    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, hx, gen);
+    gs(d_lr_sol.X, d_lr_sol.S, hx);
 
     /* Half step S */
 
@@ -2358,7 +2337,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     matmul_transb(d_tmpV,d_lr_sol.S,d_lr_sol.V);
 
     D1_gpu = d_D1;
-    schur(D1_gpu, W_gpu, dd_r_gpu, lwork);
+    schur(D1_gpu, W_gpu, dd_r_gpu);
     d_W = W_gpu;
     d_dd_r = dd_r_gpu;
 
@@ -2407,8 +2386,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     }
 
-    gram_schmidt_gpu(d_lr_sol.V, d_lr_sol.S, hv, gen);
-    transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
+    gs(d_lr_sol.V, d_lr_sol.S, hv);
+    //transpose_inplace<<<d_lr_sol.S.num_elements(),1>>>(r,d_lr_sol.S.begin());
+    transpose_inplace(d_lr_sol.S);
 
     /* Half step S */
 
@@ -2463,7 +2443,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     matmul(d_tmpX,d_lr_sol.S,d_lr_sol.X);
 
     C1_gpu = d_C1;
-    schur(C1_gpu, T_gpu, dc_r_gpu, lwork);
+    schur(C1_gpu, T_gpu, dc_r_gpu);
     d_T = T_gpu;
     d_dc_r = dc_r_gpu;
 
@@ -2512,7 +2492,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     }
 
-    gram_schmidt_gpu(d_lr_sol.X, d_lr_sol.S, hx, gen);
+    gs(d_lr_sol.X, d_lr_sol.S, hx);
 
     cudaDeviceSynchronize();
     gt::stop("Restarted integration GPU");
@@ -2579,8 +2559,6 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
   destroy_plans(plans_d_e);
   destroy_plans(plans_d_x);
   destroy_plans(plans_d_v);
-
-  curandDestroyGenerator(gen);
 
   el_energyGPUf.close();
   err_massGPUf.close();

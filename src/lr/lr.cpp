@@ -36,8 +36,8 @@ template std::function<double(double*,double*)> inner_product_from_const_weight(
 template std::function<float(float*,float*)> inner_product_from_const_weight(float w, Index N);
 
 
-template<>
-void gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product) {
+
+void gram_schmidt_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product) {
   array<Index,2> dims = Q.shape();
 
   std::default_random_engine generator(time(0));
@@ -149,6 +149,46 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
 
 #endif
 
+
+gram_schmidt::gram_schmidt() {
+  #ifdef __CUDACC__
+  curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
+  curandSetPseudoRandomGeneratorSeed(gen,time(0));
+  #endif
+}
+
+gram_schmidt::~gram_schmidt() {
+  #ifdef __CUDACC__
+  curandDestroyGenerator(gen);
+  #endif
+}
+
+void gram_schmidt::operator()(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product) {
+  if(Q.sl == stloc::host) {
+    gram_schmidt_cpu(Q, R, inner_product);
+  } else {
+    cout << "ERROR: gram_schmidt::operator() with non-constant inner product currently not implemented for GPU." << endl;
+    exit(1);
+  }
+}
+
+void gram_schmidt::operator()(multi_array<double,2>& Q, multi_array<double,2>& R, double w) {
+  if(Q.sl == stloc::host) {
+    cout << "ERROR: gram_schmidt::operator() with constant inner product currently not implemented on CPU." << endl;
+    exit(1);
+  } else {
+    #ifdef __CUDACC__
+    gram_schmidt_gpu(Q, R, w, gen);
+    #else
+    cout << "ERROR: gram_schmidt_gpu called but not GPU support available." << endl;
+    exit(1);
+    #endif
+  }
+}
+
+
+
+
 /*
 template<>
 void gram_schmidt(multi_array<float,2>& Q, multi_array<float,2>& R, std::function<float(float*,float*)> inner_product) {
@@ -211,8 +251,9 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, std::functio
 
   multi_array<T, 2> X_R(lr.S.shape()), V_R(lr.S.shape());
 
-  gram_schmidt(lr.X, X_R, inner_product_X);
-  gram_schmidt(lr.V, V_R, inner_product_V);
+  gram_schmidt gs;
+  gs(lr.X, X_R, inner_product_X);
+  gs(lr.V, V_R, inner_product_V);
 
   for(int j = n_b; j < r; j++){
     for(int i = 0; i < r; i++){

@@ -124,6 +124,10 @@ struct multi_array {
   T& operator()(array<Index,d> idx) {
     return v[linear_idx(idx)];
   }
+  
+  const T& operator()(array<Index,d> idx) const {
+    return v[linear_idx(idx)];
+  }
 
   // TODO: if called as (z,0) this gives a -Wnarrowing warning. These warnings
   // are turned off in the build system at the moment.
@@ -132,6 +136,13 @@ struct multi_array {
     static_assert(sizeof...(Ints) == d, "wrong number of arguments to ().");
     return v[linear_idx(array<Index,d>({idx...}))];
   }
+
+  template<typename... Ints>
+  const T& operator()(Ints&&... idx) const {
+    static_assert(sizeof...(Ints) == d, "wrong number of arguments to ().");
+    return v[linear_idx(array<Index,d>({idx...}))];
+  }
+
 
   T* extract(array<Index,d-1> idx_r) {
     array<Index,d> idx;

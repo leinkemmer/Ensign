@@ -30,7 +30,8 @@ TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
 
     std::function<double(double*,double*)> ip = inner_product_from_const_weight(1.0, 4);
 
-    gram_schmidt(A, R, ip);
+    gram_schmidt gs;
+    gs(A, R, ip);
 
     multi_array<double,2> id({3,3});
     set_identity(id);
