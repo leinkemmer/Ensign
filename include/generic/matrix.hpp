@@ -30,35 +30,46 @@ void ptw_mult_row(const multi_array<T,2>& a, const multi_array<T,1>& w, multi_ar
 template<class T>
 void transpose_inplace(multi_array<T,2>& a);
 
-/* Matrix multiplication (computes c = a b)
-*/
-template<class T>
-void matmul(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c);
 
-/* Matrix multiplication with first matrix transposed (computes c = a^T b)
-*/
-template<class T>
-void matmul_transa(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c);
+struct blas_ops {
 
-/* Matrix multiplication with second matrix transposed (computes c = a b^T)
-*/
-template<class T>
-void matmul_transb(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c);
+  blas_ops();
+  ~blas_ops();
 
-/* Matrix multiplication with both matrices transposed (computes c = a^T b^T)
-*/
-template<class T>
-void matmul_transab(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c);
+  /* Matrix multiplication (computes c = a b)
+  */
+  template<class T>
+  void matmul(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c) const;
 
-/* Matrix vector multiplication (c = a b)
-*/
-template<class T>
-void matvec(const multi_array<T,2>& a, const multi_array<T,1>& b, multi_array<T,1>& c);
+  /* Matrix multiplication with first matrix transposed (computes c = a^T b)
+  */
+  template<class T>
+  void matmul_transa(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c) const;
 
-/* Matrix vector multiplication with matrix transposed (c = a^T b)
-*/
-template<class T>
-void matvec_trans(const multi_array<T,2>& a, const multi_array<T,1>& b, multi_array<T,1>& c);
+  /* Matrix multiplication with second matrix transposed (computes c = a b^T)
+  */
+  template<class T>
+  void matmul_transb(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c) const;
+
+  /* Matrix multiplication with both matrices transposed (computes c = a^T b^T)
+  */
+  template<class T>
+  void matmul_transab(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c) const;
+
+  /* Matrix vector multiplication (c = a b)
+  */
+  template<class T>
+  void matvec(const multi_array<T,2>& a, const multi_array<T,1>& b, multi_array<T,1>& c) const;
+
+  /* Matrix vector multiplication with matrix transposed (c = a^T b)
+  */
+  template<class T>
+  void matvec_trans(const multi_array<T,2>& a, const multi_array<T,1>& b, multi_array<T,1>& c) const;
+
+  #ifdef __CUDACC__
+  cublasHandle_t  handle;
+  #endif
+};
 
 /* Helper class to perform diagonalization of a symmetric matrix (also known as the Schur decomposition)
 */

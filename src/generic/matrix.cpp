@@ -150,8 +150,21 @@ void transpose_inplace(multi_array<T,2>& a){
 template void transpose_inplace(multi_array<double,2>&);
 //template void transpose_inplace(multi_array<float,2>&);
 
+
+blas_ops::blas_ops() {
+  #ifdef __CUDACC__
+  cublasCreate(&handle);
+  #endif
+}
+
+blas_ops::~blas_ops() {
+  #ifdef __CUDACC__
+  cublasDestroy(handle);
+  #endif
+}
+
 template<>
-void matmul(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c){
+void blas_ops::matmul(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c) const {
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
       a.shape()[0], b.shape()[1], a.shape()[1],
@@ -182,7 +195,7 @@ void matmul(const multi_array<double,2>& a, const multi_array<double,2>& b, mult
 }
 
 template<>
-void matmul(const multi_array<complex<double>,2>& a, const multi_array<complex<double>,2>& b, multi_array<complex<double>,2>& c){
+void blas_ops::matmul(const multi_array<complex<double>,2>& a, const multi_array<complex<double>,2>& b, multi_array<complex<double>,2>& c) const {
     complex<double> one(1.0,0.0);
     complex<double> zero(0.0,0.0);
 
@@ -196,7 +209,7 @@ void matmul(const multi_array<complex<double>,2>& a, const multi_array<complex<d
 
 #ifdef __CUDACC__
 template<>
-void matmul(const multi_array<cuDoubleComplex,2>& a, const multi_array<cuDoubleComplex,2>& b, multi_array<cuDoubleComplex,2>& c){
+void blas_ops::matmul(const multi_array<cuDoubleComplex,2>& a, const multi_array<cuDoubleComplex,2>& b, multi_array<cuDoubleComplex,2>& c) const {
 
   cuDoubleComplex one = make_cuDoubleComplex(1.0, 0.0);
   cuDoubleComplex zero = make_cuDoubleComplex(0.0, 0.0);
@@ -212,7 +225,7 @@ void matmul(const multi_array<cuDoubleComplex,2>& a, const multi_array<cuDoubleC
 
 
 template<>
-void matmul(const multi_array<float,2>& a, const multi_array<float,2>& b, multi_array<float,2>& c){
+void blas_ops::matmul(const multi_array<float,2>& a, const multi_array<float,2>& b, multi_array<float,2>& c) const {
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
       a.shape()[0], b.shape()[1], a.shape()[1],
@@ -243,7 +256,7 @@ void matmul(const multi_array<float,2>& a, const multi_array<float,2>& b, multi_
 }
 
 template<>
-void matmul_transa(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c){
+void blas_ops::matmul_transa(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c) const {
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans,
       a.shape()[1], b.shape()[1], a.shape()[0],
@@ -273,7 +286,7 @@ void matmul_transa(const multi_array<double,2>& a, const multi_array<double,2>& 
   }
 }
 template<>
-void matmul_transa(const multi_array<float,2>& a, const multi_array<float,2>& b, multi_array<float,2>& c){
+void blas_ops::matmul_transa(const multi_array<float,2>& a, const multi_array<float,2>& b, multi_array<float,2>& c) const {
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_sgemm(CblasColMajor, CblasTrans, CblasNoTrans,
       a.shape()[1], b.shape()[1], a.shape()[0],
@@ -304,7 +317,7 @@ void matmul_transa(const multi_array<float,2>& a, const multi_array<float,2>& b,
       }
 }
 template<>
-void matmul_transb(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c){
+void blas_ops::matmul_transb(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c) const {
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
 
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
@@ -335,7 +348,7 @@ void matmul_transb(const multi_array<double,2>& a, const multi_array<double,2>& 
       }
 }
 template<>
-void matmul_transb(const multi_array<float,2>& a, const multi_array<float,2>& b, multi_array<float,2>& c){
+void blas_ops::matmul_transb(const multi_array<float,2>& a, const multi_array<float,2>& b, multi_array<float,2>& c) const {
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_sgemm(CblasColMajor, CblasNoTrans, CblasTrans,
       a.shape()[0], b.shape()[0], a.shape()[1],
@@ -366,7 +379,7 @@ void matmul_transb(const multi_array<float,2>& a, const multi_array<float,2>& b,
 }
 
 template<>
-void matmul_transb(const multi_array<complex<double>,2>& a, const multi_array<complex<double>,2>& b, multi_array<complex<double>,2>& c){
+void blas_ops::matmul_transb(const multi_array<complex<double>,2>& a, const multi_array<complex<double>,2>& b, multi_array<complex<double>,2>& c) const {
     complex<double> one(1.0,0.0);
     complex<double> zero(0.0,0.0);
 
@@ -379,7 +392,7 @@ void matmul_transb(const multi_array<complex<double>,2>& a, const multi_array<co
 
 #ifdef __CUDACC__
 template<>
-void matmul_transb(const multi_array<cuDoubleComplex,2>& a, const multi_array<cuDoubleComplex,2>& b, multi_array<cuDoubleComplex,2>& c){
+void blas_ops::matmul_transb(const multi_array<cuDoubleComplex,2>& a, const multi_array<cuDoubleComplex,2>& b, multi_array<cuDoubleComplex,2>& c) const {
         cuDoubleComplex one = make_cuDoubleComplex(1.0, 0.0);
         cuDoubleComplex zero = make_cuDoubleComplex(0.0, 0.0);
 
@@ -393,7 +406,7 @@ void matmul_transb(const multi_array<cuDoubleComplex,2>& a, const multi_array<cu
 #endif
 
 template<>
-void matmul_transab(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c){
+void blas_ops::matmul_transab(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c) const {
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_dgemm(CblasColMajor, CblasTrans, CblasTrans,
       a.shape()[1], b.shape()[0], a.shape()[0],
@@ -424,7 +437,7 @@ void matmul_transab(const multi_array<double,2>& a, const multi_array<double,2>&
 }
 
 template<>
-void matmul_transab(const multi_array<float,2>& a, const multi_array<float,2>& b, multi_array<float,2>& c){
+void blas_ops::matmul_transab(const multi_array<float,2>& a, const multi_array<float,2>& b, multi_array<float,2>& c) const {
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_sgemm(CblasColMajor, CblasTrans, CblasTrans,
       a.shape()[1], b.shape()[0], a.shape()[0],
@@ -455,7 +468,7 @@ void matmul_transab(const multi_array<float,2>& a, const multi_array<float,2>& b
 }
 
 template<>
-void matvec(const multi_array<double,2>& a, const multi_array<double,1>& b, multi_array<double,1>& c){
+void blas_ops::matvec(const multi_array<double,2>& a, const multi_array<double,1>& b, multi_array<double,1>& c) const {
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_dgemv(CblasColMajor, CblasNoTrans,
       a.shape()[0], a.shape()[1],
@@ -487,7 +500,7 @@ void matvec(const multi_array<double,2>& a, const multi_array<double,1>& b, mult
 }
 
 template<>
-void matvec_trans(const multi_array<double,2>& a, const multi_array<double,1>& b, multi_array<double,1>& c){
+void blas_ops::matvec_trans(const multi_array<double,2>& a, const multi_array<double,1>& b, multi_array<double,1>& c) const {
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_dgemv(CblasColMajor, CblasTrans,
       a.shape()[0], a.shape()[1],
@@ -519,7 +532,7 @@ void matvec_trans(const multi_array<double,2>& a, const multi_array<double,1>& b
 }
 
 template<>
-void matvec_trans(const multi_array<float,2>& a, const multi_array<float,1>& b, multi_array<float,1>& c){
+void blas_ops::matvec_trans(const multi_array<float,2>& a, const multi_array<float,1>& b, multi_array<float,1>& c) const {
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_sgemv(CblasColMajor, CblasTrans,
       a.shape()[0], a.shape()[1],

@@ -9,7 +9,7 @@
  * This functions assumes that w is a constant weight.
 */
 template<class T>
-void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, T w, multi_array<T,2>& out);
+void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, T w, multi_array<T,2>& out, const blas_ops& blas);
 
 /* Computes a low-rank coefficient that approximates \int a_i(x) b_j(x) \,dx.
  *
@@ -18,14 +18,14 @@ void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, T w, multi_arra
  * can incooperate a x dependent function.
 */
 template<class T>
-void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, const multi_array<T,1>& w, multi_array<T,2>& out);
+void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, const multi_array<T,1>& w, multi_array<T,2>& out, const blas_ops& blas);
 
 /* Computes an approximation to the integral \int a_i(x) \,dx.
 *
 * This function assumes that w is a constant weight.
 */
 template<class T>
-void integrate(const multi_array<T,2>& a, T w, multi_array<T,1>& out);
+void integrate(const multi_array<T,2>& a, T w, multi_array<T,1>& out, const blas_ops& blas);
 
 /* Computes an approximation to the integral \int a_i(x) \,dx.
 *
@@ -34,4 +34,4 @@ void integrate(const multi_array<T,2>& a, T w, multi_array<T,1>& out);
 *  can incooperate a x dependent function.
 */
 template<class T>
-void integrate(const multi_array<T,2>& a, const multi_array<T,1>& w, multi_array<T,1>& out);
+void integrate(const multi_array<T,2>& a, const multi_array<T,1>& w, multi_array<T,1>& out, const blas_ops& blas);

@@ -5,16 +5,10 @@
 #include <generic/matrix.hpp>
 
 #ifdef __CUDACC__
-  cublasHandle_t  handle;
   cublasHandle_t handle_dot;
 #endif
 
 TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
-
-  #ifdef __CUDACC__
-    cublasCreate(&handle);
-  #endif
-
 
   SECTION("Gram-Schmidt"){
     multi_array<double,2> A({4,3});
@@ -39,10 +33,11 @@ TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
     multi_array<double,2> R1({3,3});
     multi_array<double,2> R2({4,3});
 
-    matmul_transa(A,A,R1);
+    blas_ops blas;
+    blas.matmul_transa(A,A,R1);
     REQUIRE(bool(R1==id));
 
-    matmul(A,R,R2);
+    blas.matmul(A,R,R2);
     REQUIRE(bool(R2 == Ac));
 
   }
@@ -73,17 +68,18 @@ TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
 
     lr2<double> lr0(3,{4,4});
 
-    initialize(lr0, X, V, ip, ip);
+    blas_ops blas;
+    initialize(lr0, X, V, ip, ip, blas);
 
     multi_array<double,2> id({3,3});
     set_identity(id);
 
     multi_array<double,2> R1({3,3});
 
-    matmul_transa(lr0.X,lr0.X,R1);
+    blas.matmul_transa(lr0.X,lr0.X,R1);
     REQUIRE(bool(R1 == id));
 
-    matmul_transa(lr0.V,lr0.V,R1);
+    blas.matmul_transa(lr0.V,lr0.V,R1);
     REQUIRE(bool(R1 == id));
 
     multi_array<double,2> Rtmp({4,3});
@@ -91,8 +87,8 @@ TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
 
     multi_array<double,2> RR({4,4});
 
-    matmul(lr0.X,lr0.S,Rtmp);
-    matmul_transb(Rtmp,lr0.V,RRR);
+    blas.matmul(lr0.X,lr0.S,Rtmp);
+    blas.matmul_transb(Rtmp,lr0.V,RRR);
 
     multi_array<double,2> XX({4,3});
     multi_array<double,2> VV({4,3});
@@ -110,15 +106,10 @@ TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
         VV(i,2) = v3[i];
       }
 
-    matmul_transb(XX,VV,RR);
+    blas.matmul_transb(XX,VV,RR);
 
     REQUIRE(bool(RR == RRR));
 
 
   }
-
-  #ifdef __CUDACC__
-    cublasDestroy(handle);
-  #endif
-
 }

@@ -3,6 +3,7 @@
 #include <generic/common.hpp>
 #include <generic/storage.hpp>
 #include <generic/kernels.hpp>
+#include <generic/matrix.hpp>
 
 /* Class to store the low-rank factors (X, S, V) that are used in the computation.
 *
@@ -39,7 +40,7 @@ struct lr2 {
 */
 template<class T>
 void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, std::function<T(T*,T*)> inner_product_X,
-                std::function<T(T*,T*)> inner_product_V);
+                std::function<T(T*,T*)> inner_product_V, const blas_ops& blas);
 
 
 
@@ -72,13 +73,3 @@ private:
   curandGenerator_t gen;
   #endif
 };
-
-/*
-template<class T>
-void gram_schmidt(multi_array<T,2>& Q, multi_array<T,2>& R,
-  std::function<T(T*,T*)> inner_product);
-
-#ifdef __CUDACC__
-  void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, curandGenerator_t gen);
-#endif
-*/

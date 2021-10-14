@@ -11,7 +11,7 @@ cublasHandle_t  handle;
 cublasHandle_t handle_dot;
 #endif
 
-lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index nsteps, int nsteps_ee, int nsteps_rk4, double ax, double bx, double av, double bv, double alpha, double kappa, bool ee_flag, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_x, array<fftw_plan,2> plans_v){
+lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index nsteps, int nsteps_ee, int nsteps_rk4, double ax, double bx, double av, double bv, double alpha, double kappa, bool ee_flag, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_x, array<fftw_plan,2> plans_v, const blas_ops& blas){
 
   double tau = tstar/nsteps;
 
@@ -132,10 +132,10 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
   double err_energy = 0.0;
 
   // Initial mass
-  integrate(lr_sol.X,hx,int_x);
-  integrate(lr_sol.V,hv,int_v);
+  integrate(lr_sol.X,hx,int_x,blas);
+  integrate(lr_sol.V,hv,int_v,blas);
 
-  matvec(lr_sol.S,int_v,tmp_vec);
+  blas.matvec(lr_sol.S,int_v,tmp_vec);
 
   for(int ii = 0; ii < r; ii++){
     mass0 += (int_x(ii)*tmp_vec(ii));
@@ -143,12 +143,12 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
   // Initial energy
 
-  integrate(lr_sol.V,hv,rho);
+  integrate(lr_sol.V,hv,rho,blas);
 
   rho *= -1.0;
 
-  matmul(lr_sol.X,lr_sol.S,tmpX);
-  matvec(tmpX,rho,ef);
+  blas.matmul(lr_sol.X,lr_sol.S,tmpX);
+  blas.matvec(tmpX,rho,ef);
 
   ef += 1.0;
 
@@ -183,9 +183,9 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
     wv2(j) = pow(v(j),2) * hv;
   }
 
-  integrate(lr_sol.V,wv2,int_v);
+  integrate(lr_sol.V,wv2,int_v,blas);
 
-  matvec(lr_sol.S,int_v,tmp_vec);
+  blas.matvec(lr_sol.S,int_v,tmp_vec);
 
   for(int ii = 0; ii < r; ii++){
     energy0 += (0.5*int_x(ii)*tmp_vec(ii));
@@ -338,13 +338,13 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
     /* K step */
     tmpX = lr_sol.X;
 
-    matmul(tmpX,lr_sol.S,lr_sol.X);
+    blas.matmul(tmpX,lr_sol.S,lr_sol.X);
 
     // Electric field
 
-    integrate(lr_sol.V,-hv,rho);
+    integrate(lr_sol.V,-hv,rho,blas);
 
-    matvec(lr_sol.X,rho,ef);
+    blas.matvec(lr_sol.X,rho,ef);
 
     ef += 1.0;
 
@@ -364,7 +364,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     // Main of K step
 
-    coeff(lr_sol.V, lr_sol.V, wv, C1);
+    coeff(lr_sol.V, lr_sol.V, wv, C1, blas);
 
     fftw_execute_dft_r2c(plans_v[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
 
@@ -372,7 +372,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     fftw_execute_dft_c2r(plans_v[1],(fftw_complex*)Lhat.begin(),dV.begin());
 
-    coeff(lr_sol.V, dV, hv, C2);
+    coeff(lr_sol.V, dV, hv, C2, blas);
 
     schur(C1, T, dc_r);
 
@@ -382,7 +382,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
-    matmul(Khat,Tc,Mhat);
+    blas.matmul(Khat,Tc,Mhat);
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
@@ -390,9 +390,9 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
       fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Kehat.begin());
 
-      matmul_transb(Kehat,C2c,Khat);
+      blas.matmul_transb(Kehat,C2c,Khat);
 
-      matmul(Khat,Tc,Mhattmp);
+      blas.matmul(Khat,Tc,Mhattmp);
 
       #ifdef __OPENMP__
       #pragma omp parallel for collapse(2)
@@ -406,7 +406,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
         }
       }
 
-      matmul_transb(Mhat,Tc,Khat);
+      blas.matmul_transb(Mhat,Tc,Khat);
 
       Khat *= ncx;
 
@@ -418,9 +418,9 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
       fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Kehat.begin());
 
-      matmul_transb(Kehat,C2c,Khat);
+      blas.matmul_transb(Kehat,C2c,Khat);
 
-      matmul(Khat,Tc,Kehat);
+      blas.matmul(Khat,Tc,Kehat);
 
       Kehat -= Mhattmp;
 
@@ -435,7 +435,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
         }
       }
 
-      matmul_transb(Mhat,Tc,Khat);
+      blas.matmul_transb(Mhat,Tc,Khat);
 
       Khat *= ncx;
 
@@ -453,7 +453,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
       wx(ii) = hx*ef(ii);
     }
 
-    coeff(lr_sol.X, lr_sol.X, wx, D1);
+    coeff(lr_sol.X, lr_sol.X, wx, D1, blas);
 
     fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
@@ -461,16 +461,16 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     fftw_execute_dft_c2r(plans_x[1],(fftw_complex*)Khat.begin(),dX.begin());
 
-    coeff(lr_sol.X, dX, hx, D2);
+    coeff(lr_sol.X, dX, hx, D2, blas);
 
     if(ee_flag){
       // Explicit Euler
       for(int j = 0; j< nsteps_rk4; j++){
-        matmul_transb(lr_sol.S,C1,tmpS);
-        matmul(D2,tmpS,T);
+        blas.matmul_transb(lr_sol.S,C1,tmpS);
+        blas.matmul(D2,tmpS,T);
 
-        matmul_transb(lr_sol.S,C2,tmpS);
-        matmul(D1,tmpS,multmp);
+        blas.matmul_transb(lr_sol.S,C2,tmpS);
+        blas.matmul(D1,tmpS,multmp);
 
         T -= multmp;
         T *= tau_rk4;
@@ -479,11 +479,11 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
     }else{
       // RK4
       for(int j = 0; j< nsteps_rk4; j++){
-        matmul_transb(lr_sol.S,C1,tmpS);
-        matmul(D2,tmpS,tmpS1);
+        blas.matmul_transb(lr_sol.S,C1,tmpS);
+        blas.matmul(D2,tmpS,tmpS1);
 
-        matmul_transb(lr_sol.S,C2,tmpS);
-        matmul(D1,tmpS,multmp);
+        blas.matmul_transb(lr_sol.S,C2,tmpS);
+        blas.matmul(D1,tmpS,multmp);
 
         tmpS1 -= multmp;
 
@@ -491,11 +491,11 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
         T *= (tau_rk4/2);
         T += lr_sol.S;
 
-        matmul_transb(T,C1,tmpS);
-        matmul(D2,tmpS,tmpS2);
+        blas.matmul_transb(T,C1,tmpS);
+        blas.matmul(D2,tmpS,tmpS2);
 
-        matmul_transb(T,C2,tmpS);
-        matmul(D1,tmpS,multmp);
+        blas.matmul_transb(T,C2,tmpS);
+        blas.matmul(D1,tmpS,multmp);
 
         tmpS2 -= multmp;
 
@@ -503,11 +503,11 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
         T *= (tau_rk4/2);
         T += lr_sol.S;
 
-        matmul_transb(T,C1,tmpS);
-        matmul(D2,tmpS,tmpS3);
+        blas.matmul_transb(T,C1,tmpS);
+        blas.matmul(D2,tmpS,tmpS3);
 
-        matmul_transb(T,C2,tmpS);
-        matmul(D1,tmpS,multmp);
+        blas.matmul_transb(T,C2,tmpS);
+        blas.matmul(D1,tmpS,multmp);
 
         tmpS3 -= multmp;
 
@@ -515,11 +515,11 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
         T *= tau_rk4;
         T += lr_sol.S;
 
-        matmul_transb(T,C1,tmpS);
-        matmul(D2,tmpS,tmpS4);
+        blas.matmul_transb(T,C1,tmpS);
+        blas.matmul(D2,tmpS,tmpS4);
 
-        matmul_transb(T,C2,tmpS);
-        matmul(D1,tmpS,multmp);
+        blas.matmul_transb(T,C2,tmpS);
+        blas.matmul(D1,tmpS,multmp);
 
         tmpS4 -= multmp;
 
@@ -539,7 +539,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
     /* L step */
 
     tmpV = lr_sol.V;
-    matmul_transb(tmpV,lr_sol.S,lr_sol.V);
+    blas.matmul_transb(tmpV,lr_sol.S,lr_sol.V);
 
     schur(D1, T, dc_r);
 
@@ -548,7 +548,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     fftw_execute_dft_r2c(plans_v[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
 
-    matmul(Lhat,Tc,Nhat);
+    blas.matmul(Lhat,Tc,Nhat);
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
@@ -556,9 +556,9 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
       fftw_execute_dft_r2c(plans_v[0],lr_sol.V.begin(),(fftw_complex*)Lvhat.begin());
 
-      matmul_transb(Lvhat,C2c,Lhat);
+      blas.matmul_transb(Lvhat,C2c,Lhat);
 
-      matmul(Lhat,Tc,Nhattmp);
+      blas.matmul(Lhat,Tc,Nhattmp);
 
       #ifdef __OPENMP__
       #pragma omp parallel for collapse(2)
@@ -572,7 +572,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
         }
       }
 
-      matmul_transb(Nhat,Tc,Lhat);
+      blas.matmul_transb(Nhat,Tc,Lhat);
 
       Lhat *= ncv;
 
@@ -584,9 +584,9 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
       fftw_execute_dft_r2c(plans_v[0],lr_sol.V.begin(),(fftw_complex*)Lvhat.begin());
 
-      matmul_transb(Lvhat,C2c,Lhat);
+      blas.matmul_transb(Lvhat,C2c,Lhat);
 
-      matmul(Lhat,Tc,Lvhat);
+      blas.matmul(Lhat,Tc,Lvhat);
 
       Lvhat -= Nhattmp;
 
@@ -601,7 +601,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
         }
       }
 
-      matmul_transb(Nhat,Tc,Lhat);
+      blas.matmul_transb(Nhat,Tc,Lhat);
 
       Lhat *= ncv;
 
@@ -628,11 +628,11 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
     el_energyf << el_energy << endl;
 
     // Error mass
-    integrate(lr_sol.X,hx,int_x);
+    integrate(lr_sol.X,hx,int_x,blas);
 
-    integrate(lr_sol.V,hv,int_v);
+    integrate(lr_sol.V,hv,int_v,blas);
 
-    matvec(lr_sol.S,int_v,tmp_vec);
+    blas.matvec(lr_sol.S,int_v,tmp_vec);
 
     mass = 0.0;
     for(int ii = 0; ii < r; ii++){
@@ -643,9 +643,9 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     err_massf << err_mass << endl;
 
-    integrate(lr_sol.V,wv2,int_v);
+    integrate(lr_sol.V,wv2,int_v,blas);
 
-    matvec(lr_sol.S,int_v,tmp_vec);
+    blas.matvec(lr_sol.S,int_v,tmp_vec);
 
     energy = el_energy;
     for(int ii = 0; ii < r; ii++){
@@ -665,11 +665,11 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     d_tmpX = d_lr_sol.X;
 
-    matmul(d_tmpX,d_lr_sol.S,d_lr_sol.X);
+    blas.matmul(d_tmpX,d_lr_sol.S,d_lr_sol.X);
 
-    integrate(d_lr_sol.V,-hv,d_rho);
+    integrate(d_lr_sol.V,-hv,d_rho,blas);
 
-    matvec(d_lr_sol.X,d_rho,d_ef);
+    blas.matvec(d_lr_sol.X,d_rho,d_ef);
 
     d_ef += 1.0;
 
@@ -679,7 +679,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     cufftExecZ2D(plans_d_e[1],(cufftDoubleComplex*)d_efhat.begin(),d_ef.begin());
 
-    coeff(d_lr_sol.V, d_lr_sol.V, d_wv, d_C1);
+    coeff(d_lr_sol.V, d_lr_sol.V, d_wv, d_C1, blas);
 
     cufftExecD2Z(plans_d_v[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
 
@@ -687,7 +687,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     cufftExecZ2D(plans_d_v[1],(cufftDoubleComplex*)d_Lhat.begin(),d_dV.begin());
 
-    coeff(d_lr_sol.V, d_dV, hv, d_C2);
+    coeff(d_lr_sol.V, d_dV, hv, d_C2, blas);
 
     C1_gpu = d_C1;
     schur(C1_gpu, T_gpu, dc_r_gpu);
@@ -700,7 +700,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
 
-    matmul(d_Khat,d_Tc,d_Mhat);
+    blas.matmul(d_Khat,d_Tc,d_Mhat);
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
@@ -708,13 +708,13 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
       cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Kehat.begin());
 
-      matmul_transb(d_Kehat,d_C2c,d_Khat);
+      blas.matmul_transb(d_Kehat,d_C2c,d_Khat);
 
-      matmul(d_Khat,d_Tc,d_Mhattmp);
+      blas.matmul(d_Khat,d_Tc,d_Mhattmp);
 
       exp_euler_fourier<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), d_Mhat.shape()[0], d_Mhat.begin(), d_dc_r.begin(), tau_ee, d_Mhattmp.begin(), ax, bx);
 
-      matmul_transb(d_Mhat,d_Tc,d_Khat);
+      blas.matmul_transb(d_Mhat,d_Tc,d_Khat);
 
       ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(),d_Khat.begin(),ncx);
 
@@ -726,13 +726,13 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
       cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Kehat.begin());
 
-      matmul_transb(d_Kehat,d_C2c,d_Khat);
+      blas.matmul_transb(d_Kehat,d_C2c,d_Khat);
 
-      matmul(d_Khat,d_Tc,d_Kehat);
+      blas.matmul(d_Khat,d_Tc,d_Kehat);
 
       second_ord_stage_fourier<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), d_Mhat.shape()[0], d_Mhat.begin(), d_dc_r.begin(), tau_ee, d_Mhattmp.begin(), d_Kehat.begin(), ax, bx);
 
-      matmul_transb(d_Mhat,d_Tc,d_Khat);
+      blas.matmul_transb(d_Mhat,d_Tc,d_Khat);
 
       ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(),d_Khat.begin(),ncx);
 
@@ -748,7 +748,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     ptw_mult_scal<<<(d_ef.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_ef.num_elements(), d_ef.begin(), hx, d_wx.begin());
 
-    coeff(d_lr_sol.X, d_lr_sol.X, d_wx, d_D1);
+    coeff(d_lr_sol.X, d_lr_sol.X, d_wx, d_D1, blas);
 
     cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
 
@@ -756,51 +756,51 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     cufftExecZ2D(plans_d_x[1],(cufftDoubleComplex*)d_Khat.begin(),d_dX.begin());
 
-    coeff(d_lr_sol.X, d_dX, hx, d_D2);
+    coeff(d_lr_sol.X, d_dX, hx, d_D2, blas);
 
     if(ee_flag){
       // Explicit Euler
       for(int j = 0; j< nsteps_rk4; j++){
-        matmul_transb(d_lr_sol.S,d_C1,d_tmpS);
-        matmul(d_D2,d_tmpS,d_T);
+        blas.matmul_transb(d_lr_sol.S,d_C1,d_tmpS);
+        blas.matmul(d_D2,d_tmpS,d_T);
 
-        matmul_transb(d_lr_sol.S,d_C2,d_tmpS);
-        matmul(d_D1,d_tmpS,d_multmp);
+        blas.matmul_transb(d_lr_sol.S,d_C2,d_tmpS);
+        blas.matmul(d_D1,d_tmpS,d_multmp);
 
         expl_euler<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_lr_sol.S.begin(), tau_rk4, d_T.begin(), d_multmp.begin());
       }
     }else{
       // RK4
       for(int j = 0; j< nsteps_rk4; j++){
-        matmul_transb(d_lr_sol.S,d_C1,d_tmpS);
-        matmul(d_D2,d_tmpS,d_tmpS1);
+        blas.matmul_transb(d_lr_sol.S,d_C1,d_tmpS);
+        blas.matmul(d_D2,d_tmpS,d_tmpS1);
 
-        matmul_transb(d_lr_sol.S,d_C2,d_tmpS);
-        matmul(d_D1,d_tmpS,d_multmp);
+        blas.matmul_transb(d_lr_sol.S,d_C2,d_tmpS);
+        blas.matmul(d_D1,d_tmpS,d_multmp);
 
         rk4<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_T.begin(), tau_rk4/2.0, d_lr_sol.S.begin(), d_tmpS1.begin(),d_multmp.begin());
 
-        matmul_transb(d_T,d_C1,d_tmpS);
-        matmul(d_D2,d_tmpS,d_tmpS2);
+        blas.matmul_transb(d_T,d_C1,d_tmpS);
+        blas.matmul(d_D2,d_tmpS,d_tmpS2);
 
-        matmul_transb(d_T,d_C2,d_tmpS);
-        matmul(d_D1,d_tmpS,d_multmp);
+        blas.matmul_transb(d_T,d_C2,d_tmpS);
+        blas.matmul(d_D1,d_tmpS,d_multmp);
 
         rk4<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_T.begin(), tau_rk4/2.0, d_lr_sol.S.begin(), d_tmpS2.begin(),d_multmp.begin());
 
-        matmul_transb(d_T,d_C1,d_tmpS);
-        matmul(d_D2,d_tmpS,d_tmpS3);
+        blas.matmul_transb(d_T,d_C1,d_tmpS);
+        blas.matmul(d_D2,d_tmpS,d_tmpS3);
 
-        matmul_transb(d_T,d_C2,d_tmpS);
-        matmul(d_D1,d_tmpS,d_multmp);
+        blas.matmul_transb(d_T,d_C2,d_tmpS);
+        blas.matmul(d_D1,d_tmpS,d_multmp);
 
         rk4<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_T.begin(), tau_rk4, d_lr_sol.S.begin(), d_tmpS3.begin(),d_multmp.begin());
 
-        matmul_transb(d_T,d_C1,d_tmpS);
-        matmul(d_D2,d_tmpS,d_tmpS4);
+        blas.matmul_transb(d_T,d_C1,d_tmpS);
+        blas.matmul(d_D2,d_tmpS,d_tmpS4);
 
-        matmul_transb(d_T,d_C2,d_tmpS);
-        matmul(d_D1,d_tmpS,d_multmp);
+        blas.matmul_transb(d_T,d_C2,d_tmpS);
+        blas.matmul(d_D1,d_tmpS,d_multmp);
 
         rk4_finalcomb<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_lr_sol.S.begin(), tau_rk4, d_tmpS1.begin(), d_tmpS2.begin(), d_tmpS3.begin(), d_tmpS4.begin(),d_multmp.begin());
       }
@@ -810,7 +810,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
     // L step
     d_tmpV = d_lr_sol.V;
 
-    matmul_transb(d_tmpV,d_lr_sol.S,d_lr_sol.V);
+    blas.matmul_transb(d_tmpV,d_lr_sol.S,d_lr_sol.V);
 
     D1_gpu = d_D1;
     schur(D1_gpu, T_gpu, dc_r_gpu);
@@ -823,7 +823,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     cufftExecD2Z(plans_d_v[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
 
-    matmul(d_Lhat,d_Tc,d_Nhat);
+    blas.matmul(d_Lhat,d_Tc,d_Nhat);
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
@@ -831,13 +831,13 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
       cufftExecD2Z(plans_d_v[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lvhat.begin());
 
-      matmul_transb(d_Lvhat,d_C2c,d_Lhat);
+      blas.matmul_transb(d_Lvhat,d_C2c,d_Lhat);
 
-      matmul(d_Lhat,d_Tc,d_Nhattmp);
+      blas.matmul(d_Lhat,d_Tc,d_Nhattmp);
 
       exp_euler_fourier<<<(d_Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Nhat.num_elements(), d_Nhat.shape()[0], d_Nhat.begin(), d_dc_r.begin(), -tau_ee, d_Nhattmp.begin(), av, bv);
 
-      matmul_transb(d_Nhat,d_Tc,d_Lhat);
+      blas.matmul_transb(d_Nhat,d_Tc,d_Lhat);
 
       ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(),d_Lhat.begin(),ncv);
 
@@ -849,13 +849,13 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
       cufftExecD2Z(plans_d_v[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lvhat.begin());
 
-      matmul_transb(d_Lvhat,d_C2c,d_Lhat);
+      blas.matmul_transb(d_Lvhat,d_C2c,d_Lhat);
 
-      matmul(d_Lhat,d_Tc,d_Lvhat);
+      blas.matmul(d_Lhat,d_Tc,d_Lvhat);
 
       second_ord_stage_fourier<<<(d_Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Nhat.num_elements(), d_Nhat.shape()[0], d_Nhat.begin(), d_dc_r.begin(), -tau_ee, d_Nhattmp.begin(), d_Lvhat.begin(), av, bv);
 
-      matmul_transb(d_Nhat,d_Tc,d_Lhat);
+      blas.matmul_transb(d_Nhat,d_Tc,d_Lhat);
 
       ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(),d_Lhat.begin(),ncv);
 
@@ -880,11 +880,11 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
     el_energyGPUf << d_el_energy_CPU << endl;
 
     // Error mass
-    integrate(d_lr_sol.X,hx,d_int_x);
+    integrate(d_lr_sol.X,hx,d_int_x,blas);
 
-    integrate(d_lr_sol.V,hv,d_int_v);
+    integrate(d_lr_sol.V,hv,d_int_v,blas);
 
-    matvec(d_lr_sol.S,d_int_v,d_tmp_vec);
+    blas.matvec(d_lr_sol.S,d_int_v,d_tmp_vec);
 
     cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_mass);
     cudaDeviceSynchronize();
@@ -894,9 +894,9 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
     err_massGPUf << err_mass_CPU << endl;
 
-    integrate(d_lr_sol.V,d_wv2,d_int_v);
+    integrate(d_lr_sol.V,d_wv2,d_int_v,blas);
 
-    matvec(d_lr_sol.S,d_int_v,d_tmp_vec);
+    blas.matvec(d_lr_sol.S,d_int_v,d_tmp_vec);
 
     cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_energy);
     cudaDeviceSynchronize();
@@ -958,7 +958,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
   #endif
 }
 
-lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Index nsteps, int nsteps_ee, int nsteps_rk4, double ax, double bx, double av, double bv, double alpha, double kappa, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_x, array<fftw_plan,2> plans_v){
+lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Index nsteps, int nsteps_ee, int nsteps_rk4, double ax, double bx, double av, double bv, double alpha, double kappa, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_x, array<fftw_plan,2> plans_v, const blas_ops& blas){
 
   double tau = tstar/nsteps;
   double tau_h = tau/2.0;
@@ -1086,10 +1086,10 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
   double err_energy = 0.0;
 
   // Initial mass
-  integrate(lr_sol.X,hx,int_x);
-  integrate(lr_sol.V,hv,int_v);
+  integrate(lr_sol.X,hx,int_x,blas);
+  integrate(lr_sol.V,hv,int_v,blas);
 
-  matvec(lr_sol.S,int_v,tmp_vec);
+  blas.matvec(lr_sol.S,int_v,tmp_vec);
 
   for(int ii = 0; ii < r; ii++){
     mass0 += (int_x(ii)*tmp_vec(ii));
@@ -1097,12 +1097,12 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
   // Initial energy
 
-  integrate(lr_sol.V,hv,rho);
+  integrate(lr_sol.V,hv,rho,blas);
 
   rho *= -1.0;
 
-  matmul(lr_sol.X,lr_sol.S,tmpX);
-  matvec(tmpX,rho,ef);
+  blas.matmul(lr_sol.X,lr_sol.S,tmpX);
+  blas.matvec(tmpX,rho,ef);
 
   ef += 1.0;
 
@@ -1136,9 +1136,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     wv2(j) = pow(v(j),2) * hv;
   }
 
-  integrate(lr_sol.V,wv2,int_v);
+  integrate(lr_sol.V,wv2,int_v,blas);
 
-  matvec(lr_sol.S,int_v,tmp_vec);
+  blas.matvec(lr_sol.S,int_v,tmp_vec);
 
   for(int ii = 0; ii < r; ii++){
     energy0 += (0.5*int_x(ii)*tmp_vec(ii));
@@ -1307,13 +1307,13 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     tmpX = lr_sol_e.X;
 
-    matmul(tmpX,lr_sol_e.S,lr_sol_e.X);
+    blas.matmul(tmpX,lr_sol_e.S,lr_sol_e.X);
 
     // Electric field
 
-    integrate(lr_sol_e.V,-hv,rho);
+    integrate(lr_sol_e.V,-hv,rho,blas);
 
-    matvec(lr_sol_e.X,rho,ef);
+    blas.matvec(lr_sol_e.X,rho,ef);
 
     ef += 1.0;
 
@@ -1345,7 +1345,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     // Main of K step
 
-    coeff(lr_sol_e.V, lr_sol_e.V, wv, C1);
+    coeff(lr_sol_e.V, lr_sol_e.V, wv, C1, blas);
 
     fftw_execute_dft_r2c(plans_v[0],lr_sol_e.V.begin(),(fftw_complex*)Lhat.begin());
 
@@ -1353,7 +1353,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     fftw_execute_dft_c2r(plans_v[1],(fftw_complex*)Lhat.begin(),dV.begin());
 
-    coeff(lr_sol_e.V, dV, hv, C2);
+    coeff(lr_sol_e.V, dV, hv, C2, blas);
 
     schur(C1, T, dc_r);
 
@@ -1363,7 +1363,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     fftw_execute_dft_r2c(plans_x[0],lr_sol_e.X.begin(),(fftw_complex*)Khat.begin());
 
-    matmul(Khat,Tc,Mhat);
+    blas.matmul(Khat,Tc,Mhat);
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
@@ -1371,9 +1371,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       fftw_execute_dft_r2c(plans_x[0],lr_sol_e.X.begin(),(fftw_complex*)Kehat.begin());
 
-      matmul_transb(Kehat,C2c,Khat);
+      blas.matmul_transb(Kehat,C2c,Khat);
 
-      matmul(Khat,Tc,Mhattmp);
+      blas.matmul(Khat,Tc,Mhattmp);
 
       #ifdef __OPENMP__
       #pragma omp parallel for collapse(2)
@@ -1387,7 +1387,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
         }
       }
 
-      matmul_transb(Mhat,Tc,Khat);
+      blas.matmul_transb(Mhat,Tc,Khat);
 
       Khat *= ncx;
 
@@ -1399,9 +1399,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       fftw_execute_dft_r2c(plans_x[0],lr_sol_e.X.begin(),(fftw_complex*)Kehat.begin());
 
-      matmul_transb(Kehat,C2c,Khat);
+      blas.matmul_transb(Kehat,C2c,Khat);
 
-      matmul(Khat,Tc,Kehat);
+      blas.matmul(Khat,Tc,Kehat);
 
       Kehat -= Mhattmp;
 
@@ -1416,7 +1416,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
         }
       }
 
-      matmul_transb(Mhat,Tc,Khat);
+      blas.matmul_transb(Mhat,Tc,Khat);
 
       Khat *= ncx;
 
@@ -1435,7 +1435,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
       wx(ii) = hx*ef(ii);
     }
 
-    coeff(lr_sol_e.X, lr_sol_e.X, wx, D1);
+    coeff(lr_sol_e.X, lr_sol_e.X, wx, D1, blas);
 
     fftw_execute_dft_r2c(plans_x[0],lr_sol_e.X.begin(),(fftw_complex*)Khat.begin());
 
@@ -1443,15 +1443,15 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     fftw_execute_dft_c2r(plans_x[1],(fftw_complex*)Khat.begin(),dX.begin());
 
-    coeff(lr_sol_e.X, dX, hx, D2);
+    coeff(lr_sol_e.X, dX, hx, D2, blas);
 
     // RK4
     for(int j = 0; j< nsteps_rk4; j++){
-      matmul_transb(lr_sol_e.S,C1,tmpS);
-      matmul(D2,tmpS,tmpS1);
+      blas.matmul_transb(lr_sol_e.S,C1,tmpS);
+      blas.matmul(D2,tmpS,tmpS1);
 
-      matmul_transb(lr_sol_e.S,C2,tmpS);
-      matmul(D1,tmpS,multmp);
+      blas.matmul_transb(lr_sol_e.S,C2,tmpS);
+      blas.matmul(D1,tmpS,multmp);
 
       tmpS1 -= multmp;
 
@@ -1459,11 +1459,11 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
       T *= (tau_rk4_h/2);
       T += lr_sol_e.S;
 
-      matmul_transb(T,C1,tmpS);
-      matmul(D2,tmpS,tmpS2);
+      blas.matmul_transb(T,C1,tmpS);
+      blas.matmul(D2,tmpS,tmpS2);
 
-      matmul_transb(T,C2,tmpS);
-      matmul(D1,tmpS,multmp);
+      blas.matmul_transb(T,C2,tmpS);
+      blas.matmul(D1,tmpS,multmp);
 
       tmpS2 -= multmp;
 
@@ -1471,11 +1471,11 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
       T *= (tau_rk4_h/2);
       T += lr_sol_e.S;
 
-      matmul_transb(T,C1,tmpS);
-      matmul(D2,tmpS,tmpS3);
+      blas.matmul_transb(T,C1,tmpS);
+      blas.matmul(D2,tmpS,tmpS3);
 
-      matmul_transb(T,C2,tmpS);
-      matmul(D1,tmpS,multmp);
+      blas.matmul_transb(T,C2,tmpS);
+      blas.matmul(D1,tmpS,multmp);
 
       tmpS3 -= multmp;
 
@@ -1483,11 +1483,11 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
       T *= tau_rk4_h;
       T += lr_sol_e.S;
 
-      matmul_transb(T,C1,tmpS);
-      matmul(D2,tmpS,tmpS4);
+      blas.matmul_transb(T,C1,tmpS);
+      blas.matmul(D2,tmpS,tmpS4);
 
-      matmul_transb(T,C2,tmpS);
-      matmul(D1,tmpS,multmp);
+      blas.matmul_transb(T,C2,tmpS);
+      blas.matmul(D1,tmpS,multmp);
 
       tmpS4 -= multmp;
 
@@ -1505,7 +1505,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     /* Half step L */
 
     tmpV = lr_sol_e.V;
-    matmul_transb(tmpV,lr_sol_e.S,lr_sol_e.V);
+    blas.matmul_transb(tmpV,lr_sol_e.S,lr_sol_e.V);
 
     schur(D1, W, dd_r);
 
@@ -1514,7 +1514,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     fftw_execute_dft_r2c(plans_v[0],lr_sol_e.V.begin(),(fftw_complex*)Lhat.begin());
 
-    matmul(Lhat,Wc,Nhat);
+    blas.matmul(Lhat,Wc,Nhat);
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
@@ -1522,9 +1522,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       fftw_execute_dft_r2c(plans_v[0],lr_sol_e.V.begin(),(fftw_complex*)Lvhat.begin());
 
-      matmul_transb(Lvhat,D2c,Lhat);
+      blas.matmul_transb(Lvhat,D2c,Lhat);
 
-      matmul(Lhat,Wc,Nhattmp);
+      blas.matmul(Lhat,Wc,Nhattmp);
 
       #ifdef __OPENMP__
       #pragma omp parallel for collapse(2)
@@ -1538,7 +1538,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
         }
       }
 
-      matmul_transb(Nhat,Wc,Lhat);
+      blas.matmul_transb(Nhat,Wc,Lhat);
 
       Lhat *= ncv;
 
@@ -1550,9 +1550,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       fftw_execute_dft_r2c(plans_v[0],lr_sol_e.V.begin(),(fftw_complex*)Lvhat.begin());
 
-      matmul_transb(Lvhat,D2c,Lhat);
+      blas.matmul_transb(Lvhat,D2c,Lhat);
 
-      matmul(Lhat,Wc,Lvhat);
+      blas.matmul(Lhat,Wc,Lvhat);
 
       Lvhat -= Nhattmp;
 
@@ -1567,7 +1567,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
         }
       }
 
-      matmul_transb(Nhat,Wc,Lhat);
+      blas.matmul_transb(Nhat,Wc,Lhat);
 
       Lhat *= ncv;
 
@@ -1580,9 +1580,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     gt::start("Restarted integration CPU");
 
     // Electric field at tau/2
-    integrate(lr_sol_e.V,-hv,rho);
+    integrate(lr_sol_e.V,-hv,rho,blas);
 
-    matvec(lr_sol_e.X,rho,ef);
+    blas.matvec(lr_sol_e.X,rho,ef);
 
     ef += 1.0;
 
@@ -1606,11 +1606,11 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     /* Half step K */
 
     tmpX = lr_sol.X;
-    matmul(tmpX,lr_sol.S,lr_sol.X);
+    blas.matmul(tmpX,lr_sol.S,lr_sol.X);
 
     fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
-    matmul(Khat,Tc,Mhat);
+    blas.matmul(Khat,Tc,Mhat);
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
@@ -1618,9 +1618,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Kehat.begin());
 
-      matmul_transb(Kehat,C2c,Khat);
+      blas.matmul_transb(Kehat,C2c,Khat);
 
-      matmul(Khat,Tc,Mhattmp);
+      blas.matmul(Khat,Tc,Mhattmp);
 
       #ifdef __OPENMP__
       #pragma omp parallel for collapse(2)
@@ -1634,7 +1634,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
         }
       }
 
-      matmul_transb(Mhat,Tc,Khat);
+      blas.matmul_transb(Mhat,Tc,Khat);
 
       Khat *= ncx;
 
@@ -1646,9 +1646,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Kehat.begin());
 
-      matmul_transb(Kehat,C2c,Khat);
+      blas.matmul_transb(Kehat,C2c,Khat);
 
-      matmul(Khat,Tc,Kehat);
+      blas.matmul(Khat,Tc,Kehat);
 
       Kehat -= Mhattmp;
 
@@ -1663,7 +1663,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
         }
       }
 
-      matmul_transb(Mhat,Tc,Khat);
+      blas.matmul_transb(Mhat,Tc,Khat);
 
       Khat *= ncx;
 
@@ -1682,7 +1682,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
       wx(ii) = hx*ef(ii);
     }
 
-    coeff(lr_sol.X, lr_sol.X, wx, D1);
+    coeff(lr_sol.X, lr_sol.X, wx, D1, blas);
 
     fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
@@ -1690,15 +1690,15 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     fftw_execute_dft_c2r(plans_x[1],(fftw_complex*)Khat.begin(),dX.begin());
 
-    coeff(lr_sol.X, dX, hx, D2);
+    coeff(lr_sol.X, dX, hx, D2, blas);
 
     // RK4
     for(int j = 0; j< nsteps_rk4; j++){
-      matmul_transb(lr_sol.S,C1,tmpS);
-      matmul(D2,tmpS,tmpS1);
+      blas.matmul_transb(lr_sol.S,C1,tmpS);
+      blas.matmul(D2,tmpS,tmpS1);
 
-      matmul_transb(lr_sol.S,C2,tmpS);
-      matmul(D1,tmpS,multmp);
+      blas.matmul_transb(lr_sol.S,C2,tmpS);
+      blas.matmul(D1,tmpS,multmp);
 
       tmpS1 -= multmp;
 
@@ -1706,11 +1706,11 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
       T *= (tau_rk4_h/2);
       T += lr_sol.S;
 
-      matmul_transb(T,C1,tmpS);
-      matmul(D2,tmpS,tmpS2);
+      blas.matmul_transb(T,C1,tmpS);
+      blas.matmul(D2,tmpS,tmpS2);
 
-      matmul_transb(T,C2,tmpS);
-      matmul(D1,tmpS,multmp);
+      blas.matmul_transb(T,C2,tmpS);
+      blas.matmul(D1,tmpS,multmp);
 
       tmpS2 -= multmp;
 
@@ -1718,11 +1718,11 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
       T *= (tau_rk4_h/2);
       T += lr_sol.S;
 
-      matmul_transb(T,C1,tmpS);
-      matmul(D2,tmpS,tmpS3);
+      blas.matmul_transb(T,C1,tmpS);
+      blas.matmul(D2,tmpS,tmpS3);
 
-      matmul_transb(T,C2,tmpS);
-      matmul(D1,tmpS,multmp);
+      blas.matmul_transb(T,C2,tmpS);
+      blas.matmul(D1,tmpS,multmp);
 
       tmpS3 -= multmp;
 
@@ -1730,11 +1730,11 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
       T *= tau_rk4_h;
       T += lr_sol.S;
 
-      matmul_transb(T,C1,tmpS);
-      matmul(D2,tmpS,tmpS4);
+      blas.matmul_transb(T,C1,tmpS);
+      blas.matmul(D2,tmpS,tmpS4);
 
-      matmul_transb(T,C2,tmpS);
-      matmul(D1,tmpS,multmp);
+      blas.matmul_transb(T,C2,tmpS);
+      blas.matmul(D1,tmpS,multmp);
 
       tmpS4 -= multmp;
 
@@ -1752,7 +1752,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     /* Full step L */
 
     tmpV = lr_sol.V;
-    matmul_transb(tmpV,lr_sol.S,lr_sol.V);
+    blas.matmul_transb(tmpV,lr_sol.S,lr_sol.V);
 
     schur(D1, W, dd_r);
 
@@ -1761,7 +1761,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     fftw_execute_dft_r2c(plans_v[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
 
-    matmul(Lhat,Wc,Nhat);
+    blas.matmul(Lhat,Wc,Nhat);
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
@@ -1769,9 +1769,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       fftw_execute_dft_r2c(plans_v[0],lr_sol.V.begin(),(fftw_complex*)Lvhat.begin());
 
-      matmul_transb(Lvhat,D2c,Lhat);
+      blas.matmul_transb(Lvhat,D2c,Lhat);
 
-      matmul(Lhat,Wc,Nhattmp);
+      blas.matmul(Lhat,Wc,Nhattmp);
 
       #ifdef __OPENMP__
       #pragma omp parallel for collapse(2)
@@ -1785,7 +1785,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
         }
       }
 
-      matmul_transb(Nhat,Wc,Lhat);
+      blas.matmul_transb(Nhat,Wc,Lhat);
 
       Lhat *= ncv;
 
@@ -1797,9 +1797,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       fftw_execute_dft_r2c(plans_v[0],lr_sol.V.begin(),(fftw_complex*)Lvhat.begin());
 
-      matmul_transb(Lvhat,D2c,Lhat);
+      blas.matmul_transb(Lvhat,D2c,Lhat);
 
-      matmul(Lhat,Wc,Lvhat);
+      blas.matmul(Lhat,Wc,Lvhat);
 
       Lvhat -= Nhattmp;
 
@@ -1814,7 +1814,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
         }
       }
 
-      matmul_transb(Nhat,Wc,Lhat);
+      blas.matmul_transb(Nhat,Wc,Lhat);
 
       Lhat *= ncv;
 
@@ -1827,7 +1827,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     /* Half step S */
 
-    coeff(lr_sol.V, lr_sol.V, wv, C1);
+    coeff(lr_sol.V, lr_sol.V, wv, C1, blas);
 
     fftw_execute_dft_r2c(plans_v[0],lr_sol.V.begin(),(fftw_complex*)Lhat.begin());
 
@@ -1835,15 +1835,15 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     fftw_execute_dft_c2r(plans_v[1],(fftw_complex*)Lhat.begin(),dV.begin());
 
-    coeff(lr_sol.V, dV, hv, C2);
+    coeff(lr_sol.V, dV, hv, C2, blas);
 
     // RK4
     for(int j = 0; j< nsteps_rk4; j++){
-      matmul_transb(lr_sol.S,C1,tmpS);
-      matmul(D2,tmpS,tmpS1);
+      blas.matmul_transb(lr_sol.S,C1,tmpS);
+      blas.matmul(D2,tmpS,tmpS1);
 
-      matmul_transb(lr_sol.S,C2,tmpS);
-      matmul(D1,tmpS,multmp);
+      blas.matmul_transb(lr_sol.S,C2,tmpS);
+      blas.matmul(D1,tmpS,multmp);
 
       tmpS1 -= multmp;
 
@@ -1851,11 +1851,11 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
       T *= (tau_rk4_h/2);
       T += lr_sol.S;
 
-      matmul_transb(T,C1,tmpS);
-      matmul(D2,tmpS,tmpS2);
+      blas.matmul_transb(T,C1,tmpS);
+      blas.matmul(D2,tmpS,tmpS2);
 
-      matmul_transb(T,C2,tmpS);
-      matmul(D1,tmpS,multmp);
+      blas.matmul_transb(T,C2,tmpS);
+      blas.matmul(D1,tmpS,multmp);
 
       tmpS2 -= multmp;
 
@@ -1863,11 +1863,11 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
       T *= (tau_rk4_h/2);
       T += lr_sol.S;
 
-      matmul_transb(T,C1,tmpS);
-      matmul(D2,tmpS,tmpS3);
+      blas.matmul_transb(T,C1,tmpS);
+      blas.matmul(D2,tmpS,tmpS3);
 
-      matmul_transb(T,C2,tmpS);
-      matmul(D1,tmpS,multmp);
+      blas.matmul_transb(T,C2,tmpS);
+      blas.matmul(D1,tmpS,multmp);
 
       tmpS3 -= multmp;
 
@@ -1875,11 +1875,11 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
       T *= tau_rk4_h;
       T += lr_sol.S;
 
-      matmul_transb(T,C1,tmpS);
-      matmul(D2,tmpS,tmpS4);
+      blas.matmul_transb(T,C1,tmpS);
+      blas.matmul(D2,tmpS,tmpS4);
 
-      matmul_transb(T,C2,tmpS);
-      matmul(D1,tmpS,multmp);
+      blas.matmul_transb(T,C2,tmpS);
+      blas.matmul(D1,tmpS,multmp);
 
       tmpS4 -= multmp;
 
@@ -1897,7 +1897,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     /* Half step K */
 
     tmpX = lr_sol.X;
-    matmul(tmpX,lr_sol.S,lr_sol.X);
+    blas.matmul(tmpX,lr_sol.S,lr_sol.X);
 
     schur(C1, T, dc_r);
     T.to_cplx(Tc);
@@ -1905,7 +1905,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Khat.begin());
 
-    matmul(Khat,Tc,Mhat);
+    blas.matmul(Khat,Tc,Mhat);
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
@@ -1913,9 +1913,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Kehat.begin());
 
-      matmul_transb(Kehat,C2c,Khat);
+      blas.matmul_transb(Kehat,C2c,Khat);
 
-      matmul(Khat,Tc,Mhattmp);
+      blas.matmul(Khat,Tc,Mhattmp);
 
       #ifdef __OPENMP__
       #pragma omp parallel for collapse(2)
@@ -1929,7 +1929,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
         }
       }
 
-      matmul_transb(Mhat,Tc,Khat);
+      blas.matmul_transb(Mhat,Tc,Khat);
 
       Khat *= ncx;
 
@@ -1941,9 +1941,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       fftw_execute_dft_r2c(plans_x[0],lr_sol.X.begin(),(fftw_complex*)Kehat.begin());
 
-      matmul_transb(Kehat,C2c,Khat);
+      blas.matmul_transb(Kehat,C2c,Khat);
 
-      matmul(Khat,Tc,Kehat);
+      blas.matmul(Khat,Tc,Kehat);
 
       Kehat -= Mhattmp;
 
@@ -1958,7 +1958,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
         }
       }
 
-      matmul_transb(Mhat,Tc,Khat);
+      blas.matmul_transb(Mhat,Tc,Khat);
 
       Khat *= ncx;
 
@@ -1971,11 +1971,11 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     gt::stop("Restarted integration CPU");
 
     // Error mass
-    integrate(lr_sol.X,hx,int_x);
+    integrate(lr_sol.X,hx,int_x,blas);
 
-    integrate(lr_sol.V,hv,int_v);
+    integrate(lr_sol.V,hv,int_v,blas);
 
-    matvec(lr_sol.S,int_v,tmp_vec);
+    blas.matvec(lr_sol.S,int_v,tmp_vec);
 
     mass = 0.0;
     for(int ii = 0; ii < r; ii++){
@@ -1986,9 +1986,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     err_massf << err_mass << endl;
 
-    integrate(lr_sol.V,wv2,int_v);
+    integrate(lr_sol.V,wv2,int_v,blas);
 
-    matvec(lr_sol.S,int_v,tmp_vec);
+    blas.matvec(lr_sol.S,int_v,tmp_vec);
 
     energy = el_energy;
     for(int ii = 0; ii < r; ii++){
@@ -2013,15 +2013,15 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     d_tmpX = d_lr_sol_e.X;
 
-    matmul(d_tmpX,d_lr_sol_e.S,d_lr_sol_e.X);
+    blas.matmul(d_tmpX,d_lr_sol_e.S,d_lr_sol_e.X);
 
     gt::start("Lie splitting for electric field GPU");
 
     // Electric field
 
-    integrate(d_lr_sol_e.V,-hv,d_rho);
+    integrate(d_lr_sol_e.V,-hv,d_rho,blas);
 
-    matvec(d_lr_sol_e.X,d_rho,d_ef);
+    blas.matvec(d_lr_sol_e.X,d_rho,d_ef);
 
     d_ef += 1.0;
 
@@ -2043,7 +2043,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
 
     // Main of K step
-    coeff(d_lr_sol_e.V, d_lr_sol_e.V, d_wv, d_C1);
+    coeff(d_lr_sol_e.V, d_lr_sol_e.V, d_wv, d_C1, blas);
 
     cufftExecD2Z(plans_d_v[0],d_lr_sol_e.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
 
@@ -2051,7 +2051,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     cufftExecZ2D(plans_d_v[1],(cufftDoubleComplex*)d_Lhat.begin(),d_dV.begin());
 
-    coeff(d_lr_sol_e.V, d_dV, hv, d_C2);
+    coeff(d_lr_sol_e.V, d_dV, hv, d_C2, blas);
 
     C1_gpu = d_C1;
     schur(C1_gpu, T_gpu, dc_r_gpu);
@@ -2064,7 +2064,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     cufftExecD2Z(plans_d_x[0],d_lr_sol_e.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
 
-    matmul(d_Khat,d_Tc,d_Mhat);
+    blas.matmul(d_Khat,d_Tc,d_Mhat);
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
@@ -2072,13 +2072,13 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       cufftExecD2Z(plans_d_x[0],d_lr_sol_e.X.begin(),(cufftDoubleComplex*)d_Kehat.begin());
 
-      matmul_transb(d_Kehat,d_C2c,d_Khat);
+      blas.matmul_transb(d_Kehat,d_C2c,d_Khat);
 
-      matmul(d_Khat,d_Tc,d_Mhattmp);
+      blas.matmul(d_Khat,d_Tc,d_Mhattmp);
 
       exp_euler_fourier<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), d_Mhat.shape()[0], d_Mhat.begin(), d_dc_r.begin(), tau_ee_h, d_Mhattmp.begin(), ax, bx);
 
-      matmul_transb(d_Mhat,d_Tc,d_Khat);
+      blas.matmul_transb(d_Mhat,d_Tc,d_Khat);
 
       ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(),d_Khat.begin(),ncx);
 
@@ -2090,13 +2090,13 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       cufftExecD2Z(plans_d_x[0],d_lr_sol_e.X.begin(),(cufftDoubleComplex*)d_Kehat.begin());
 
-      matmul_transb(d_Kehat,d_C2c,d_Khat);
+      blas.matmul_transb(d_Kehat,d_C2c,d_Khat);
 
-      matmul(d_Khat,d_Tc,d_Kehat);
+      blas.matmul(d_Khat,d_Tc,d_Kehat);
 
       second_ord_stage_fourier<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), d_Mhat.shape()[0], d_Mhat.begin(), d_dc_r.begin(), tau_ee_h, d_Mhattmp.begin(), d_Kehat.begin(), ax, bx);
 
-      matmul_transb(d_Mhat,d_Tc,d_Khat);
+      blas.matmul_transb(d_Mhat,d_Tc,d_Khat);
 
       ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(),d_Khat.begin(),ncx);
 
@@ -2110,7 +2110,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     ptw_mult_scal<<<(d_ef.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_ef.num_elements(), d_ef.begin(), hx, d_wx.begin());
 
-    coeff(d_lr_sol_e.X, d_lr_sol_e.X, d_wx, d_D1);
+    coeff(d_lr_sol_e.X, d_lr_sol_e.X, d_wx, d_D1, blas);
 
     cufftExecD2Z(plans_d_x[0],d_lr_sol_e.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
 
@@ -2118,39 +2118,39 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     cufftExecZ2D(plans_d_x[1],(cufftDoubleComplex*)d_Khat.begin(),d_dX.begin());
 
-    coeff(d_lr_sol_e.X, d_dX, hx, d_D2);
+    coeff(d_lr_sol_e.X, d_dX, hx, d_D2, blas);
 
     // RK4
     for(int j = 0; j< nsteps_rk4; j++){
-      matmul_transb(d_lr_sol_e.S,d_C1,d_tmpS);
-      matmul(d_D2,d_tmpS,d_tmpS1);
+      blas.matmul_transb(d_lr_sol_e.S,d_C1,d_tmpS);
+      blas.matmul(d_D2,d_tmpS,d_tmpS1);
 
-      matmul_transb(d_lr_sol_e.S,d_C2,d_tmpS);
-      matmul(d_D1,d_tmpS,d_multmp);
+      blas.matmul_transb(d_lr_sol_e.S,d_C2,d_tmpS);
+      blas.matmul(d_D1,d_tmpS,d_multmp);
 
       rk4<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_T.begin(), tau_rk4_h/2.0, d_lr_sol_e.S.begin(), d_tmpS1.begin(),d_multmp.begin());
 
-      matmul_transb(d_T,d_C1,d_tmpS);
-      matmul(d_D2,d_tmpS,d_tmpS2);
+      blas.matmul_transb(d_T,d_C1,d_tmpS);
+      blas.matmul(d_D2,d_tmpS,d_tmpS2);
 
-      matmul_transb(d_T,d_C2,d_tmpS);
-      matmul(d_D1,d_tmpS,d_multmp);
+      blas.matmul_transb(d_T,d_C2,d_tmpS);
+      blas.matmul(d_D1,d_tmpS,d_multmp);
 
       rk4<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_T.begin(), tau_rk4_h/2.0, d_lr_sol_e.S.begin(), d_tmpS2.begin(),d_multmp.begin());
 
-      matmul_transb(d_T,d_C1,d_tmpS);
-      matmul(d_D2,d_tmpS,d_tmpS3);
+      blas.matmul_transb(d_T,d_C1,d_tmpS);
+      blas.matmul(d_D2,d_tmpS,d_tmpS3);
 
-      matmul_transb(d_T,d_C2,d_tmpS);
-      matmul(d_D1,d_tmpS,d_multmp);
+      blas.matmul_transb(d_T,d_C2,d_tmpS);
+      blas.matmul(d_D1,d_tmpS,d_multmp);
 
       rk4<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_T.begin(), tau_rk4_h, d_lr_sol_e.S.begin(), d_tmpS3.begin(),d_multmp.begin());
 
-      matmul_transb(d_T,d_C1,d_tmpS);
-      matmul(d_D2,d_tmpS,d_tmpS4);
+      blas.matmul_transb(d_T,d_C1,d_tmpS);
+      blas.matmul(d_D2,d_tmpS,d_tmpS4);
 
-      matmul_transb(d_T,d_C2,d_tmpS);
-      matmul(d_D1,d_tmpS,d_multmp);
+      blas.matmul_transb(d_T,d_C2,d_tmpS);
+      blas.matmul(d_D1,d_tmpS,d_multmp);
 
       rk4_finalcomb<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_lr_sol_e.S.begin(), tau_rk4_h, d_tmpS1.begin(), d_tmpS2.begin(), d_tmpS3.begin(), d_tmpS4.begin(),d_multmp.begin());
     }
@@ -2158,7 +2158,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     /* Half step L */
     d_tmpV = d_lr_sol_e.V;
 
-    matmul_transb(d_tmpV,d_lr_sol_e.S,d_lr_sol_e.V);
+    blas.matmul_transb(d_tmpV,d_lr_sol_e.S,d_lr_sol_e.V);
 
     D1_gpu = d_D1;
     schur(D1_gpu, W_gpu, dd_r_gpu);
@@ -2171,7 +2171,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     cufftExecD2Z(plans_d_v[0],d_lr_sol_e.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
 
-    matmul(d_Lhat,d_Wc,d_Nhat);
+    blas.matmul(d_Lhat,d_Wc,d_Nhat);
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
@@ -2179,13 +2179,13 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       cufftExecD2Z(plans_d_v[0],d_lr_sol_e.V.begin(),(cufftDoubleComplex*)d_Lvhat.begin());
 
-      matmul_transb(d_Lvhat,d_D2c,d_Lhat);
+      blas.matmul_transb(d_Lvhat,d_D2c,d_Lhat);
 
-      matmul(d_Lhat,d_Wc,d_Nhattmp);
+      blas.matmul(d_Lhat,d_Wc,d_Nhattmp);
 
       exp_euler_fourier<<<(d_Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Nhat.num_elements(), d_Nhat.shape()[0], d_Nhat.begin(), d_dd_r.begin(), -tau_ee_h, d_Nhattmp.begin(), av, bv);
 
-      matmul_transb(d_Nhat,d_Wc,d_Lhat);
+      blas.matmul_transb(d_Nhat,d_Wc,d_Lhat);
 
       ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(),d_Lhat.begin(),ncv);
 
@@ -2197,13 +2197,13 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       cufftExecD2Z(plans_d_v[0],d_lr_sol_e.V.begin(),(cufftDoubleComplex*)d_Lvhat.begin());
 
-      matmul_transb(d_Lvhat,d_D2c,d_Lhat);
+      blas.matmul_transb(d_Lvhat,d_D2c,d_Lhat);
 
-      matmul(d_Lhat,d_Wc,d_Lvhat);
+      blas.matmul(d_Lhat,d_Wc,d_Lvhat);
 
       second_ord_stage_fourier<<<(d_Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Nhat.num_elements(), d_Nhat.shape()[0], d_Nhat.begin(), d_dd_r.begin(), -tau_ee_h, d_Nhattmp.begin(), d_Lvhat.begin(), av, bv);
 
-      matmul_transb(d_Nhat,d_Wc,d_Lhat);
+      blas.matmul_transb(d_Nhat,d_Wc,d_Lhat);
 
       ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(),d_Lhat.begin(),ncv);
 
@@ -2218,9 +2218,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     // Electric field at tau/2
 
-    integrate(d_lr_sol_e.V,-hv,d_rho);
+    integrate(d_lr_sol_e.V,-hv,d_rho,blas);
 
-    matvec(d_lr_sol_e.X,d_rho,d_ef);
+    blas.matvec(d_lr_sol_e.X,d_rho,d_ef);
 
     d_ef += 1.0;
 
@@ -2236,11 +2236,11 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     d_tmpX = d_lr_sol.X;
 
-    matmul(d_tmpX,d_lr_sol.S,d_lr_sol.X);
+    blas.matmul(d_tmpX,d_lr_sol.S,d_lr_sol.X);
 
     cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
 
-    matmul(d_Khat,d_Tc,d_Mhat);
+    blas.matmul(d_Khat,d_Tc,d_Mhat);
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
@@ -2248,13 +2248,13 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Kehat.begin());
 
-      matmul_transb(d_Kehat,d_C2c,d_Khat);
+      blas.matmul_transb(d_Kehat,d_C2c,d_Khat);
 
-      matmul(d_Khat,d_Tc,d_Mhattmp);
+      blas.matmul(d_Khat,d_Tc,d_Mhattmp);
 
       exp_euler_fourier<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), d_Mhat.shape()[0], d_Mhat.begin(), d_dc_r.begin(), tau_ee_h, d_Mhattmp.begin(), ax, bx);
 
-      matmul_transb(d_Mhat,d_Tc,d_Khat);
+      blas.matmul_transb(d_Mhat,d_Tc,d_Khat);
 
       ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(),d_Khat.begin(),ncx);
 
@@ -2266,13 +2266,13 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Kehat.begin());
 
-      matmul_transb(d_Kehat,d_C2c,d_Khat);
+      blas.matmul_transb(d_Kehat,d_C2c,d_Khat);
 
-      matmul(d_Khat,d_Tc,d_Kehat);
+      blas.matmul(d_Khat,d_Tc,d_Kehat);
 
       second_ord_stage_fourier<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), d_Mhat.shape()[0], d_Mhat.begin(), d_dc_r.begin(), tau_ee_h, d_Mhattmp.begin(), d_Kehat.begin(), ax, bx);
 
-      matmul_transb(d_Mhat,d_Tc,d_Khat);
+      blas.matmul_transb(d_Mhat,d_Tc,d_Khat);
 
       ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(),d_Khat.begin(),ncx);
 
@@ -2286,7 +2286,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     ptw_mult_scal<<<(d_ef.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_ef.num_elements(), d_ef.begin(), hx, d_wx.begin());
 
-    coeff(d_lr_sol.X, d_lr_sol.X, d_wx, d_D1);
+    coeff(d_lr_sol.X, d_lr_sol.X, d_wx, d_D1, blas);
 
     cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
 
@@ -2294,39 +2294,39 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     cufftExecZ2D(plans_d_x[1],(cufftDoubleComplex*)d_Khat.begin(),d_dX.begin());
 
-    coeff(d_lr_sol.X, d_dX, hx, d_D2);
+    coeff(d_lr_sol.X, d_dX, hx, d_D2, blas);
 
     // RK4
     for(int j = 0; j< nsteps_rk4; j++){
-      matmul_transb(d_lr_sol.S,d_C1,d_tmpS);
-      matmul(d_D2,d_tmpS,d_tmpS1);
+      blas.matmul_transb(d_lr_sol.S,d_C1,d_tmpS);
+      blas.matmul(d_D2,d_tmpS,d_tmpS1);
 
-      matmul_transb(d_lr_sol.S,d_C2,d_tmpS);
-      matmul(d_D1,d_tmpS,d_multmp);
+      blas.matmul_transb(d_lr_sol.S,d_C2,d_tmpS);
+      blas.matmul(d_D1,d_tmpS,d_multmp);
 
       rk4<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_T.begin(), tau_rk4_h/2.0, d_lr_sol.S.begin(), d_tmpS1.begin(),d_multmp.begin());
 
-      matmul_transb(d_T,d_C1,d_tmpS);
-      matmul(d_D2,d_tmpS,d_tmpS2);
+      blas.matmul_transb(d_T,d_C1,d_tmpS);
+      blas.matmul(d_D2,d_tmpS,d_tmpS2);
 
-      matmul_transb(d_T,d_C2,d_tmpS);
-      matmul(d_D1,d_tmpS,d_multmp);
+      blas.matmul_transb(d_T,d_C2,d_tmpS);
+      blas.matmul(d_D1,d_tmpS,d_multmp);
 
       rk4<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_T.begin(), tau_rk4_h/2.0, d_lr_sol.S.begin(), d_tmpS2.begin(),d_multmp.begin());
 
-      matmul_transb(d_T,d_C1,d_tmpS);
-      matmul(d_D2,d_tmpS,d_tmpS3);
+      blas.matmul_transb(d_T,d_C1,d_tmpS);
+      blas.matmul(d_D2,d_tmpS,d_tmpS3);
 
-      matmul_transb(d_T,d_C2,d_tmpS);
-      matmul(d_D1,d_tmpS,d_multmp);
+      blas.matmul_transb(d_T,d_C2,d_tmpS);
+      blas.matmul(d_D1,d_tmpS,d_multmp);
 
       rk4<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_T.begin(), tau_rk4_h, d_lr_sol.S.begin(), d_tmpS3.begin(),d_multmp.begin());
 
-      matmul_transb(d_T,d_C1,d_tmpS);
-      matmul(d_D2,d_tmpS,d_tmpS4);
+      blas.matmul_transb(d_T,d_C1,d_tmpS);
+      blas.matmul(d_D2,d_tmpS,d_tmpS4);
 
-      matmul_transb(d_T,d_C2,d_tmpS);
-      matmul(d_D1,d_tmpS,d_multmp);
+      blas.matmul_transb(d_T,d_C2,d_tmpS);
+      blas.matmul(d_D1,d_tmpS,d_multmp);
 
       rk4_finalcomb<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_lr_sol.S.begin(), tau_rk4_h, d_tmpS1.begin(), d_tmpS2.begin(), d_tmpS3.begin(), d_tmpS4.begin(),d_multmp.begin());
     }
@@ -2334,7 +2334,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     /* Full step L */
     d_tmpV = d_lr_sol.V;
 
-    matmul_transb(d_tmpV,d_lr_sol.S,d_lr_sol.V);
+    blas.matmul_transb(d_tmpV,d_lr_sol.S,d_lr_sol.V);
 
     D1_gpu = d_D1;
     schur(D1_gpu, W_gpu, dd_r_gpu);
@@ -2346,7 +2346,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     cufftExecD2Z(plans_d_v[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
 
-    matmul(d_Lhat,d_Wc,d_Nhat);
+    blas.matmul(d_Lhat,d_Wc,d_Nhat);
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
@@ -2354,13 +2354,13 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       cufftExecD2Z(plans_d_v[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lvhat.begin());
 
-      matmul_transb(d_Lvhat,d_D2c,d_Lhat);
+      blas.matmul_transb(d_Lvhat,d_D2c,d_Lhat);
 
-      matmul(d_Lhat,d_Wc,d_Nhattmp);
+      blas.matmul(d_Lhat,d_Wc,d_Nhattmp);
 
       exp_euler_fourier<<<(d_Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Nhat.num_elements(), d_Nhat.shape()[0], d_Nhat.begin(), d_dd_r.begin(), -tau_ee, d_Nhattmp.begin(), av, bv);
 
-      matmul_transb(d_Nhat,d_Wc,d_Lhat);
+      blas.matmul_transb(d_Nhat,d_Wc,d_Lhat);
 
       ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(),d_Lhat.begin(),ncv);
 
@@ -2372,13 +2372,13 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       cufftExecD2Z(plans_d_v[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lvhat.begin());
 
-      matmul_transb(d_Lvhat,d_D2c,d_Lhat);
+      blas.matmul_transb(d_Lvhat,d_D2c,d_Lhat);
 
-      matmul(d_Lhat,d_Wc,d_Lvhat);
+      blas.matmul(d_Lhat,d_Wc,d_Lvhat);
 
       second_ord_stage_fourier<<<(d_Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Nhat.num_elements(), d_Nhat.shape()[0], d_Nhat.begin(), d_dd_r.begin(), -tau_ee, d_Nhattmp.begin(), d_Lvhat.begin(), av, bv);
 
-      matmul_transb(d_Nhat,d_Wc,d_Lhat);
+      blas.matmul_transb(d_Nhat,d_Wc,d_Lhat);
 
       ptw_mult_cplx<<<(d_Lhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Lhat.num_elements(),d_Lhat.begin(),ncv);
 
@@ -2392,7 +2392,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     /* Half step S */
 
-    coeff(d_lr_sol.V, d_lr_sol.V, d_wv, d_C1);
+    coeff(d_lr_sol.V, d_lr_sol.V, d_wv, d_C1, blas);
 
     cufftExecD2Z(plans_d_v[0],d_lr_sol.V.begin(),(cufftDoubleComplex*)d_Lhat.begin());
 
@@ -2400,39 +2400,39 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     cufftExecZ2D(plans_d_v[1],(cufftDoubleComplex*)d_Lhat.begin(),d_dV.begin());
 
-    coeff(d_lr_sol.V, d_dV, hv, d_C2);
+    coeff(d_lr_sol.V, d_dV, hv, d_C2, blas);
 
     // RK4
     for(int j = 0; j< nsteps_rk4; j++){
-      matmul_transb(d_lr_sol.S,d_C1,d_tmpS);
-      matmul(d_D2,d_tmpS,d_tmpS1);
+      blas.matmul_transb(d_lr_sol.S,d_C1,d_tmpS);
+      blas.matmul(d_D2,d_tmpS,d_tmpS1);
 
-      matmul_transb(d_lr_sol.S,d_C2,d_tmpS);
-      matmul(d_D1,d_tmpS,d_multmp);
+      blas.matmul_transb(d_lr_sol.S,d_C2,d_tmpS);
+      blas.matmul(d_D1,d_tmpS,d_multmp);
 
       rk4<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_T.begin(), tau_rk4_h/2.0, d_lr_sol.S.begin(), d_tmpS1.begin(),d_multmp.begin());
 
-      matmul_transb(d_T,d_C1,d_tmpS);
-      matmul(d_D2,d_tmpS,d_tmpS2);
+      blas.matmul_transb(d_T,d_C1,d_tmpS);
+      blas.matmul(d_D2,d_tmpS,d_tmpS2);
 
-      matmul_transb(d_T,d_C2,d_tmpS);
-      matmul(d_D1,d_tmpS,d_multmp);
+      blas.matmul_transb(d_T,d_C2,d_tmpS);
+      blas.matmul(d_D1,d_tmpS,d_multmp);
 
       rk4<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_T.begin(), tau_rk4_h/2.0, d_lr_sol.S.begin(), d_tmpS2.begin(),d_multmp.begin());
 
-      matmul_transb(d_T,d_C1,d_tmpS);
-      matmul(d_D2,d_tmpS,d_tmpS3);
+      blas.matmul_transb(d_T,d_C1,d_tmpS);
+      blas.matmul(d_D2,d_tmpS,d_tmpS3);
 
-      matmul_transb(d_T,d_C2,d_tmpS);
-      matmul(d_D1,d_tmpS,d_multmp);
+      blas.matmul_transb(d_T,d_C2,d_tmpS);
+      blas.matmul(d_D1,d_tmpS,d_multmp);
 
       rk4<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_T.begin(), tau_rk4_h, d_lr_sol.S.begin(), d_tmpS3.begin(),d_multmp.begin());
 
-      matmul_transb(d_T,d_C1,d_tmpS);
-      matmul(d_D2,d_tmpS,d_tmpS4);
+      blas.matmul_transb(d_T,d_C1,d_tmpS);
+      blas.matmul(d_D2,d_tmpS,d_tmpS4);
 
-      matmul_transb(d_T,d_C2,d_tmpS);
-      matmul(d_D1,d_tmpS,d_multmp);
+      blas.matmul_transb(d_T,d_C2,d_tmpS);
+      blas.matmul(d_D1,d_tmpS,d_multmp);
 
       rk4_finalcomb<<<(d_D1.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_D1.num_elements(), d_lr_sol.S.begin(), tau_rk4_h, d_tmpS1.begin(), d_tmpS2.begin(), d_tmpS3.begin(), d_tmpS4.begin(),d_multmp.begin());
     }
@@ -2440,7 +2440,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     /* Half step K */
 
     d_tmpX = d_lr_sol.X;
-    matmul(d_tmpX,d_lr_sol.S,d_lr_sol.X);
+    blas.matmul(d_tmpX,d_lr_sol.S,d_lr_sol.X);
 
     C1_gpu = d_C1;
     schur(C1_gpu, T_gpu, dc_r_gpu);
@@ -2452,7 +2452,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Khat.begin());
 
-    matmul(d_Khat,d_Tc,d_Mhat);
+    blas.matmul(d_Khat,d_Tc,d_Mhat);
 
     for(int kk = 0; kk < nsteps_ee; kk++){
 
@@ -2460,13 +2460,13 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Kehat.begin());
 
-      matmul_transb(d_Kehat,d_C2c,d_Khat);
+      blas.matmul_transb(d_Kehat,d_C2c,d_Khat);
 
-      matmul(d_Khat,d_Tc,d_Mhattmp);
+      blas.matmul(d_Khat,d_Tc,d_Mhattmp);
 
       exp_euler_fourier<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), d_Mhat.shape()[0], d_Mhat.begin(), d_dc_r.begin(), tau_ee_h, d_Mhattmp.begin(), ax, bx);
 
-      matmul_transb(d_Mhat,d_Tc,d_Khat);
+      blas.matmul_transb(d_Mhat,d_Tc,d_Khat);
 
       ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(),d_Khat.begin(),ncx);
 
@@ -2478,13 +2478,13 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
       cufftExecD2Z(plans_d_x[0],d_lr_sol.X.begin(),(cufftDoubleComplex*)d_Kehat.begin());
 
-      matmul_transb(d_Kehat,d_C2c,d_Khat);
+      blas.matmul_transb(d_Kehat,d_C2c,d_Khat);
 
-      matmul(d_Khat,d_Tc,d_Kehat);
+      blas.matmul(d_Khat,d_Tc,d_Kehat);
 
       second_ord_stage_fourier<<<(d_Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Mhat.num_elements(), d_Mhat.shape()[0], d_Mhat.begin(), d_dc_r.begin(), tau_ee_h, d_Mhattmp.begin(), d_Kehat.begin(), ax, bx);
 
-      matmul_transb(d_Mhat,d_Tc,d_Khat);
+      blas.matmul_transb(d_Mhat,d_Tc,d_Khat);
 
       ptw_mult_cplx<<<(d_Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(d_Khat.num_elements(),d_Khat.begin(),ncx);
 
@@ -2498,11 +2498,11 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
     gt::stop("Restarted integration GPU");
 
     // Error mass
-    integrate(d_lr_sol.X,hx,d_int_x);
+    integrate(d_lr_sol.X,hx,d_int_x,blas);
 
-    integrate(d_lr_sol.V,hv,d_int_v);
+    integrate(d_lr_sol.V,hv,d_int_v,blas);
 
-    matvec(d_lr_sol.S,d_int_v,d_tmp_vec);
+    blas.matvec(d_lr_sol.S,d_int_v,d_tmp_vec);
 
     cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_mass);
     cudaDeviceSynchronize();
@@ -2512,9 +2512,9 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
 
     err_massGPUf << err_mass_CPU << endl;
 
-    integrate(d_lr_sol.V,d_wv2,d_int_v);
+    integrate(d_lr_sol.V,d_wv2,d_int_v,blas);
 
-    matvec(d_lr_sol.S,d_int_v,d_tmp_vec);
+    blas.matvec(d_lr_sol.S,d_int_v,d_tmp_vec);
 
     cublasDdot (handle_dot, r, d_int_x.begin(), 1, d_tmp_vec.begin(), 1,d_energy);
     cudaDeviceSynchronize();
@@ -2674,7 +2674,8 @@ int main(){
   array<fftw_plan,2> plans_x = create_plans_1d(Nx, lr_sol0.X, Khat);
   array<fftw_plan,2> plans_v = create_plans_1d(Nv, lr_sol0.V, Lhat);
 
-  initialize(lr_sol0, X, V, ip_x, ip_v);
+  blas_ops blas;
+  initialize(lr_sol0, X, V, ip_x, ip_v, blas);
 
   // Computation of reference solution
   lr2<double> lr_sol_fin(r,{Nx,Nv});
@@ -2683,7 +2684,7 @@ int main(){
   //lr_sol_fin = integration_first_order(Nx,Nv,r,tstar,nsteps_ref,nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,ee_flag,lr_sol0, plans_e, plans_x, plans_v);
 
   cout << "Second order" << endl;
-  lr_sol_fin = integration_second_order(Nx,Nv,r,tstar,nsteps_ref,nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,lr_sol0, plans_e, plans_x, plans_v);
+  lr_sol_fin = integration_second_order(Nx,Nv,r,tstar,nsteps_ref,nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,lr_sol0, plans_e, plans_x, plans_v, blas);
 
   //exit(1);
 
@@ -2693,8 +2694,8 @@ int main(){
   multi_array<double,2> sol({Nx,Nv});
   multi_array<double,2> tmpsol({Nx,r});
 
-  matmul(lr_sol_fin.X,lr_sol_fin.S,tmpsol);
-  matmul_transb(tmpsol,lr_sol_fin.V,refsol);
+  blas.matmul(lr_sol_fin.X,lr_sol_fin.S,tmpsol);
+  blas.matmul_transb(tmpsol,lr_sol_fin.V,refsol);
 
   ofstream error_order1_1d;
   error_order1_1d.open("../../plots/error_order1_1d.txt");
@@ -2716,10 +2717,10 @@ int main(){
 
   for(int count = 0; count < nspan.size(); count++){
 
-    lr_sol_fin = integration_first_order(Nx,Nv,r,tstar,nspan[count],nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,ee_flag,lr_sol0, plans_e, plans_x, plans_v);
+    lr_sol_fin = integration_first_order(Nx,Nv,r,tstar,nspan[count],nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,ee_flag,lr_sol0, plans_e, plans_x, plans_v, blas);
 
-    matmul(lr_sol_fin.X,lr_sol_fin.S,tmpsol);
-    matmul_transb(tmpsol,lr_sol_fin.V,sol);
+    blas.matmul(lr_sol_fin.X,lr_sol_fin.S,tmpsol);
+    blas.matmul_transb(tmpsol,lr_sol_fin.V,sol);
 
     double error_o1 = 0.0;
     for(int iii = 0; iii < Nx; iii++){
@@ -2732,10 +2733,10 @@ int main(){
     }
     error_order1_1d << error_o1 << endl;
 
-    lr_sol_fin = integration_second_order(Nx,Nv,r,tstar,nspan[count],nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,lr_sol0, plans_e, plans_x, plans_v);
+    lr_sol_fin = integration_second_order(Nx,Nv,r,tstar,nspan[count],nsteps_ee,nsteps_rk4,ax,bx,av,bv,alpha,kappa,lr_sol0, plans_e, plans_x, plans_v, blas);
 
-    matmul(lr_sol_fin.X,lr_sol_fin.S,tmpsol);
-    matmul_transb(tmpsol,lr_sol_fin.V,sol);
+    blas.matmul(lr_sol_fin.X,lr_sol_fin.S,tmpsol);
+    blas.matmul_transb(tmpsol,lr_sol_fin.V,sol);
 
 
     double error_o2 = 0.0;

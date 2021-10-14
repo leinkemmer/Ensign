@@ -1,8 +1,8 @@
 #include <lr/coefficients.hpp>
 
 template<class T>
-void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, T w, multi_array<T,2>& out) {
-  matmul_transa(a,b,out);
+void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, T w, multi_array<T,2>& out, const blas_ops& blas) {
+  blas.matmul_transa(a,b,out);
   if(a.sl == stloc::host){
     out *=  w;
   }else{
@@ -16,12 +16,12 @@ void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, T w, multi_arra
   }
 
 }
-template void coeff(const multi_array<double,2>& a, const multi_array<double,2>& b, double w, multi_array<double,2>& out);
-template void coeff(const multi_array<float,2>& a, const multi_array<float,2>& b, float w, multi_array<float,2>& out);
+template void coeff(const multi_array<double,2>& a, const multi_array<double,2>& b, double w, multi_array<double,2>& out, const blas_ops& blas);
+template void coeff(const multi_array<float,2>& a, const multi_array<float,2>& b, float w, multi_array<float,2>& out, const blas_ops& blas);
 
 
 template<class T>
-void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, const multi_array<T,1>& w, multi_array<T,2>& out) {
+void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, const multi_array<T,1>& w, multi_array<T,2>& out, const blas_ops& blas) {
   multi_array<T,2> tmp(b.shape(),b.sl);
   if(b.sl == stloc::host){
     ptw_mult_row(b,w,tmp);
@@ -35,25 +35,25 @@ void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, const multi_arr
     #endif
   }
 
-  matmul_transa(a,tmp,out);
+  blas.matmul_transa(a,tmp,out);
 }
-template void coeff(const multi_array<double,2>& a, const multi_array<double,2>& b, const multi_array<double,1>& w, multi_array<double,2>& out);
-template void coeff(const multi_array<float,2>& a, const multi_array<float,2>& b, const multi_array<float,1>&, multi_array<float,2>& out);
+template void coeff(const multi_array<double,2>& a, const multi_array<double,2>& b, const multi_array<double,1>& w, multi_array<double,2>& out, const blas_ops& blas);
+template void coeff(const multi_array<float,2>& a, const multi_array<float,2>& b, const multi_array<float,1>&, multi_array<float,2>& out, const blas_ops& blas);
 
 
 template<class T>
-void integrate(const multi_array<T,2>& a, const multi_array<T,1>& w, multi_array<T,1>& out) {
-  matvec_trans(a,w,out);
+void integrate(const multi_array<T,2>& a, const multi_array<T,1>& w, multi_array<T,1>& out, const blas_ops& blas) {
+  blas.matvec_trans(a,w,out);
 }
-template void integrate(const multi_array<double,2>& a, const multi_array<double,1>& w, multi_array<double,1>& out);
-template void integrate(const multi_array<float,2>& a, const multi_array<float,1>& w, multi_array<float,1>& out);
+template void integrate(const multi_array<double,2>& a, const multi_array<double,1>& w, multi_array<double,1>& out, const blas_ops& blas);
+template void integrate(const multi_array<float,2>& a, const multi_array<float,1>& w, multi_array<float,1>& out, const blas_ops& blas);
 
 
 template<class T>
-void integrate(const multi_array<T,2>& a, T w, multi_array<T,1>& out) {
+void integrate(const multi_array<T,2>& a, T w, multi_array<T,1>& out, const blas_ops& blas) {
   multi_array<T,1> vec({a.shape()[0]}, a.sl);
   set_const(vec,w);
-  matvec_trans(a,vec,out);
+  blas.matvec_trans(a,vec,out);
 }
-template void integrate(const multi_array<double,2>& a, double w, multi_array<double,1>& out);
-template void integrate(const multi_array<float,2>& a, float w, multi_array<float,1>& out);
+template void integrate(const multi_array<double,2>& a, double w, multi_array<double,1>& out, const blas_ops& blas);
+template void integrate(const multi_array<float,2>& a, float w, multi_array<float,1>& out, const blas_ops& blas);

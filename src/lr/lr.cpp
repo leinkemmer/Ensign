@@ -210,7 +210,7 @@ void gram_schmidt(multi_array<float,2>& Q, multi_array<float,2>& R, std::functio
 
 
 template<class T>
-void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, std::function<T(T*,T*)> inner_product_X, std::function<T(T*,T*)> inner_product_V) {
+void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, std::function<T(T*,T*)> inner_product_X, std::function<T(T*,T*)> inner_product_V, const blas_ops& blas) {
 
   int n_b = X.size();
   Index r = lr.rank();
@@ -267,8 +267,8 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, std::functio
     }
   }
 
-  matmul_transb(X_R, V_R, lr.S);
+  blas.matmul_transb(X_R, V_R, lr.S);
 
 };
-template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V);
-//template void initialize(lr2<float>& lr, vector<const float*> X, vector<const float*> V, std::function<float(float*,float*)> inner_product_X, std::function<float(float*,float*)> inner_product_V);
+template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const blas_ops& blas);
+//template void initialize(lr2<float>& lr, vector<const float*> X, vector<const float*> V, std::function<float(float*,float*)> inner_product_X, std::function<float(float*,float*)> inner_product_V, const blas_ops& blas);

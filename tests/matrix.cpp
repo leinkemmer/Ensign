@@ -2,17 +2,10 @@
 #include <catch2/catch.hpp>
 #include <generic/matrix.hpp>
 
-#ifdef __CUDACC__
-  cublasHandle_t  handle;
-#endif
-
 
 TEST_CASE( "matrix basic operations", "[matrix]" ) {
 
-  #ifdef __CUDACC__
-    cublasCreate(&handle);
-  #endif
-
+  blas_ops blas;
 
   SECTION("initializations (CPU)"){
     multi_array<double, 2> a({2,3});
@@ -172,9 +165,9 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
       }
     }
 
-    matmul(A,B,AB);
+    blas.matmul(A,B,AB);
     REQUIRE(bool(RAB == AB));
-    matmul(Af,Bf,ABf);
+    blas.matmul(Af,Bf,ABf);
     REQUIRE(bool(RABf == ABf));
 
   }
@@ -216,13 +209,13 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
     B = _B;
     Bf = _Bf;
 
-    matmul(_A,_B,_RAB);
-    matmul(A,B,AB);
+    blas.matmul(_A,_B,_RAB);
+    blas.matmul(A,B,AB);
     _AB = AB;
     REQUIRE(bool(_RAB == _AB));
 
-    matmul(_Af,_Bf,_RABf);
-    matmul(Af,Bf,ABf);
+    blas.matmul(_Af,_Bf,_RABf);
+    blas.matmul(Af,Bf,ABf);
     _ABf = ABf;
     REQUIRE(bool(_RABf == _ABf));
   }
@@ -264,9 +257,9 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
       }
     }
 
-    matmul_transa(A,B,AtB);
+    blas.matmul_transa(A,B,AtB);
     REQUIRE(bool(RAtB == AtB));
-    matmul_transa(Af,Bf,AtBf);
+    blas.matmul_transa(Af,Bf,AtBf);
     REQUIRE(bool(RAtBf == AtBf));
   }
 
@@ -306,13 +299,13 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
     B = _B;
     Bf = _Bf;
 
-    matmul_transa(A,B,AtB);
-    matmul_transa(_A,_B,_RAtB);
+    blas.matmul_transa(A,B,AtB);
+    blas.matmul_transa(_A,_B,_RAtB);
     _AtB = AtB;
     REQUIRE(bool(_AtB == _RAtB));
 
-    matmul_transa(Af,Bf,AtBf);
-    matmul_transa(_Af,_Bf,_RAtBf);
+    blas.matmul_transa(Af,Bf,AtBf);
+    blas.matmul_transa(_Af,_Bf,_RAtBf);
     _AtBf = AtBf;
     REQUIRE(bool(_AtBf == _RAtBf));
   }
@@ -352,9 +345,9 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
       }
     }
 
-    matmul_transb(A,B,ABt);
+    blas.matmul_transb(A,B,ABt);
     REQUIRE(bool(RABt == ABt));
-    matmul_transb(Af,Bf,ABtf);
+    blas.matmul_transb(Af,Bf,ABtf);
     REQUIRE(bool(RABtf == ABtf));
   }
 
@@ -394,13 +387,13 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
     B = _B;
     Bf = _Bf;
 
-    matmul_transb(_A,_B,_RABt);
-    matmul_transb(A,B,ABt);
+    blas.matmul_transb(_A,_B,_RABt);
+    blas.matmul_transb(A,B,ABt);
     _ABt = ABt;
     REQUIRE(bool(_RABt == _ABt));
 
-    matmul_transb(_Af,_Bf,_RABtf);
-    matmul_transb(Af,Bf,ABtf);
+    blas.matmul_transb(_Af,_Bf,_RABtf);
+    blas.matmul_transb(Af,Bf,ABtf);
     _ABtf = ABtf;
     REQUIRE(bool(_RABtf == _ABtf));
   }
@@ -440,9 +433,9 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
       }
     }
 
-    matmul_transab(A,B,AtBt);
+    blas.matmul_transab(A,B,AtBt);
     REQUIRE(bool(RAtBt == AtBt));
-    matmul_transab(Af,Bf,AtBtf);
+    blas.matmul_transab(Af,Bf,AtBtf);
     REQUIRE(bool(RAtBtf == AtBtf));
 
   }
@@ -483,13 +476,13 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
     B = _B;
     Bf = _Bf;
 
-    matmul_transab(A,B,AtBt);
-    matmul_transab(_A,_B,_RAtBt);
+    blas.matmul_transab(A,B,AtBt);
+    blas.matmul_transab(_A,_B,_RAtBt);
     _AtBt = AtBt;
     REQUIRE(bool(_RAtBt == _AtBt));
 
-    matmul_transab(Af,Bf,AtBtf);
-    matmul_transab(_Af,_Bf,_RAtBtf);
+    blas.matmul_transab(Af,Bf,AtBtf);
+    blas.matmul_transab(_Af,_Bf,_RAtBtf);
     _AtBtf = AtBtf;
     REQUIRE(bool(_RAtBtf == _AtBtf));
   }
@@ -527,7 +520,7 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
         }
       }
 
-      matmul(A,B,AB);
+      blas.matmul(A,B,AB);
 
       for(int i = 0; i<2; i++){
         for(int j = 0; j<4; j++){
@@ -572,8 +565,8 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
         }
     }
 
-    matvec(_A,_b,_Ab2);
-    matvec(A,b,Ab);
+    blas.matvec(_A,_b,_Ab2);
+    blas.matvec(A,b,Ab);
     _Ab = Ab;
     REQUIRE(bool(_RAb == _Ab));
     REQUIRE(bool(_RAb == _Ab2));
@@ -614,8 +607,8 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
     cout << _A << endl;
     cout << _b << endl;
 
-    matvec_trans(_A,_b,_Ab2);
-    matvec_trans(A,b,Ab);
+    blas.matvec_trans(_A,_b,_Ab2);
+    blas.matvec_trans(A,b,Ab);
     _Ab = Ab;
 
     REQUIRE(bool(_RAb == _Ab));
@@ -635,10 +628,6 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
     cout << v_cpu << endl;
 
   }
-  #endif
-
-  #ifdef __CUDACC__
-    cublasDestroy(handle);
   #endif
 
 }

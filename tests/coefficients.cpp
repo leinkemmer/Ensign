@@ -6,15 +6,10 @@
 
 #include <lr/coefficients.hpp>
 
-#ifdef __CUDACC__
-  cublasHandle_t  handle;
-#endif
 
 TEST_CASE( "coefficients", "[coefficients]" ) {
 
-  #ifdef __CUDACC__
-    cublasCreate(&handle);
-  #endif
+  blas_ops blas;
 
   SECTION("In CPU"){
     multi_array<double,2> a({2,3}), b({2,3}), out({3,3}), out2({3,3});
@@ -28,7 +23,7 @@ TEST_CASE( "coefficients", "[coefficients]" ) {
 
     double co = 0.3;
 
-    coeff(a, b, co, out);
+    coeff(a, b, co, out, blas);
 
     Index N = a.shape()[0];
     int r_a = a.shape()[1];
@@ -56,7 +51,7 @@ TEST_CASE( "coefficients", "[coefficients]" ) {
     aa(1,1) = 1.0;
 
     bb = aa;
-    coeff(aa, bb, 1.0, outout);
+    coeff(aa, bb, 1.0, outout, blas);
 
     multi_array<double,2> RR({2,2});
     set_identity(RR);
@@ -80,8 +75,8 @@ TEST_CASE( "coefficients", "[coefficients]" ) {
     multi_array<float,1> wwf({3});
     wwf(0)=-1.0; wwf(1)=2.0; wwf(2)=5.0;
 
-    coeff(aaa, bbb, ww, out3);
-    coeff(aaaf, bbbf, wwf, out3f);
+    coeff(aaa, bbb, ww, out3, blas);
+    coeff(aaaf, bbbf, wwf, out3f, blas);
 
     multi_array<double,2> R3({2,2});
     R3(0,0) = 34.0; R3(0,1) = 70.0;
@@ -96,9 +91,6 @@ TEST_CASE( "coefficients", "[coefficients]" ) {
     REQUIRE(bool(R3f == out3f));
   }
 
-  #ifdef __CUDACC__
-    cublasDestroy(handle);
-  #endif
 
 }
 ;
