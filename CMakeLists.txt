@@ -17,7 +17,6 @@ else()
 endif()
 
 option("OPENMP" "Enable OpenMP" ON)
-message(${OPENMP})
 if(${OPENMP})
   find_package(OpenMP)
   if(OPENMP_FOUND)
@@ -61,7 +60,7 @@ else()
     INSTALL_COMMAND DESTDIR=${PROJECT_BINARY_DIR}/extern/build/OpenBLAS make install
     LOG_BUILD 1
   )
-  set(OPENBLAS_LIBRARIES "${PROJECT_BINARY_DIR}/extern/build/OpenBLAS/usr/local/lib/libopenblas.a")
+  set(OPENBLAS_LIBRARIES "${PROJECT_BINARY_DIR}/extern/build/OpenBLAS/opt/OpenBLAS/lib/libopenblas.a")
 
   find_package(Threads REQUIRED)
 endif()

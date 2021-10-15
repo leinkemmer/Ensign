@@ -1,6 +1,5 @@
 set(LR_SOURCES ../src/lr/lr.cpp ../src/lr/coefficients.cpp ../src/generic/utility.cpp ../src/generic/matrix.cpp ../src/generic/timer.cpp ../src/generic/fft.cpp)
 set(LR_SOURCES_GPU ../src/lr/lr.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/timer.cu ../src/generic/fft.cu ../src/generic/kernels.cu)
-#message(${LR_SOURCES})
 
 if(${CUDA_ENABLED})
   message("linear_landau.cpp ${LR_SOURCES_GPU}")
