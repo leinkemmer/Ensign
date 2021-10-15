@@ -8,3 +8,24 @@ The repository makes use of git submodules. The easiest way to obtain all the re
 
     git clone --recursive https://github.com/leinkemmer/Ensign.git
 
+To build the software the following are needed
+- CMake
+- C++14 compatible C++ compiler
+- Fortran compiler (if the included OpenBLAS is used)
+- CUDA (if GPU support is desired)
+
+To build the example programs and tests execute
+
+    mkdir build
+    cd build
+    cmake -DCUDA_ENABLED=ON ..
+    make
+
+If you prefer to use Intel MKL as the BLAS and LAPACK backend set
+
+    mkdir build
+    cd build
+    export MKLROOT=/opt/intel/mkl
+    cmake -DMKL_ENABLED=ON -DCUDA_ENABLED=ON ..
+    make
+
