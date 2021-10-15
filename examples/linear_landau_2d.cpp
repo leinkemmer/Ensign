@@ -1409,11 +1409,13 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
   #ifdef __CPU__
   return lr_sol;
   #else
+  #ifdef __CUDACC__
   lr_sol.X = d_lr_sol.X;
   lr_sol.S = d_lr_sol.S;
   lr_sol.V = d_lr_sol.V;
   cudaDeviceSynchronize();
   return lr_sol;
+  #endif
   #endif
 }
 
@@ -4033,11 +4035,13 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
   #ifdef __CPU__
   return lr_sol;
   #else
+  #ifdef __CUDACC__
   lr_sol.X = d_lr_sol.X;
   lr_sol.S = d_lr_sol.S;
   lr_sol.V = d_lr_sol.V;
   cudaDeviceSynchronize();
   return lr_sol;
+  #endif
   #endif
 }
 

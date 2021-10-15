@@ -939,10 +939,12 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
   #ifdef __CPU__
   return lr_sol;
   #else
+  #ifdef __CUDACC__
   lr_sol.X = d_lr_sol.X;
   lr_sol.S = d_lr_sol.S;
   lr_sol.V = d_lr_sol.V;
   return lr_sol;
+  #endif
   #endif
 }
 
@@ -2549,10 +2551,12 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
   #ifdef __CPU__
   return lr_sol;
   #else
+  #ifdef __CUDACC__
   lr_sol.X = d_lr_sol.X;
   lr_sol.S = d_lr_sol.S;
   lr_sol.V = d_lr_sol.V;
   return lr_sol;
+  #endif
   #endif
   }
 

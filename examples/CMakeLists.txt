@@ -2,7 +2,6 @@ set(LR_SOURCES ../src/lr/lr.cpp ../src/lr/coefficients.cpp ../src/generic/utilit
 set(LR_SOURCES_GPU ../src/lr/lr.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/timer.cu ../src/generic/fft.cu ../src/generic/kernels.cu)
 
 if(${CUDA_ENABLED})
-  message("linear_landau.cpp ${LR_SOURCES_GPU}")
   cuda_add_executable(linear_landau linear_landau.cu ${LR_SOURCES_GPU})
   cuda_add_cublas_to_target(linear_landau)
   cuda_add_cufft_to_target(linear_landau)

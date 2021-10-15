@@ -51,6 +51,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
     }
   }
 
+  gram_schmidt gs(&blas);
 
   // For Electric field
 
@@ -617,8 +618,6 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   multi_array<cuDoubleComplex,2> d_tmpXhat({dxxh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_tmpVhat({dvvh_mult,r},stloc::device);
 
-  // For random values generation
-  gram_schmidt gs(&blas);
 
   // Quantities of interest
 
@@ -2091,6 +2090,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     }
   }
 
+  gram_schmidt gs(&blas);
 
   // For Electric field
 
@@ -2645,7 +2645,6 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   multi_array<cuDoubleComplex,2> d_tmpXhat({dxxh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_tmpVhat({dvvh_mult,r},stloc::device);
 
-  gram_schmidt gs(&blas);
 
   // Quantities of interest
 
