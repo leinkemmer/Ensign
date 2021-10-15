@@ -1,4 +1,4 @@
-prefix=/home/lukas/Dropbox/programming/dynlr/build/extern/fftw
+prefix=/home/lukas/Dropbox/programming/Ensign/build/extern/fftw
 exec_prefix=${prefix}
 libdir=${exec_prefix}/lib
 includedir=${prefix}/include

@@ -6,6 +6,5 @@ The **Ensign** software framework facilitates the efficient implementation of dy
 
 The repository makes use of git submodules. The easiest way to obtain all the relevant sources is to execute
 
-    git clone --recursive git@github.com:leinkemmer/Ensign.git
-
+    git clone --recursive https://github.com/leinkemmer/Ensign.git
 
