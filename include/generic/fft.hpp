@@ -3,6 +3,22 @@
 #include <generic/common.hpp>
 #include <generic/storage.hpp>
 
+template<size_t d>
+struct fft3d {
+
+    fft3d(array<Index,3> dims_, multi_array<double,d>& real, multi_array<complex<double>,d>& freq);
+
+    void forward(multi_array<double,d>& real, multi_array<complex<double>,d>& freq); 
+    void backward(multi_array<complex<double>,d>& freq, multi_array<double,d>& real);
+
+private:
+    array<fftw_plan,2> plans;
+    #ifdef __CUDACC__
+    array<cufftHandle,2> cuda_plans;
+    #endif
+};
+
+
 /* Helper routines to create FFTW plans for 1d transforms
 */
 array<fftw_plan,2> create_plans_1d(Index dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq);

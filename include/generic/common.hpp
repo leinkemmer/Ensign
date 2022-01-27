@@ -10,6 +10,7 @@
 #include <assert.h>
 #include <complex>
 #include <string>
+#include <memory>
 
 #ifdef __MKL__
   #include <mkl.h>
@@ -53,3 +54,11 @@ enum class stloc { host, device };
 #ifdef __OPENMP__
   const int n_threads_omp = 32;
 #endif
+
+
+// make_unique implementation for compiler that do not support it yet
+template<typename T, typename... Args>
+std::unique_ptr<T> make_unique_ptr(Args&&... args)
+{
+    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}

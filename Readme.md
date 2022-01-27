@@ -4,15 +4,16 @@ The **Ensign** software framework facilitates the efficient implementation of dy
 
 [F. Cassini, L. Einkemmer. Efficient 6D Vlasov simulation using the dynamical low-rank framework Ensign.](https://arxiv.org/abs/2110.13481)
 
-The repository makes use of git submodules. The easiest way to obtain all the relevant sources is to execute
+First clone the repository
 
-    git clone --recursive https://github.com/leinkemmer/Ensign.git
+    git clone https://github.com/leinkemmer/Ensign.git
 
 To build the software the following are needed
 - CMake
-- C++14 compatible C++ compiler
+- C++11 compatible C++ compiler
 - Fortran compiler (if the included OpenBLAS is used)
 - CUDA (if GPU support is desired)
+- NetCDF (optinal, required for writing snapshots to disk)
 
 To build the example programs and tests execute
 

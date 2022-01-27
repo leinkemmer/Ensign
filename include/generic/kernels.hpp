@@ -8,8 +8,12 @@ __global__ void fill_gpu(int n, T* v, T alpha);
 template<class T>
 __global__ void ptw_mult_scal(int n, T* A, T alpha);
 
+__global__ void ptw_mult_scal_cplx(int n, cuDoubleComplex* A, cuDoubleComplex alpha);
+
 template<class T>
 __global__ void ptw_mult_row_k(int nm, int n, T* A, T* v, T* B);
+
+__global__ void ptw_mult_row_k(int nm, int n, cuDoubleComplex* A, cuDoubleComplex* v, cuDoubleComplex* B);
 
 template<class T>
 __global__ void ptw_sum_scal(int n, T* A, T alpha);

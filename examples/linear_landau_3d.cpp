@@ -403,17 +403,17 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   ofstream err_massf;
   ofstream err_energyf;
   if(CPU) {
-    string str = "../../plots/el_energy_order1_";
+    string str = "el_energy_order1_";
     str += to_string(nsteps);
     str += "_3d.txt";
     el_energyf.open(str);
 
-    str = "../../plots/err_mass_order1_";
+    str = "err_mass_order1_";
     str += to_string(nsteps);
     str += "_3d.txt";
     err_massf.open(str);
 
-    str = "../../plots/err_energy_order1_";
+    str = "err_energy_order1_";
     str += to_string(nsteps);
     str += "_3d.txt";
     err_energyf.open(str);
@@ -660,17 +660,17 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
   ofstream err_massGPUf;
   ofstream err_energyGPUf;
 
-  string strg = "../../plots/el_energy_gpu_order1_";
+  string strg = "el_energy_gpu_order1_";
   strg += to_string(nsteps);
   strg += "_3d.txt";
   el_energyGPUf.open(strg);
 
-  strg = "../../plots/err_mass_gpu_order1_";
+  strg = "err_mass_gpu_order1_";
   strg += to_string(nsteps);
   strg += "_3d.txt";
   err_massGPUf.open(strg);
 
-  strg = "../../plots/err_energy_gpu_order1_";
+  strg = "err_energy_gpu_order1_";
   strg += to_string(nsteps);
   strg += "_3d.txt";
   err_energyGPUf.open(strg);
@@ -2437,17 +2437,17 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   ofstream err_massf;
   ofstream err_energyf;
   if(CPU) {
-    string str = "../../plots/el_energy_order2_";
+    string str = "el_energy_order2_";
     str += to_string(nsteps);
     str += "_3d.txt";
     el_energyf.open(str);
 
-    str = "../../plots/err_mass_order2_";
+    str = "err_mass_order2_";
     str += to_string(nsteps);
     str += "_3d.txt";
     err_massf.open(str);
 
-    str = "../../plots/err_energy_order2_";
+    str = "err_energy_order2_";
     str += to_string(nsteps);
     str += "_3d.txt";
     err_energyf.open(str);
@@ -2687,7 +2687,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   //string strg = "../../plots/el_energy_gpu_order2_";
   //strg += to_string(nsteps);
   //strg += "_3d.txt";
-  string strg = "../../plots/el_energy_rk";
+  string strg = "el_energy_rk";
   strg += to_string(r);
   strg += ".txt";
   el_energyGPUf.open(strg);
@@ -2695,7 +2695,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   //strg = "../../plots/err_mass_gpu_order2_";
   //strg += to_string(nsteps);
   //strg += "_3d.txt";
-  strg = "../../plots/err_mass_rk";
+  strg = "err_mass_rk";
   strg += to_string(r);
   strg += ".txt";
   err_massGPUf.open(strg);
@@ -2703,7 +2703,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
   //strg = "../../plots/err_energy_gpu_order2_";
   //strg += to_string(nsteps);
   //strg += "_3d.txt";
-  strg = "../../plots/err_energy_rk";
+  strg = "err_energy_rk";
   strg += to_string(r);
   strg += ".txt";
   err_energyGPUf.open(strg);
@@ -5941,11 +5941,11 @@ int main(int argc, char** argv){
   blas.matmul_transb(tmpsol,lr_sol_fin.V,refsol);
 
   ofstream error_order1_3d;
-  error_order1_3d.open("../../plots/error_order1_3d.txt");
+  error_order1_3d.open("error_order1_3d.txt");
   error_order1_3d.precision(16);
 
   ofstream error_order2_3d;
-  error_order2_3d.open("../../plots/error_order2_3d.txt");
+  error_order2_3d.open("error_order2_3d.txt");
   error_order2_3d.precision(16);
 
   error_order1_3d << nspan.size() << endl;

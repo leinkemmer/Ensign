@@ -1,9 +1,0 @@
-[submodule "extern/Catch2"]
-	path = extern/Catch2
-	url = https://github.com/catchorg/Catch2.git
-[submodule "extern/OpenBLAS"]
-	path = extern/OpenBLAS
-	url = https://github.com/xianyi/OpenBLAS.git
-[submodule "extern/cxxopts"]
-	path = extern/cxxopts
-	url = https://github.com/jarro2783/cxxopts.git

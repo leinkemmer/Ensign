@@ -38,9 +38,10 @@ struct multi_array {
 
   // copy and swap assignment operator
   multi_array& operator=(const multi_array& ma) {
-    if(v == nullptr)
-    resize(ma.e);
-    else if(e != ma.e) {
+    if(v == nullptr) {
+      sl = ma.sl;
+      resize(ma.e);
+    } else if(e != ma.e) {
       cout << "ERROR: array dimensions do not match in assignment" << endl;
       exit(1);
     }
@@ -111,7 +112,7 @@ struct multi_array {
     return k;
   }
 
-  void to_cplx(multi_array<complex<T>,d>& out) {
+  void to_cplx(multi_array<complex<T>,d>& out) const {
     std::transform(begin(), end(), out.begin(), [](const T& c){return complex<T>(c,T(0.0));} );
   }
 
@@ -180,20 +181,23 @@ struct multi_array {
   }
 
   multi_array& operator+=(const multi_array& lhs) {
-    /*
-    if((sl == stloc::host) && (lhs.sl == stloc::host)){
+    if(sl == stloc::host && lhs.sl == stloc::host) {
       std::transform(begin(), end(), lhs.begin(), begin(), [](T& a, T& b){return a+b;} );
-    }else if ((sl == stloc::device) && (lhs.sl == stloc::device)){
+    } else if(sl == stloc::device && lhs.sl == stloc::device) {
       #ifdef __CUDACC__
-        ptw_sum<<<(num_elements()+n_threads-1)/n_threads,n_threads>>>(num_elements(),begin(),lhs.begin());
+      if(std::is_same<T, complex<double>>::value)
+        ptw_sum_complex<<<(num_elements()+n_threads-1)/n_threads,n_threads>>>(num_elements(), (cuDoubleComplex*)v, (cuDoubleComplex*)lhs.begin());
+      else if(std::is_same<T, double>::value)
+        ptw_sum<<<(num_elements()+n_threads-1)/n_threads,n_threads>>>(num_elements(), v, lhs.begin());
+      else {
+        cout << "ERROR: single precision in operator+= currently not implemented" << endl;
+        exit(1);
+      }
       #endif
-    }else{
-      cout << "ERROR: either both on CPU or on GPU" << __FILE__ << ":"
-      << __LINE__ << endl;
+    } else {
+      cout << "ERROR: for operator+= both operands need to be either on the device or on the host." << endl;
       exit(1);
     }
-    */
-    std::transform(begin(), end(), lhs.begin(), begin(), [](T& a, T& b){return a+b;} );
     return *this;
   }
 
@@ -209,55 +213,72 @@ struct multi_array {
   }
 
   multi_array& operator-=(const multi_array& lhs) {
-    /*
-    if((sl == stloc::host) && (lhs.sl == stloc::host)){
+    if(sl == stloc::host){
       std::transform(begin(), end(), lhs.begin(), begin(), [](T& a, T& b){return a-b;} );
-    }else if ((sl == stloc::device) && (lhs.sl == stloc::device)){
+    } else {
       #ifdef __CUDACC__
-        ptw_diff<<<(num_elements()+n_threads-1)/n_threads,n_threads>>>(num_elements(),begin(),lhs.begin());
+      if(std::is_same<T, double>::value)
+        ptw_diff<<<(num_elements()+n_threads-1)/n_threads,n_threads>>>(num_elements(),v,lhs.begin());
+      else {
+        cout << "ERROR: attempted operation not implemented on device (operator+=)" << endl;
+        exit(1);
+      }
       #endif
-    }else{
-      cout << "ERROR: either both on CPU or on GPU" << __FILE__ << ":"
-      << __LINE__ << endl;
-      exit(1);
     }
-    */
-    std::transform(begin(), end(), lhs.begin(), begin(), [](T& a, T& b){return a-b;} );
     return *this;
   }
 
-  multi_array& operator*=(const T scalar) {
+  multi_array& operator*=(T scalar) {
     if(sl == stloc::host){
       std::transform(begin(), end(), begin(), [&scalar](T& a){return scalar*a;} );
     }else{
       #ifdef __CUDACC__
-        //ptw_mult_scal<<<2,2>>>(num_elements(),begin(),scalar); TO BE FIXED FOR COMPLEX NUMBERS
+      run_ptw_mult_scal(num_elements(), v, scalar);
       #endif
     }
     return *this;
   }
 
   multi_array& operator/=(const T scalar) {
-    std::transform(begin(), end(), begin(), [&scalar](T& a){return a/scalar;} );
+    if(sl == stloc::host){
+      std::transform(begin(), end(), begin(), [&scalar](T& a){return a/scalar;} );
+    } else {
+      cout << "ERROR: operator/= is not implemented on the device." << endl;
+      exit(1);
+    }
     return *this;
   }
 
   multi_array operator+(const multi_array& lhs) {
-    multi_array<T,d> out(e);
-    std::transform(begin(), end(), lhs.begin(), out.begin(), [](T& a, T& b){return a+b;} );
-    return out;
+    if(sl == stloc::host){
+      multi_array<T,d> out(e);
+      std::transform(begin(), end(), lhs.begin(), out.begin(), [](T& a, T& b){return a+b;} );
+      return out;
+    } else {
+      cout << "ERROR: operator+ is not implemented on the device." << endl;
+      exit(1);
+    }
   }
 
   multi_array operator-(const multi_array& lhs) {
-    multi_array<T,d> out(e);
-    std::transform(begin(), end(), lhs.begin(), out.begin(), [](T& a, T& b){return a-b;} );
-    return out;
+    if(sl == stloc::host){
+      multi_array<T,d> out(e);
+      std::transform(begin(), end(), lhs.begin(), out.begin(), [](T& a, T& b){return a-b;} );
+    } else {
+      cout << "ERROR: operator- is not implemented on the device." << endl;
+      exit(1);
+    }
   }
 
   multi_array operator*(const T scalar) {
-    multi_array<T,d> out(e);
-    std::transform(begin(), end(), out.begin(), [&scalar](const T& c){return c*scalar;} );
-    return out;
+    if(sl == stloc::host){
+      multi_array<T,d> out(e);
+      std::transform(begin(), end(), out.begin(), [&scalar](const T& c){return c*scalar;} );
+      return out;
+    } else {
+      cout << "ERROR: operator* is not implemented on the device." << endl;
+      exit(1);
+    }
   }
 
   friend std::ostream &operator<<(std::ostream &os, const multi_array &A) {
@@ -292,4 +313,44 @@ struct multi_array {
       return true;
     }
   }
+
+
+private:
+  #ifdef __CUDACC__
+  void run_ptw_mult_scal(Index n, double* v, double scalar) {
+    ptw_mult_scal<<<(n+n_threads-1)/n_threads,n_threads>>>(n, v, scalar);
+  }
+
+  void run_ptw_mult_scal(Index n, float* v, float scalar) {
+    ptw_mult_scal<<<(n+n_threads-1)/n_threads,n_threads>>>(n, v, scalar);
+  }
+
+  void run_ptw_mult_scal(Index n, complex<double>* v, complex<double> scalar) {
+    ptw_mult_scal_cplx<<<(n+n_threads-1)/n_threads,n_threads>>>(n, (cuDoubleComplex*)v, make_cuDoubleComplex(scalar.real(), scalar.imag()));
+  }
+  #endif
 };
+
+template<size_t d>
+void dump(string fn, const multi_array<double,d>& ma) {
+  multi_array<double,d> h_ma(ma.e, stloc::host);
+  h_ma = ma;
+
+  ofstream fs(fn);
+  fs.precision(16);
+  for(Index idx=0;idx<ma.num_elements();idx++)
+    fs << h_ma.v[idx] << endl;
+  fs.close();
+}
+
+template<size_t d>
+void dump(string fn, const multi_array<complex<double>,d>& ma) {
+  multi_array<complex<double>,d> h_ma(ma.e, stloc::host);
+  h_ma = ma;
+
+  ofstream fs(fn);
+  fs.precision(16);
+  for(Index idx=0;idx<ma.num_elements();idx++)
+    fs << h_ma.v[idx].real() << " " << h_ma.v[idx].imag() << endl;
+  fs.close();
+}

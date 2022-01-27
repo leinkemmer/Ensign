@@ -83,7 +83,6 @@ template void set_const(multi_array<float,2>&, float);
 template<class T>
 void ptw_mult_row(const multi_array<T,2>& a, const multi_array<T,1>& w, multi_array<T,2>& out){
   if(a.sl == stloc::host){
-    Index N = a.shape()[0];
     #ifdef __OPENMP__
     #pragma omp parallel for collapse(2)
     for(int r = 0; r < a.shape()[1]; r++){
@@ -94,7 +93,7 @@ void ptw_mult_row(const multi_array<T,2>& a, const multi_array<T,1>& w, multi_ar
     }
     #else
     for(int r = 0; r < a.shape()[1]; r++){
-      T* ptr = a.extract({r});
+      const T* ptr = a.extract({r});
       for(Index i = 0; i < a.shape()[0]; i++){
         out(i,r) = ptr[i]*w(i);
       }
@@ -102,15 +101,19 @@ void ptw_mult_row(const multi_array<T,2>& a, const multi_array<T,1>& w, multi_ar
     #endif
   }else{
     #ifdef __CUDACC__
-    cout << "ERROR: use the corresponding kernel" << __FILE__ << ":"
-    << __LINE__ << endl;
+    if(std::is_same<T, double>::value) {
+      ptw_mult_row_k<<<(a.num_elements()+n_threads-1)/n_threads,n_threads>>>(a.num_elements(),a.shape()[0],a.begin(),w.begin(),out.begin());
+    } else if(std::is_same<T, complex<double>>::value) {
+      ptw_mult_row_k<<<(a.num_elements()+n_threads-1)/n_threads,n_threads>>>(a.num_elements(),a.shape()[0],(cuDoubleComplex*)a.begin(),(cuDoubleComplex*)w.begin(),(cuDoubleComplex*)out.begin());
+    } else {
+      cout << "ERROR: ptw_mult_row for not implemented for that datatype" << endl;
       exit(1);
+    }
     #else
     cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
     << __LINE__ << endl;
     exit(1);
     #endif
-
   }
 
 }
@@ -202,6 +205,7 @@ void blas_ops::matmul(const multi_array<double,2>& a, const multi_array<double,2
 
 template<>
 void blas_ops::matmul(const multi_array<complex<double>,2>& a, const multi_array<complex<double>,2>& b, multi_array<complex<double>,2>& c) const {
+  if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     complex<double> one(1.0,0.0);
     complex<double> zero(0.0,0.0);
 
@@ -210,24 +214,29 @@ void blas_ops::matmul(const multi_array<complex<double>,2>& a, const multi_array
       &one, a.begin(), a.shape()[0],
       b.begin(), a.shape()[1], &zero,
       c.begin(), a.shape()[0]);
+  }
+  else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
+    #ifdef __CUDACC__
+    cuDoubleComplex one = make_cuDoubleComplex(1.0, 0.0);
+    cuDoubleComplex zero = make_cuDoubleComplex(0.0, 0.0);
 
+    cublasZgemm(handle,CUBLAS_OP_N,CUBLAS_OP_N,
+            a.shape()[0],b.shape()[1],a.shape()[1],
+            &one,(cuDoubleComplex*)a.begin(),a.shape()[0],
+            (cuDoubleComplex*)b.begin(), a.shape()[1],&zero,
+            (cuDoubleComplex*)c.begin(), a.shape()[0]);
+    #else
+    cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
+    << __LINE__ << endl;
+    exit(1);
+    #endif
+  } else {
+    cout << "ERROR: inputs and output must be all on CPU or on GPU" << __FILE__ << ":"
+         << __LINE__ << endl;
+    exit(1);
+  }
 }
 
-#ifdef __CUDACC__
-template<>
-void blas_ops::matmul(const multi_array<cuDoubleComplex,2>& a, const multi_array<cuDoubleComplex,2>& b, multi_array<cuDoubleComplex,2>& c) const {
-
-  cuDoubleComplex one = make_cuDoubleComplex(1.0, 0.0);
-  cuDoubleComplex zero = make_cuDoubleComplex(0.0, 0.0);
-
-  cublasZgemm(handle,CUBLAS_OP_N,CUBLAS_OP_N,
-          a.shape()[0],b.shape()[1],a.shape()[1],
-          &one,a.begin(),a.shape()[0],
-          b.begin(),a.shape()[1],&zero,
-          c.begin(), a.shape()[0]);
-
-}
-#endif
 
 
 template<>
@@ -260,6 +269,23 @@ void blas_ops::matmul(const multi_array<float,2>& a, const multi_array<float,2>&
       exit(1);
   }
 }
+
+
+#ifdef __CUDACC__
+template<>
+void blas_ops::matmul(const multi_array<cuDoubleComplex,2>& a, const multi_array<cuDoubleComplex,2>& b, multi_array<cuDoubleComplex,2>& c) const {
+
+  cuDoubleComplex one = make_cuDoubleComplex(1.0, 0.0);
+  cuDoubleComplex zero = make_cuDoubleComplex(0.0, 0.0);
+
+  cublasZgemm(handle,CUBLAS_OP_N,CUBLAS_OP_N,
+          a.shape()[0],b.shape()[1],a.shape()[1],
+          &one,a.begin(),a.shape()[0],
+          b.begin(),a.shape()[1],&zero,
+          c.begin(), a.shape()[0]);
+
+}
+#endif
 
 template<>
 void blas_ops::matmul_transa(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c) const {
@@ -386,6 +412,7 @@ void blas_ops::matmul_transb(const multi_array<float,2>& a, const multi_array<fl
 
 template<>
 void blas_ops::matmul_transb(const multi_array<complex<double>,2>& a, const multi_array<complex<double>,2>& b, multi_array<complex<double>,2>& c) const {
+  if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     complex<double> one(1.0,0.0);
     complex<double> zero(0.0,0.0);
 
@@ -394,6 +421,27 @@ void blas_ops::matmul_transb(const multi_array<complex<double>,2>& a, const mult
       &one, a.begin(), a.shape()[0],
       b.begin(), b.shape()[0], &zero,
       c.begin(), a.shape()[0]);
+  } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
+      #ifdef __CUDACC__
+      cuDoubleComplex one = make_cuDoubleComplex(1.0, 0.0);
+      cuDoubleComplex zero = make_cuDoubleComplex(0.0, 0.0);
+
+      cublasZgemm(handle,CUBLAS_OP_N,CUBLAS_OP_T,
+        a.shape()[0],b.shape()[0],a.shape()[1],
+        &one, (cuDoubleComplex*)a.begin(), a.shape()[0],
+        (cuDoubleComplex*)b.begin(), b.shape()[0],&zero,
+        (cuDoubleComplex*)c.begin(), a.shape()[0]);
+      #else
+      cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
+      << __LINE__ << endl;
+      exit(1);
+      #endif
+  } else {
+    cout << "ERROR: inputs and output must be all on CPU or on GPU" << __FILE__ << ":"
+    << __LINE__ << endl;
+    exit(1);
+  }
+
 }
 
 #ifdef __CUDACC__

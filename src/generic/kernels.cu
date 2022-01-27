@@ -26,6 +26,28 @@ __global__ void ptw_mult_scal(int n, T* A, T alpha){
 template __global__ void ptw_mult_scal(int, double*, double);
 template __global__ void ptw_mult_scal(int, float*, float);
 
+__global__ void ptw_mult_scal_cplx(int n, cuDoubleComplex* A, cuDoubleComplex alphac){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    A[idx] = cuCmul(alphac,A[idx]);
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+__global__ void ptw_mult_cplx(int n, cuDoubleComplex* A, double alpha){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  cuDoubleComplex alphac = make_cuDoubleComplex(alpha, 0.0);
+
+  while(idx < n){
+    A[idx] = cuCmul(alphac,A[idx]);
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+
+
 template<class T>
 __global__ void ptw_mult_row_k(int nm, int n, T* A, T* v, T* B){
   int idx = threadIdx.x + blockDim.x * blockIdx.x;
@@ -37,6 +59,16 @@ __global__ void ptw_mult_row_k(int nm, int n, T* A, T* v, T* B){
 }
 template __global__ void ptw_mult_row_k(int, int, double*, double*, double*);
 template __global__ void ptw_mult_row_k(int, int, float*, float*, float*);
+
+
+__global__ void ptw_mult_row_k(int nm, int n, cuDoubleComplex* A, cuDoubleComplex* v, cuDoubleComplex* B){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < nm){
+    B[idx] = cuCmul(A[idx], v[idx % n]);
+    idx += blockDim.x * gridDim.x;
+  }
+}
 
 template<class T>
 __global__ void ptw_sum(int n, T* A, T* B){
@@ -99,7 +131,6 @@ __global__ void cplx_conv(int n, double* A, cuDoubleComplex* B){
 __device__ cuDoubleComplex expim(double z){
     cuDoubleComplex out;
     sincos(z, &out.y, &out.x);
-
     return out;
 }
 
@@ -153,17 +184,6 @@ __global__ void second_ord_stage_fourier(int nm, int n, cuDoubleComplex* A, doub
 
   while(idx < nm){
     A[idx] = cuCadd(A[idx],cuCmul(tt,cuCmul(phi2im(-ts*2.0*M_PI/(bx-ax)*(idx%n)*dc_r[idx / n]),cuCsub(U[idx],T[idx]))));
-    idx += blockDim.x * gridDim.x;
-  }
-}
-
-__global__ void ptw_mult_cplx(int n, cuDoubleComplex* A, double alpha){
-  int idx = threadIdx.x + blockDim.x * blockIdx.x;
-
-  cuDoubleComplex alphac = make_cuDoubleComplex(alpha, 0.0);
-
-  while(idx < n){
-    A[idx] = cuCmul(alphac,A[idx]);
     idx += blockDim.x * gridDim.x;
   }
 }
@@ -550,11 +570,10 @@ __global__ void exp_euler_fourier_3d(int N, int nx, int ny, int nz, cuDoubleComp
   while(idx < N){
     int k = (idx % (nx*ny*nz)) / (nx*ny);
 
-    if(k==nz/2){
+    if(k > nz/2)
+      k = k-nz;
+    else if(k == nz/2)
       k = 0;
-    }else if(k > nz/2){
-      k -= nz;
-    }
 
     A[idx] = cuCmul(A[idx],expim(-ts*(2.0*M_PI/(lims[5]-lims[4]))*k*dc_r[idx / (nx*ny*nz)]));
     A[idx] = cuCadd(A[idx],cuCmul(tt,cuCmul(phi1im(-ts*(2.0*M_PI/(lims[5]-lims[4]))*k*dc_r[idx / (nx*ny*nz)]),T[idx])));

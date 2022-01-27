@@ -7,7 +7,7 @@ if(${CUDA_ENABLED})
 else()
     add_executable(storage storage.cpp ../src/generic/utility.cpp)
 endif()
-target_link_libraries(storage Catch2::Catch2)
+#target_link_libraries(storage Catch2::Catch2)
 add_test(NAME storage COMMAND storage)
 
 #
@@ -20,7 +20,7 @@ if(${CUDA_ENABLED})
 else()
     add_executable(matrix matrix.cpp ../src/generic/matrix.cpp ../src/generic/utility.cpp ../src/generic/timer.cpp)
 endif()
-target_link_libraries(matrix Catch2::Catch2)
+#target_link_libraries(matrix Catch2::Catch2)
 add_test(NAME matrix COMMAND matrix)
 
 #
@@ -33,7 +33,7 @@ if(${CUDA_ENABLED})
 else()
     add_executable(coefficients coefficients.cpp ../src/lr/coefficients.cpp ../src/generic/matrix.cpp ../src/generic/utility.cpp ../src/generic/timer.cpp)
 endif()
-target_link_libraries(coefficients Catch2::Catch2)
+#target_link_libraries(coefficients Catch2::Catch2)
 add_test(NAME coefficients COMMAND coefficients)
 
 #
@@ -47,7 +47,7 @@ if(${CUDA_ENABLED})
 else()
     add_executable(lr lr.cpp ../src/lr/lr.cpp ../src/generic/utility.cpp ../src/generic/matrix.cpp ../src/generic/timer.cpp)
 endif()
-target_link_libraries(lr Catch2::Catch2)
+#target_link_libraries(lr Catch2::Catch2)
 add_test(NAME lr COMMAND lr)
 
 #

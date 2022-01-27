@@ -40,7 +40,7 @@ template std::function<float(float*,float*)> inner_product_from_const_weight(flo
 void gram_schmidt_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product) {
   array<Index,2> dims = Q.shape();
 
-  std::default_random_engine generator(time(0));
+  std::default_random_engine generator(1234);
   std::normal_distribution<double> distribution(0.0,1.0);
 
   for(Index j=0;j<dims[1];j++) {
@@ -155,7 +155,7 @@ gram_schmidt::gram_schmidt(const blas_ops* _blas) {
 
   #ifdef __CUDACC__
   curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
-  curandSetPseudoRandomGeneratorSeed(gen,time(0));
+  curandSetPseudoRandomGeneratorSeed(gen,1234);
   #endif
 }
 
@@ -217,7 +217,7 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, std::functio
   int n_b = X.size();
   Index r = lr.rank();
 
-  std::default_random_engine generator(time(0));
+  std::default_random_engine generator(1234);
   std::normal_distribution<double> distribution(0.0,1.0);
 
   for(Index k=0;k<r;k++) {
