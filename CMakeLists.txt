@@ -30,11 +30,12 @@ else()
 endif()
 
 find_package(NetCDF)
-include_directories(${NETCDF_INCLUDE_DIR})
 if(${NETCDF_FOUND})
+  include_directories(${NETCDF_INCLUDE_DIR})
   add_definitions("-D__NETCDF__")
 else()
   message("NetCDF has _not_ been found. If you want to write snapshots to disk please set the path in CMake appropriately.")
+  set(NETCDF_LIBRARIES "")
 endif()
 
 #
