@@ -75,17 +75,16 @@ if(${MKL_ENABLED})
 else()
   message("OpenBLAS is used by default. MKL support is available by setting MKL_ENABLED to ON (set MKLROOT environment variable appropriately).")
   ExternalProject_Add(OpenBLAS
+    PREFIX "${PROJECT_BINARY_DIR}/extern/build/OpenBLAS"
     GIT_REPOSITORY "https://github.com/xianyi/OpenBLAS.git"
     GIT_TAG "develop"  # appearently master is years out of date
-    PREFIX "${PROJECT_BINARY_DIR}/extern/build/OpenBLAS"
-    SOURCE_DIR "${PROJECT_BINARY_DIR}/extern/OpenBLAS" 
     CONFIGURE_COMMAND ""
     BUILD_COMMAND make
     BUILD_IN_SOURCE 1
-    INSTALL_COMMAND DESTDIR=${PROJECT_BINARY_DIR}/extern/build/OpenBLAS make install
+    INSTALL_COMMAND DESTDIR=${PROJECT_BINARY_DIR}/extern/OpenBLAS make install
     UPDATE_COMMAND ""
   )
-  set(OPENBLAS_LIBRARIES "${PROJECT_BINARY_DIR}/extern/build/OpenBLAS/opt/OpenBLAS/lib/libopenblas.a")
+  set(OPENBLAS_LIBRARIES "${PROJECT_BINARY_DIR}/extern/OpenBLAS/opt/OpenBLAS/lib/libopenblas.a")
 endif()
 find_package(Threads REQUIRED)
 
