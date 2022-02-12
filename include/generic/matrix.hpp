@@ -73,6 +73,8 @@ struct blas_ops {
 };
 
 /* Helper class to perform diagonalization of a symmetric matrix (also known as the Schur decomposition)
+   Factorizes the matrix CC as follows
+   CC = TT*diag(diag_r)*TT^T
 */
 struct diagonalization {
   diagonalization(Index m);

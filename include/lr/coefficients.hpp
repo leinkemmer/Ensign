@@ -35,3 +35,11 @@ void integrate(const multi_array<T,2>& a, T w, multi_array<T,1>& out, const blas
 */
 template<class T>
 void integrate(const multi_array<T,2>& a, const multi_array<T,1>& w, multi_array<T,1>& out, const blas_ops& blas);
+
+
+/* Computes a low-rank coefficient that approximates \int a_i(x) b_j(x) b_k(x) \,dx.
+ *
+ * This function assumes that w is a constant weight.
+*/
+template<class T>
+void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, const multi_array<T,2>& c, T w, multi_array<T,3>& out, const blas_ops& blas);
