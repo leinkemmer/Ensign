@@ -33,8 +33,10 @@ struct grid_info {
   Index dxx_mult, dzv_mult, dxxh_mult;
   double M_e, C_P;
 
+  bool debug_adv_z, debug_adv_v;
+
   grid_info(Index _r, mind<d> _N_xx, mind<d> _N_zv, mfp<2*d> _lim_xx, mfp<2*d> _lim_zv, double _M_e, double _C_P)
-    : r(_r), N_xx(_N_xx), N_zv(_N_zv), lim_xx(_lim_xx), lim_zv(_lim_zv), M_e(_M_e), C_P(_C_P) {
+    : r(_r), N_xx(_N_xx), N_zv(_N_zv), lim_xx(_lim_xx), lim_zv(_lim_zv), M_e(_M_e), C_P(_C_P), debug_adv_z(true), debug_adv_v(true) {
 
     // compute h_xx and h_zv
     for(int ii = 0; ii < 2; ii++){
@@ -145,14 +147,14 @@ void deriv_z(const mat& in, mat& out, const grid_info<2>& gi) {
     // only depends on z
     for(Index ir=0;ir<gi.r;ir++) {
       for(Index iz=0;iz<gi.N_zv[0];iz++)
-        out(iz, ir) = (out((iz+1)%gi.N_zv[0], ir) - out((iz-1+gi.N_zv[0])%gi.N_zv[0], ir))/(2.0*gi.h_zv[0]);
+        out(iz, ir) = (in((iz+1)%gi.N_zv[0], ir) - in((iz-1+gi.N_zv[0])%gi.N_zv[0], ir))/(2.0*gi.h_zv[0]);
     }
   } else {
     // depends on both z and v
     for(Index ir=0;ir<gi.r;ir++) {
       for(Index iv=0;iv<gi.N_zv[1];iv++) {
         for(Index iz=0;iz<gi.N_zv[0];iz++)
-          out(gi.lin_idx_v({iz,iv}), ir) = (out(gi.lin_idx_v({(iz+1)%gi.N_zv[0],iv}), ir) - out(gi.lin_idx_v({(iz-1+gi.N_zv[0])%gi.N_zv[0],iv}), ir))/(2.0*gi.h_zv[0]);
+          out(gi.lin_idx_v({iz,iv}), ir) = (in(gi.lin_idx_v({(iz+1)%gi.N_zv[0],iv}), ir) - in(gi.lin_idx_v({(iz-1+gi.N_zv[0])%gi.N_zv[0],iv}), ir))/(2.0*gi.h_zv[0]);
       }
     }
   }
@@ -163,7 +165,7 @@ void deriv_v(const mat& in, mat& out, const grid_info<2>& gi) {
   for(Index ir=0;ir<gi.r;ir++) {
     for(Index iv=0;iv<gi.N_zv[1];iv++) {
       for(Index iz=0;iz<gi.N_zv[0];iz++)
-        out(gi.lin_idx_v({iz,iv}), ir) = (out(gi.lin_idx_v({iz,(iv+1)%gi.N_zv[1]}), ir) - out(gi.lin_idx_v({iz, (iv-1+gi.N_zv[1])%gi.N_zv[1]}), ir))/(2.0*gi.h_zv[1]);
+        out(gi.lin_idx_v({iz,iv}), ir) = (in(gi.lin_idx_v({iz,(iv+1)%gi.N_zv[1]}), ir) - in(gi.lin_idx_v({iz, (iv-1+gi.N_zv[1])%gi.N_zv[1]}), ir))/(2.0*gi.h_zv[1]);
     }
   }
 }
@@ -179,8 +181,8 @@ struct compute_coeff {
   }
 
   ten3 compute_C2(const mat& Vf, const mat& Vphi, const blas_ops& blas) {
-    deriv_z(Vphi, Vtmp1, gi);
-    deriv_v(Vf, Vtmp2, gi);
+    deriv_v(Vf, Vtmp1, gi);
+    deriv_z(Vphi, Vtmp2, gi);
 
     ten3 C2({gi.r,gi.r,gi.r});
     coeff(Vf, Vtmp1, Vtmp2, gi.h_zv[0]*gi.h_zv[1], C2, blas);
@@ -189,7 +191,7 @@ struct compute_coeff {
   
   ten3 compute_D2(const mat& Xf, const mat& Xphi, const blas_ops& blas) {
     ten3 D2({gi.r,gi.r,gi.r});
-    coeff(Xf, Xphi, Xf, gi.h_xx[0]*gi.h_xx[1], D2, blas);
+    coeff(Xf, Xf, Xphi, gi.h_xx[0]*gi.h_xx[1], D2, blas);
     return D2;
   }
 
@@ -280,12 +282,13 @@ struct PS_K_step {
     rk4(tau, K, [this, &C1, &C2, &Kphi, &blas](const mat& K, mat& Kout) {
 
       blas.matmul_transb(K, C1, Kout);
+      Kout *= -double(gi.debug_adv_z);
 
       for(Index j=0;j<gi.r;j++) {
         for(Index l=0;l<gi.r;l++) {
           for(Index n=0;n<gi.r;n++) {
             for(Index i=0;i<gi.dxx_mult;i++) {
-              Kout(i, j) = -Kout(i,j) - 1.0/gi.M_e*C2(j,l,n)*Kphi(i, n)*K(i, l);
+              Kout(i, j) -= double(gi.debug_adv_v)/gi.M_e*C2(j,l,n)*Kphi(i, n)*K(i, l);
             }
           }
         }
@@ -305,6 +308,7 @@ struct PS_S_step {
   void operator()(double tau, mat& S, const mat& Sphi, const mat& C1, const ten3& C2, const ten3& D2) {
     rk4(tau, S, [this, &C1, &C2, &D2, &Sphi](const mat& S, mat& Sout) {
       blas.matmul_transb(S, C1, Sout);
+      Sout *= double(gi.debug_adv_z);
       
       for(Index i=0;i<gi.r;i++) {
         for(Index j=0;j<gi.r;j++) {
@@ -312,13 +316,14 @@ struct PS_S_step {
             for(Index n=0;n<gi.r;n++) {
               for(Index m=0;m<gi.r;m++) {
                 for(Index k=0;k<gi.r;k++) {
-                  Sout(i, j) += 1.0/gi.M_e*D2(i,k,m)*Sphi(m,n)*S(k,l)*C2(j,l,n);
+                  Sout(i, j) += double(gi.debug_adv_v)/gi.M_e*D2(i,k,m)*Sphi(m,n)*S(k,l)*C2(j,l,n);
                 }
               }
             }
           }
         }
       }
+      
     });
   }
 
@@ -331,63 +336,71 @@ private:
 
 struct PS_L_step {
 
-  void operator()(double tau, mat& L, const mat& Lphi, const ten3& e) {
+  void operator()(double tau, mat& L, const ten3& e) {
     // Here use use a splitting scheme between the advection in z and the advection in v
 
-    // the term -v \partial_z L using a Lax-Wendroff scheme
-    componentwise_mat_omp(gi.r, gi.N_zv, [this, tau, &L](Index idx, mind<2> i, Index r) {
-      Index idx_p1 = gi.lin_idx_v({(i[0]+1)%gi.N_zv[0],i[1]});
-      Index idx_m1 = gi.lin_idx_v({(i[0]-1+gi.N_zv[0])%gi.N_zv[0],i[1]});
-      double v = gi.v(0, i[1]);
-      Ltmp(idx, r) = L(idx,r) - 0.5*tau/gi.h_zv[0]*v*(L(idx_p1, r) - L(idx_m1, r))
-                      +0.5*pow(tau,2)/pow(gi.h_zv[0],2)*pow(v,2)*(L(idx_p1,r)-2.0*L(idx,r)+L(idx_m1,r));
-      // wrong
-      //double v_p1 = gi.v(0, (i[0]+1)%gi.N_zv[0]);
-      //double v_m1 = gi.v(0, (i[0]-1)%gi.N_zv[0]);
-      //Ltmp(idx, r) = L(idx,r) - 0.5*tau/gi.h_zv[0]*(v_p1*L(idx_p1, r) - v_m1*L(idx_m1, r))
-      //                +0.5*pow(tau,2)/pow(gi.h_zv[0],2)*(0.5*(v_p1+v)*L(idx_p1,r)-L(idx,r)  - 0.5*(v+v_m1)*(L(idx,r)-L(idx_m1,r)));
-    });
+    if(gi.debug_adv_z) {
+      // the term -v \partial_z L using a Lax-Wendroff scheme
+      componentwise_mat_omp(gi.r, gi.N_zv, [this, tau, &L](Index idx, mind<2> i, Index r) {
+        Index idx_p1 = gi.lin_idx_v({(i[0]+1)%gi.N_zv[0],i[1]});
+        Index idx_m1 = gi.lin_idx_v({(i[0]-1+gi.N_zv[0])%gi.N_zv[0],i[1]});
+        double v = gi.v(1, i[1]);
+        Ltmp(idx, r) = L(idx,r) - 0.5*tau/gi.h_zv[0]*v*(L(idx_p1, r) - L(idx_m1, r))
+                        +0.5*pow(tau,2)/pow(gi.h_zv[0],2)*pow(v,2)*(L(idx_p1,r)-2.0*L(idx,r)+L(idx_m1,r));
+      });
+    } else {
+      Ltmp = L;
+    }
 
+    if(gi.debug_adv_v) {
+      mat ez({gi.r,gi.r}), T({gi.r, gi.r});
+      vec lambda({gi.r});
+      mat M({gi.N_zv[1], gi.r}), Mout({gi.N_zv[1], gi.r});
 
-    mat ez({gi.r,gi.r}), T({gi.r, gi.r});
-    vec lambda({gi.r});
-    mat M({gi.N_zv[1], gi.r}), Mout({gi.N_zv[1], gi.r});
-    for(Index i=0;i<gi.r;i++) {
       for(Index iz=0;iz<gi.N_zv[0];iz++) {
-        for(Index k2=0;k2<gi.r;k2++)
-          for(Index k1=0;k1<gi.r;k1++)
+
+        for(Index k2=0;k2<gi.r;k2++) {
+          for(Index k1=0;k1<gi.r;k1++) {
             ez(k1, k2) = e(iz, k1, k2);
+          }
+        }
 
         schur(ez, T, lambda);
 
         // compute M from L
-        for(Index i=0;i<gi.r;i++) {
+        for(Index ir=0;ir<gi.r;ir++) {
           for(Index iv=0;iv<gi.N_zv[1];iv++) {
-            M(iv, i) = 0.0;
+            double val = 0.0;
             for(Index n=0;n<gi.r;n++)
-              M(iv, i) += T(n, i)*Ltmp(gi.lin_idx_v({iz,iv}), n);
+              val += T(n, ir)*Ltmp(gi.lin_idx_v({iz,iv}), n);
+            M(iv, ir) = val;
           }
         }
 
         // solve equation in diagonalized form
-        for(Index i=0;i<gi.r;i++) {
+        for(Index ir=0;ir<gi.r;ir++) {
           for(Index iv=0;iv<gi.N_zv[1];iv++) {
             Index iv_p1 = (iv+1)%gi.N_zv[1];
             Index iv_m1 = (iv-1+gi.N_zv[1])%gi.N_zv[1];
-            Mout(iv, i) = M(iv, i) - 0.5*tau/gi.h_zv[1]*lambda(i)/gi.M_e*(M(iv_p1, i) - M(iv_m1, i))
-                                   + 0.5*pow(tau,2)/pow(gi.h_zv[1],2)*pow(lambda(i)/gi.M_e,2)*(L(iv_p1,i)-2.0*L(iv,i)+L(iv_m1,i));
+            Mout(iv, ir) = M(iv, ir) - 0.5*tau/gi.h_zv[1]*lambda(ir)/gi.M_e*(M(iv_p1, ir) - M(iv_m1, ir))
+                                     + 0.5*pow(tau,2)/pow(gi.h_zv[1],2)*pow(lambda(ir)/gi.M_e,2)*(M(iv_p1,ir)-2.0*M(iv,ir)+M(iv_m1,ir));
           }
         }
 
         // compute L from M
-        for(Index i=0;i<gi.r;i++) {
+        for(Index ir=0;ir<gi.r;ir++) {
           for(Index iv=0;iv<gi.N_zv[1];iv++) {
-            M(iv, i) = 0.0;
+            double val = 0.0;
             for(Index n=0;n<gi.r;n++)
-              L(gi.lin_idx_v({iz,iv}), i) += T(i, n)*Mout(iv, n);
+              val += T(ir, n)*Mout(iv, n);
+            L(gi.lin_idx_v({iz,iv}), ir) = val;
           }
         }
+
       }
+
+    } else {
+      L = Ltmp;
     }
   }
 
@@ -484,7 +497,7 @@ double electric_energy(const mat& Kphi, const grid_info<2>& gi, const blas_ops& 
 }
 
 
-void integration(double final_time, double tau, const grid_info<2>& gi, vector<const double*> X0, vector<const double*> V0) {
+lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, vector<const double*> X0, vector<const double*> V0, mat* __Kphi=nullptr, mat* __Vphi=nullptr) {
 
   blas_ops blas;
 
@@ -500,15 +513,15 @@ void integration(double final_time, double tau, const grid_info<2>& gi, vector<c
   mat C1({gi.r, gi.r});
   ten3 C2({gi.r,gi.r,gi.r});
 
-  mat L({gi.dzv_mult, gi.r});
   mat Lphi({gi.N_zv[0], gi.r});
   mat Sphi({gi.r, gi.r});
 
   lr2<double> f(gi.r, {gi.dxx_mult, gi.dzv_mult});
-  mat tmpX({gi.dxx_mult, gi.r});
-  mat tmpV({gi.dzv_mult, gi.r});
+  mat K({gi.dxx_mult, gi.r});
+  mat L({gi.dzv_mult, gi.r});
 
   mat Kphi({gi.dxx_mult, gi.r});
+  mat Xphi({gi.dxx_mult, gi.r});
   mat Vphi({gi.N_zv[0], gi.r});
 
   std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(gi.h_xx[0]*gi.h_xx[1], gi.dxx_mult);
@@ -523,45 +536,51 @@ void integration(double final_time, double tau, const grid_info<2>& gi, vector<c
       tau = final_time - t;
     
     // phi 
-    tmpX = f.X;
-    blas.matmul(tmpX,f.S,f.X); // f.X becomes f.K
+    blas.matmul(f.X,f.S,K); // f.X becomes f.K
 
-    compute_phi(f.X, f.V, Kphi, Vphi);
-    cout << Kphi(0,0) << " " << Kphi(1,0) << " " << Vphi(0,0) << " " << Vphi(1,0) << endl;
+    if(__Kphi == nullptr) {
+      compute_phi(K, f.V, Kphi, Vphi);
+    } else {
+      Kphi = *__Kphi;
+      Vphi = *__Vphi;
+    }
+
     double ee = electric_energy(Kphi, gi, blas);
     fs_evolution << t << "\t" << ee << endl;
     cout << "t=" << t << endl;
 
     // K step
-    ccoeff.compute_C1(f.V, blas);
-    ccoeff.compute_C2(f.V, Vphi, blas);
+    C1 = ccoeff.compute_C1(f.V, blas);
+    C2 = ccoeff.compute_C2(f.V, Vphi, blas);
 
-    K_step(tau, f.X, Kphi, C1, C2, blas);
+    K_step(tau, K, Kphi, C1, C2, blas);
 
+    f.X = K;
     gs(f.X, f.S, ip_xx);
-    gs(Kphi, Sphi, ip_xx); // Kphi becomes Xphi
+
+    Xphi = Kphi;
+    gs(Xphi, Sphi, ip_xx);
 
     // S step
-    ccoeff.compute_D2(f.X, Kphi, blas);
-    ccoeff.compute_C1(f.V, blas);
-    ccoeff.compute_C2(f.V, Vphi, blas);
+    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
     S_step(tau, f.S, Sphi, C1, C2, D2);
 
     // L step
-    ccoeff.compute_D2(f.X, Kphi, blas);
+    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
     blas.matmul_transb(Vphi,Sphi,Lphi);
-    ccoeff.compute_e(D2, Lphi);
+    e = ccoeff.compute_e(D2, Lphi);
 
-    tmpV = f.V;
-    blas.matmul_transb(tmpV,f.S,f.V);
-    L_step(tau, f.V, Lphi, e);
+    blas.matmul_transb(f.V,f.S,L);
+    L_step(tau, L, e);
 
+    f.V = L;
     gs(f.V, f.S, ip_zv);
     transpose_inplace(f.S);
 
     t += tau;
   }
 
+  return f;
 }
 
 
@@ -570,8 +589,8 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
   blas_ops blas;
     
   Index r=3;
-  mind<2> N_xx = {16, 16};
-  mind<2> N_zv = {16, 16};
+  mind<2> N_xx = {32, 32};
+  mind<2> N_zv = {32, 43};
   mfp<4> lim_xx = {0.0,2*M_PI,0.0,2*M_PI};
   mfp<4> lim_zv = {0.0,2*M_PI,-6.0, 6.0};
   grid_info<2> gi(r, N_xx, N_zv, lim_xx, lim_zv, 1.0, 1.0); 
@@ -593,13 +612,15 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     vv2(idx) = 0.5*cos(zv[0])*sqrt(1.0/M_PI)*exp(-pow(zv[1],2));
   });
 
-    vector<const double*> X, V;
-    X.push_back(xx1.begin());
-    X.push_back(xx2.begin());
-    V.push_back(vv1.begin());
-    V.push_back(vv2.begin());
-    lr2<double> f(gi.r, {gi.dxx_mult, gi.dzv_mult});
-    initialize(f, X, V, ip_xx, ip_zv, blas);
+  vector<const double*> X, V;
+  X.push_back(xx1.begin());
+  X.push_back(xx2.begin());
+  V.push_back(vv1.begin());
+  V.push_back(vv2.begin());
+  lr2<double> f(gi.r, {gi.dxx_mult, gi.dzv_mult});
+  initialize(f, X, V, ip_xx, ip_zv, blas);
+
+  compute_coeff cc(gi);
 
 
   SECTION("INITIALIZE") {
@@ -609,6 +630,7 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     mat f_full({gi.dxx_mult, gi.dzv_mult});
     blas.matmul_transb(K, f.V, f_full);
 
+    double err = 0.0;
     for(Index jv=0;jv<gi.N_zv[1];jv++) {
       for(Index jz=0;jz<gi.N_zv[0];jz++) {
         for(Index iy=0;iy<gi.N_xx[1];iy++) {
@@ -616,12 +638,14 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
             mfp<2> xy = gi.x({ix, iy});
             mfp<2> zv = gi.v({jz, jv});
             double expected = sqrt(1.0/M_PI)*(1.0+0.5*cos(zv[0])*cos(xy[0])*cos(xy[1]))*exp(-pow(zv[1],2));
-            REQUIRE( abs(f_full(ix+gi.N_xx[0]*iy,jz+gi.N_zv[0]*jv) - expected) <= 1e-13 );
+            err = max(err, abs(f_full(ix+gi.N_xx[0]*iy,jz+gi.N_zv[0]*jv) - expected));
           }
         }
       }
     }
 
+    cout << "Error initial value: " << err << endl;
+    REQUIRE( err < 1e-13 );
   }
 
   SECTION("scalar_potential"){
@@ -638,24 +662,107 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     mat phi({gi.dxx_mult, gi.N_zv[0]});
     blas.matmul_transb(Kphi, Vphi, phi);
 
-
+    double err = 0.0;
     for(Index jz=0;jz<gi.N_zv[0];jz++) {
       for(Index iy=0;iy<gi.N_xx[1];iy++) {
         for(Index ix=0;ix<gi.N_xx[0];ix++) {
           mfp<2> xy = gi.x({ix, iy});
           double z = gi.v(0, jz);
           double expected = 0.25*cos(z)*cos(xy[0])*cos(xy[1]);
-          REQUIRE( abs(phi(ix+gi.N_xx[0]*iy,jz) - expected) <= 1e-7 );
+          err = max(err, abs(phi(ix+gi.N_xx[0]*iy,jz) - expected));
         }
       }
     }
 
+    cout << "Error scalar potential: " << err << endl;
+    REQUIRE( err < 1e-13 );
 
   }
 
+  SECTION("advection_z") {
+    gi.debug_adv_v = false; // disable in advection in v
+
+    double t_final = 1.0;
+    lr2<double> f_final = integration(t_final, 1e-2, gi, X, V); 
+
+    mat K({gi.dxx_mult,gi.r});
+    blas.matmul(f_final.X, f_final.S, K);
+    mat f_full({gi.dxx_mult, gi.dzv_mult});
+    blas.matmul_transb(K, f_final.V, f_full);
+    
+    double err = 0.0;
+    for(Index jv=0;jv<gi.N_zv[1];jv++) {
+      for(Index jz=0;jz<gi.N_zv[0];jz++) {
+        for(Index iy=0;iy<gi.N_xx[1];iy++) {
+          for(Index ix=0;ix<gi.N_xx[0];ix++) {
+            mfp<2> xy = gi.x({ix, iy});
+            mfp<2> zv = gi.v({jz, jv});
+            double expected = sqrt(1.0/M_PI)*(1.0+0.5*cos(zv[0]-t_final*zv[1])*cos(xy[0])*cos(xy[1]))*exp(-pow(zv[1],2));
+            double val = f_full(ix+gi.N_xx[0]*iy,jz+gi.N_zv[0]*jv);
+            if(std::isnan(val)) 
+              err = std::numeric_limits<double>::infinity();
+            else
+              err = max(err, abs(val - expected));
+          }
+        }
+      }
+    }
+            
+    cout << "Error advection z: " << err << endl;
+    REQUIRE( err <= 1e-3 );
+  }
+
+  SECTION("advection_v") {
+    gi.debug_adv_z = false;
+
+    mat Kphi({gi.dxx_mult, gi.r});
+    for(Index k=0;k<gi.r;k++) {
+      for(Index j=0;j<gi.N_xx[1];j++) {
+        for(Index i=0;i<gi.N_xx[0];i++) {
+          Kphi(i+gi.N_xx[0]*j, k) = (k==0) ? sqrt(M_PI)*sqrt(2.0*M_PI) : 0.0;
+        }
+      }
+    }
+
+    mat Vphi({gi.N_zv[0], gi.r});
+    for(Index k=0;k<gi.r;k++) {
+      for(Index i=0;i<gi.N_zv[0];i++) {
+        double z = gi.v(0, i);
+        Vphi(i, k) = (k==0) ? sin(z)/sqrt(M_PI)/sqrt(2.0*M_PI) : 0.0;
+      }
+    }
+    
+    double t_final = 0.2;
+    lr2<double> f_final = integration(t_final, 1e-2, gi, X, V, &Kphi, &Vphi); 
+
+    mat K({gi.dxx_mult,gi.r});
+    blas.matmul(f_final.X, f_final.S, K);
+    mat f_full({gi.dxx_mult, gi.dzv_mult});
+    blas.matmul_transb(K, f_final.V, f_full);
+    
+    double err = 0.0;
+    for(Index jv=0;jv<gi.N_zv[1];jv++) {
+      for(Index jz=0;jz<gi.N_zv[0];jz++) {
+        for(Index iy=0;iy<gi.N_xx[1];iy++) {
+          for(Index ix=0;ix<gi.N_xx[0];ix++) {
+            mfp<2> xy = gi.x({ix, iy});
+            mfp<2> zv = gi.v({jz, jv});
+            double expected = sqrt(1.0/M_PI)*(1.0+0.5*cos(zv[0])*cos(xy[0])*cos(xy[1]))*exp(-pow(zv[1]-t_final*cos(zv[0]),2));
+            double val = f_full(ix+gi.N_xx[0]*iy,jz+gi.N_zv[0]*jv);
+            if(std::isnan(val)) 
+              err = std::numeric_limits<double>::infinity();
+            else
+              err = max(err, abs(val - expected));
+          }
+        }
+      }
+    }
+            
+    cout << "Error advection v: " << err << endl;
+    REQUIRE( err <= 1e-2 );
+  }
+
 }
-
-
 
 
 /*
@@ -694,6 +801,6 @@ int main() {
   X.push_back(xx.begin());
   V.push_back(vv.begin());
 
-  integration(20.0, 3e-4, gi, X, V);
+  integration(20.0, 1e-4, gi, X, V);
 }
 */
