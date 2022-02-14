@@ -1,6 +1,3 @@
-#define CATCH_CONFIG_MAIN
-#include <catch2/catch.hpp>
-
 #include <lr/lr.hpp>
 #include <generic/matrix.hpp>
 #include <generic/storage.hpp>
@@ -460,7 +457,8 @@ struct scalar_potential {
       complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(gi.lim_xx[1]-gi.lim_xx[0])*i[0]);
       complex<double> lambday = complex<double>(0.0,2.0*M_PI/(gi.lim_xx[3]-gi.lim_xx[2])*mult_j);
           
-      Kphihat(idx, r) *= (i[0]==0 && mult_j==0) ? 0.0 : 1.0/(pow(lambdax,2) + pow(lambday,2))*ncxx;
+      // TODO: why is there a minus here? otherwise it does not work
+      Kphihat(idx, r) *= (i[0]==0 && mult_j==0) ? 0.0 : -1.0/(pow(lambdax,2) + pow(lambday,2))*ncxx;
     });
 
     fft->backward(Kphihat, Kphi);
@@ -547,7 +545,8 @@ lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, v
 
     double ee = electric_energy(Kphi, gi, blas);
     fs_evolution << t << "\t" << ee << endl;
-    cout << "t=" << t << endl;
+    cout << "\rt=" << t;
+    cout.flush();
 
     // K step
     C1 = ccoeff.compute_C1(f.V, blas);
@@ -583,17 +582,22 @@ lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, v
   return f;
 }
 
+/*
+#define CATCH_CONFIG_MAIN
+#include <catch2/catch.hpp>
 
 TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
 
   blas_ops blas;
     
+  double C_P = 3.0;
+  double M_e = 0.1;
   Index r=3;
   mind<2> N_xx = {32, 32};
-  mind<2> N_zv = {32, 43};
+  mind<2> N_zv = {64, 64};
   mfp<4> lim_xx = {0.0,2*M_PI,0.0,2*M_PI};
-  mfp<4> lim_zv = {0.0,2*M_PI,-6.0, 6.0};
-  grid_info<2> gi(r, N_xx, N_zv, lim_xx, lim_zv, 1.0, 1.0); 
+  mfp<4> lim_zv = {0.0,2*M_PI,-6.0/sqrt(M_e), 6.0/sqrt(M_e)};
+  grid_info<2> gi(r, N_xx, N_zv, lim_xx, lim_zv, M_e, C_P); 
 
   std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(gi.h_xx[0]*gi.h_xx[1], gi.dxx_mult);
   std::function<double(double*,double*)> ip_zv = inner_product_from_const_weight(gi.h_zv[0]*gi.h_zv[1], gi.dzv_mult);
@@ -608,8 +612,8 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
   vec vv1({gi.dzv_mult}), vv2({gi.dzv_mult});
   componentwise_vec_omp(gi.N_zv, [&vv1, &vv2, &gi](Index idx, array<Index,2> i) {
     mfp<2> zv  = gi.v(i);
-    vv1(idx) = sqrt(1.0/M_PI)*exp(-pow(zv[1],2));
-    vv2(idx) = 0.5*cos(zv[0])*sqrt(1.0/M_PI)*exp(-pow(zv[1],2));
+    vv1(idx) = sqrt(gi.M_e/M_PI)*exp(-gi.M_e*pow(zv[1],2));
+    vv2(idx) = 0.5*cos(zv[0])*sqrt(gi.M_e/M_PI)*exp(-gi.M_e*pow(zv[1],2));
   });
 
   vector<const double*> X, V;
@@ -637,7 +641,7 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
           for(Index ix=0;ix<gi.N_xx[0];ix++) {
             mfp<2> xy = gi.x({ix, iy});
             mfp<2> zv = gi.v({jz, jv});
-            double expected = sqrt(1.0/M_PI)*(1.0+0.5*cos(zv[0])*cos(xy[0])*cos(xy[1]))*exp(-pow(zv[1],2));
+            double expected = sqrt(gi.M_e/M_PI)*(1.0+0.5*cos(zv[0])*cos(xy[0])*cos(xy[1]))*exp(-gi.M_e*pow(zv[1],2));
             err = max(err, abs(f_full(ix+gi.N_xx[0]*iy,jz+gi.N_zv[0]*jv) - expected));
           }
         }
@@ -668,7 +672,7 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
         for(Index ix=0;ix<gi.N_xx[0];ix++) {
           mfp<2> xy = gi.x({ix, iy});
           double z = gi.v(0, jz);
-          double expected = 0.25*cos(z)*cos(xy[0])*cos(xy[1]);
+          double expected = -gi.C_P*0.25*cos(z)*cos(xy[0])*cos(xy[1]);
           err = max(err, abs(phi(ix+gi.N_xx[0]*iy,jz) - expected));
         }
       }
@@ -682,8 +686,8 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
   SECTION("advection_z") {
     gi.debug_adv_v = false; // disable in advection in v
 
-    double t_final = 1.0;
-    lr2<double> f_final = integration(t_final, 1e-2, gi, X, V); 
+    double t_final = 0.1;
+    lr2<double> f_final = integration(t_final, 1e-3, gi, X, V); 
 
     mat K({gi.dxx_mult,gi.r});
     blas.matmul(f_final.X, f_final.S, K);
@@ -697,7 +701,7 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
           for(Index ix=0;ix<gi.N_xx[0];ix++) {
             mfp<2> xy = gi.x({ix, iy});
             mfp<2> zv = gi.v({jz, jv});
-            double expected = sqrt(1.0/M_PI)*(1.0+0.5*cos(zv[0]-t_final*zv[1])*cos(xy[0])*cos(xy[1]))*exp(-pow(zv[1],2));
+            double expected = sqrt(gi.M_e/M_PI)*(1.0+0.5*cos(zv[0]-t_final*zv[1])*cos(xy[0])*cos(xy[1]))*exp(-gi.M_e*pow(zv[1],2));
             double val = f_full(ix+gi.N_xx[0]*iy,jz+gi.N_zv[0]*jv);
             if(std::isnan(val)) 
               err = std::numeric_limits<double>::infinity();
@@ -709,7 +713,7 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     }
             
     cout << "Error advection z: " << err << endl;
-    REQUIRE( err <= 1e-3 );
+    REQUIRE( err <= 3e-5 );
   }
 
   SECTION("advection_v") {
@@ -747,7 +751,7 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
           for(Index ix=0;ix<gi.N_xx[0];ix++) {
             mfp<2> xy = gi.x({ix, iy});
             mfp<2> zv = gi.v({jz, jv});
-            double expected = sqrt(1.0/M_PI)*(1.0+0.5*cos(zv[0])*cos(xy[0])*cos(xy[1]))*exp(-pow(zv[1]-t_final*cos(zv[0]),2));
+            double expected = sqrt(gi.M_e/M_PI)*(1.0+0.5*cos(zv[0])*cos(xy[0])*cos(xy[1]))*exp(-gi.M_e*pow(zv[1]-t_final/gi.M_e*cos(zv[0]),2));
             double val = f_full(ix+gi.N_xx[0]*iy,jz+gi.N_zv[0]*jv);
             if(std::isnan(val)) 
               err = std::numeric_limits<double>::infinity();
@@ -759,13 +763,12 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     }
             
     cout << "Error advection v: " << err << endl;
-    REQUIRE( err <= 1e-2 );
+    REQUIRE( err <= 5e-3 );
   }
 
 }
+*/
 
-
-/*
 int main() {
 
   double rho_i = 1e-3;
@@ -774,33 +777,34 @@ int main() {
   double C_P = 1.0/pow(rho_i,2);
   double kpar = 1.0;
   double Vmax = 6.0/sqrt(M_e);
+  double alpha = 1e-5;
 
-  Index r = 10;
-  mind<2> N_xx = {16, 16};
-  mind<2> N_zv = {16, 16};
+  Index r = 5;
+  mind<2> N_xx = {100, 100};
+  mind<2> N_zv = {100, 100};
   mfp<4> lim_xx = {0.0,2*M_PI/kperp,0.0,2*M_PI/kperp};
   mfp<4> lim_zv = {0.0,2*M_PI,-Vmax,Vmax};
   grid_info<2> gi(r, N_xx, N_zv, lim_xx, lim_zv, M_e, C_P); 
 
 
-  vec xx({gi.dxx_mult});
-  componentwise_vec_omp(gi.N_xx, [&xx, &gi, &kperp](Index idx, array<Index,2> i) {
-    double alpha = 1e-1;
+  vec xx1({gi.dxx_mult}), xx2({gi.dxx_mult});
+  componentwise_vec_omp(gi.N_xx, [&xx1, &xx2, &gi, kperp](Index idx, array<Index,2> i) {
     mfp<2> x  = gi.x(i);
-    xx(idx) = alpha*cos(kperp*x[0])*cos(kperp*x[1]);
+    xx1(idx) = 1.0;
+    xx2(idx) = cos(kperp*x[0])*cos(kperp*x[1]);
   });
 
-  vec vv({gi.dzv_mult});
-  componentwise_vec_omp(gi.N_zv, [&vv, &gi, &kpar](Index idx, array<Index,2> i) {
-    double alpha = 1e-1;
-      mfp<2> zv  = gi.v(i);
-      vv(idx) = sqrt(gi.M_e/M_PI)*(1.0+alpha*cos(kpar*zv[0]))*exp(-gi.M_e*pow(zv[1],2));
+  vec vv1({gi.dzv_mult}), vv2({gi.dzv_mult});
+  componentwise_vec_omp(gi.N_zv, [&vv1, &vv2, &gi, &alpha](Index idx, array<Index,2> i) {
+    mfp<2> zv  = gi.v(i);
+    vv1(idx) = sqrt(gi.M_e/M_PI)*exp(-gi.M_e*pow(zv[1],2));
+    vv2(idx) = alpha*cos(zv[0])*sqrt(gi.M_e/M_PI)*exp(-gi.M_e*pow(zv[1],2));
   });
-
   vector<const double*> X, V;
-  X.push_back(xx.begin());
-  V.push_back(vv.begin());
+  X.push_back(xx1.begin());
+  X.push_back(xx2.begin());
+  V.push_back(vv1.begin());
+  V.push_back(vv2.begin());
 
-  integration(20.0, 1e-4, gi, X, V);
+  integration(20.0, 5e-5, gi, X, V);
 }
-*/
