@@ -5,6 +5,10 @@
 #include <generic/timer.hpp>
 #include <generic/fft.hpp>
 
+// TODO: using lapack
+#include <eigen3/Eigen/Core>
+#include <eigen3/Eigen/SVD>
+
 template<size_t d> using mind = array<Index,d>;
 template<size_t d> using mfp  = array<double,d>;
 using mat  = multi_array<double,2>;
@@ -28,12 +32,12 @@ struct grid_info {
   mfp<2*d> lim_xx, lim_zv;
   mfp<d>   h_xx, h_zv;
   Index dxx_mult, dzv_mult, dxxh_mult;
-  double M_e, C_P;
+  double M_e, C_P, C_A;
 
-  bool debug_adv_z, debug_adv_v;
+  bool debug_adv_z, debug_adv_v, debug_adv_vA;
 
-  grid_info(Index _r, mind<d> _N_xx, mind<d> _N_zv, mfp<2*d> _lim_xx, mfp<2*d> _lim_zv, double _M_e, double _C_P)
-    : r(_r), N_xx(_N_xx), N_zv(_N_zv), lim_xx(_lim_xx), lim_zv(_lim_zv), M_e(_M_e), C_P(_C_P), debug_adv_z(true), debug_adv_v(true) {
+  grid_info(Index _r, mind<d> _N_xx, mind<d> _N_zv, mfp<2*d> _lim_xx, mfp<2*d> _lim_zv, double _M_e, double _C_P, double _C_A)
+    : r(_r), N_xx(_N_xx), N_zv(_N_zv), lim_xx(_lim_xx), lim_zv(_lim_zv), M_e(_M_e), C_P(_C_P), C_A(_C_A), debug_adv_z(true), debug_adv_v(true), debug_adv_vA(true) {
 
     // compute h_xx and h_zv
     for(int ii = 0; ii < 2; ii++){
@@ -140,11 +144,19 @@ void componentwise_mat_fourier_omp(Index r, const mind<2>& N,  func F) {
 
 
 void deriv_z(const mat& in, mat& out, const grid_info<2>& gi) {
-  if(in.shape()[0] == gi.N_zv[0]) {
+  if(in.shape()[0] == gi.N_zv[0] && out.shape()[0] == gi.N_zv[0]) {
     // only depends on z
     for(Index ir=0;ir<gi.r;ir++) {
       for(Index iz=0;iz<gi.N_zv[0];iz++)
         out(iz, ir) = (in((iz+1)%gi.N_zv[0], ir) - in((iz-1+gi.N_zv[0])%gi.N_zv[0], ir))/(2.0*gi.h_zv[0]);
+    }
+  } else if(in.shape()[0] == gi.N_zv[0] && out.shape()[0] != gi.N_zv[0]) {
+    // depends on both z and v
+    for(Index ir=0;ir<gi.r;ir++) {
+      for(Index iv=0;iv<gi.N_zv[1];iv++) {
+        for(Index iz=0;iz<gi.N_zv[0];iz++)
+          out(gi.lin_idx_v({iz,iv}), ir) = (in((iz+1)%gi.N_zv[0], ir) - in((iz-1+gi.N_zv[0])%gi.N_zv[0], ir))/(2.0*gi.h_zv[0]);
+      }
     }
   } else {
     // depends on both z and v
@@ -167,6 +179,28 @@ void deriv_v(const mat& in, mat& out, const grid_info<2>& gi) {
   }
 }
 
+
+
+void deriv_x(const mat& in, mat& out, const grid_info<2>& gi) {
+  for(Index ir=0;ir<gi.r;ir++) {
+    for(Index ix=0;ix<gi.N_xx[0];ix++) {
+      for(Index iy=0;iy<gi.N_xx[1];iy++)
+        out(gi.lin_idx_x({ix,iy}), ir) = (in(gi.lin_idx_x({(ix+1)%gi.N_xx[0],iy}), ir) - in(gi.lin_idx_x({(ix-1+gi.N_xx[0])%gi.N_xx[0], iy}), ir))/(2.0*gi.h_xx[0]);
+    }
+  }
+}
+
+void deriv_y(const mat& in, mat& out, const grid_info<2>& gi) {
+  for(Index ir=0;ir<gi.r;ir++) {
+    for(Index ix=0;ix<gi.N_xx[0];ix++) {
+      for(Index iy=0;iy<gi.N_xx[1];iy++)
+        out(gi.lin_idx_x({ix,iy}), ir) = (in(gi.lin_idx_x({ix,(iy+1)%gi.N_xx[1]}), ir) - in(gi.lin_idx_x({ix, (iy-1+gi.N_xx[1])%gi.N_xx[1]}), ir))/(2.0*gi.h_xx[1]);
+    }
+  }
+}
+
+
+
 struct compute_coeff {
   mat compute_C1(const mat& V, const blas_ops& blas) {
     ptw_mult_row(V,v,Vtmp1); // multiply by V
@@ -186,10 +220,30 @@ struct compute_coeff {
     return C2;
   }
   
+  ten3 compute_C3(const mat& Vf, const mat& VdtA, const blas_ops& blas) {
+    deriv_v(Vf, Vtmp1, gi);
+
+    // Vtmp2 has to be enlarged to the full zv space such that the coeff function
+    // can be used.
+    componentwise_mat_omp(gi.r, gi.N_zv, [this, &VdtA](Index idx, mind<2> i, Index r) {
+      Vtmp2(idx, r) = VdtA(i[0], r);
+    });
+
+    ten3 C3({gi.r,gi.r,gi.r});
+    coeff(Vf, Vtmp1, Vtmp2, gi.h_zv[0]*gi.h_zv[1], C3, blas);
+    return C3;
+  }
+  
   ten3 compute_D2(const mat& Xf, const mat& Xphi, const blas_ops& blas) {
     ten3 D2({gi.r,gi.r,gi.r});
     coeff(Xf, Xf, Xphi, gi.h_xx[0]*gi.h_xx[1], D2, blas);
     return D2;
+  }
+  
+  ten3 compute_D3(const mat& Xf, const mat& XdtA, const blas_ops& blas) {
+    ten3 D3({gi.r,gi.r,gi.r});
+    coeff(Xf, Xf, XdtA, gi.h_xx[0]*gi.h_xx[1], D3, blas);
+    return D3;
   }
 
   ten3 compute_e(const ten3& D2, const mat& Lphi) {
@@ -207,6 +261,21 @@ struct compute_coeff {
       }
     }
     return e;
+  }
+  
+  ten3 compute_eA(const ten3& D3, const mat& LdtA) {
+    ten3 eA({gi.N_zv[0], gi.r, gi.r});
+    for(Index i=0;i<gi.r;i++) {
+      for(Index k=0;k<gi.r;k++) {
+        for(Index iz=0;iz<gi.N_zv[0];iz++) {
+          double val = 0.0;
+          for(Index m=0;m<gi.r;m++)
+            val += D3(i, k, m)*LdtA(iz, m);
+          eA(iz, i, k) = val;
+        }
+      }
+    }
+    return eA;
   }
 
   compute_coeff(grid_info<2> _gi) : gi(_gi) {
@@ -274,9 +343,9 @@ void rk4(double tau, mat& U, std::function<void(const mat&, mat&)> rhs) {
 
 struct PS_K_step {
 
-  void operator()(double tau, mat& K, const mat& Kphi, const mat& C1, const ten3& C2, const blas_ops& blas) {
+  void operator()(double tau, mat& K, const mat& Kphi, const mat& KdtA, const mat& C1, const ten3& C2, const ten3& C3, const blas_ops& blas) {
 
-    rk4(tau, K, [this, &C1, &C2, &Kphi, &blas](const mat& K, mat& Kout) {
+    rk4(tau, K, [this, &C1, &C2, &C3, &Kphi, &KdtA, &blas](const mat& K, mat& Kout) {
 
       blas.matmul_transb(K, C1, Kout);
       Kout *= -double(gi.debug_adv_z);
@@ -285,7 +354,8 @@ struct PS_K_step {
         for(Index l=0;l<gi.r;l++) {
           for(Index n=0;n<gi.r;n++) {
             for(Index i=0;i<gi.dxx_mult;i++) {
-              Kout(i, j) -= double(gi.debug_adv_v)/gi.M_e*C2(j,l,n)*Kphi(i, n)*K(i, l);
+              Kout(i, j) -= double(gi.debug_adv_v)/gi.M_e*C2(j,l,n)*Kphi(i, n)*K(i, l)
+                            + double(gi.debug_adv_vA)/gi.M_e*C3(j,l,n)*KdtA(i, n)*K(i, l);
             }
           }
         }
@@ -302,8 +372,8 @@ private:
 
 struct PS_S_step {
 
-  void operator()(double tau, mat& S, const mat& Sphi, const mat& C1, const ten3& C2, const ten3& D2) {
-    rk4(tau, S, [this, &C1, &C2, &D2, &Sphi](const mat& S, mat& Sout) {
+  void operator()(double tau, mat& S, const mat& Sphi, const mat& SdtA, const mat& C1, const ten3& C2, const ten3& C3, const ten3& D2, const ten3& D3) {
+    rk4(tau, S, [this, &C1, &C2, &C3, &D2, &D3, &Sphi, &SdtA](const mat& S, mat& Sout) {
       blas.matmul_transb(S, C1, Sout);
       Sout *= double(gi.debug_adv_z);
       
@@ -313,7 +383,8 @@ struct PS_S_step {
             for(Index n=0;n<gi.r;n++) {
               for(Index m=0;m<gi.r;m++) {
                 for(Index k=0;k<gi.r;k++) {
-                  Sout(i, j) += double(gi.debug_adv_v)/gi.M_e*D2(i,k,m)*Sphi(m,n)*S(k,l)*C2(j,l,n);
+                  Sout(i, j) += double(gi.debug_adv_v)/gi.M_e*D2(i,k,m)*Sphi(m,n)*S(k,l)*C2(j,l,n)
+                               +double(gi.debug_adv_vA)/gi.M_e*D3(i,k,m)*SdtA(m,n)*S(k,l)*C3(j,l,n);
                 }
               }
             }
@@ -333,7 +404,7 @@ private:
 
 struct PS_L_step {
 
-  void operator()(double tau, mat& L, const ten3& e) {
+  void operator()(double tau, mat& L, const ten3& e, const ten3& eA) {
     // Here use use a splitting scheme between the advection in z and the advection in v
 
     if(gi.debug_adv_z) {
@@ -358,7 +429,7 @@ struct PS_L_step {
 
         for(Index k2=0;k2<gi.r;k2++) {
           for(Index k1=0;k1<gi.r;k1++) {
-            ez(k1, k2) = e(iz, k1, k2);
+            ez(k1, k2) = e(iz, k1, k2) + double(gi.debug_adv_vA)*eA(iz, k1, k2);
           }
         }
 
@@ -425,6 +496,16 @@ void integrate_v(const mat& V, mat& intV, const grid_info<2>& gi) {
   });
 }
 
+void integrate_mulv_v(const mat& V, mat& intV, const grid_info<2>& gi) {
+  for(Index k=0;k<gi.r;k++)
+    for(Index i=0;i<gi.N_zv[0];i++)
+      intV(i, k) = 0.0;
+
+  componentwise_mat_omp(gi.r, gi.N_zv, [&gi, &V, &intV](Index idx, mind<2> i, Index r) {
+    intV(i[0], r) += -gi.v(1, i[1])*V(idx, r)*gi.h_zv[1];
+  });
+}
+
 struct scalar_potential {
 
   void operator()(const mat& Kf, const mat& Vf, mat& Kphi, mat& Vphi) {
@@ -484,57 +565,102 @@ private:
   std::function<double(double*,double*)> ip_z;
 };
 
-double electric_energy(const mat& Kphi, const grid_info<2>& gi, const blas_ops& blas) {
-  // TODO: this is inefficient
-  mat out({gi.r,gi.r});
-  coeff(Kphi, Kphi, gi.h_xx[0]*gi.h_xx[1], out, blas);
+double kinetic_energy(const mat& K, const mat& V, const grid_info<2>& gi, const blas_ops&blas) {
+  vec intK({gi.r});
+  integrate(K, gi.h_xx[0]*gi.h_xx[1], intK, blas);
+
+  vec intvsqV({gi.r});
+  mat vsqV({gi.dxx_mult, gi.r});
+  componentwise_mat_omp(gi.r, gi.N_zv, [&vsqV, &V, &gi](Index idx, mind<2> i, Index r) {
+    vsqV(idx, r) = pow(gi.v(1,i[1]), 2)*V(idx, r);
+  });
+  integrate(vsqV, gi.h_zv[0]*gi.h_zv[1], intvsqV, blas);
+
   double val = 0.0;
-  for(Index k=0;k<gi.r;k++)
-    val += out(k, k);
-  return 0.5*val;
+  for(Index i=0;i<gi.r;i++)
+    val += intK(i)*intvsqV(i);
+  return 0.5*gi.M_e*val;
 }
 
+double electric_energy(const mat& Kphi, const grid_info<2>& gi, const blas_ops& blas) {
+  // TODO: this is inefficient
 
-lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, vector<const double*> X0, vector<const double*> V0, mat* __Kphi=nullptr, mat* __Vphi=nullptr) {
+  mat dx({gi.r,gi.r}), dy({gi.r,gi.r});
 
-  blas_ops blas;
+  mat dxKphi({gi.dxx_mult, gi.r});
+  deriv_x(Kphi, dxKphi, gi);
+  coeff(dxKphi, dxKphi, gi.h_xx[0]*gi.h_xx[1], dx, blas);
 
-  compute_coeff ccoeff(gi);
-  PS_L_step L_step(gi, blas);
-  PS_K_step K_step(gi, blas);
-  PS_S_step S_step(gi, blas);
-  gram_schmidt gs(&blas);
-  scalar_potential compute_phi(gi, blas);
+  mat dyKphi({gi.dxx_mult, gi.r});
+  deriv_y(Kphi, dyKphi, gi);
+  coeff(dyKphi, dyKphi, gi.h_xx[0]*gi.h_xx[1], dy, blas);
 
-  ten3 D2({gi.r,gi.r,gi.r});
-  ten3 e({gi.N_zv[0], gi.r, gi.r});
-  mat C1({gi.r, gi.r});
-  ten3 C2({gi.r,gi.r,gi.r});
+  double val = 0.0;
+  for(Index k=0;k<gi.r;k++)
+    val += dx(k, k) + dy(k, k);
+  return 0.5/gi.C_P*val;
+}
 
-  mat Lphi({gi.N_zv[0], gi.r});
-  mat Sphi({gi.r, gi.r});
+double magnetic_energy(const mat& KA, const grid_info<2>& gi, const blas_ops& blas) {
+  return gi.C_P/gi.C_A*electric_energy(KA, gi, blas);
+}
 
-  lr2<double> f(gi.r, {gi.dxx_mult, gi.dzv_mult});
-  mat K({gi.dxx_mult, gi.r});
-  mat L({gi.dzv_mult, gi.r});
+struct vector_potential {
 
-  mat Kphi({gi.dxx_mult, gi.r});
-  mat Xphi({gi.dxx_mult, gi.r});
-  mat Vphi({gi.N_zv[0], gi.r});
+  void operator()(const lr2<double>& f, mat& KA, mat& VA) {
+    // compute the basis of -<v V_j^f>_v
+    integrate_mulv_v(f.V, VA, gi);
+    gs(VA, intVf_R, ip_z);
 
-  std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(gi.h_xx[0]*gi.h_xx[1], gi.dxx_mult);
-  std::function<double(double*,double*)> ip_zv = inner_product_from_const_weight(gi.h_zv[0]*gi.h_zv[1], gi.dzv_mult);
-  initialize(f, X0, V0, ip_xx, ip_zv, blas);
+    blas.matmul_transb(f.S, intVf_R, Stmp);
 
-  ofstream fs_evolution("evolution.data");
-  double t = 0.0;
-  Index n_steps = ceil(final_time/tau);
-  for(Index ts=0;ts<n_steps;ts++) {
-    if(final_time - t < tau)
-      tau = final_time - t;
-    
+    blas.matmul(f.X, Stmp, Krhs);
+
+
+    if(fft == nullptr)
+      fft = make_unique_ptr<fft2d<2>>(gi.N_xx, Krhs, KdtAhat);
+
+    fft->forward(Krhs, KdtAhat);
+
+    double ncxx = 1.0/double(gi.N_xx[0]*gi.N_xx[1]);
+    componentwise_mat_fourier_omp(gi.r, gi.N_xx, [this, ncxx](Index idx, mind<2> i, Index r) {
+      Index mult_j = freq(i[1], gi.N_xx[1]);
+      complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(gi.lim_xx[1]-gi.lim_xx[0])*i[0]);
+      complex<double> lambday = complex<double>(0.0,2.0*M_PI/(gi.lim_xx[3]-gi.lim_xx[2])*mult_j);
+          
+      // TODO: why is there a minus here? otherwise it does not work
+      KdtAhat(idx, r) *= (i[0]==0 && mult_j==0) ? 0.0 : -gi.C_A/(pow(lambdax,2) + pow(lambday,2))*ncxx;
+    });
+
+    fft->backward(KdtAhat, KA);
+  }
+
+  vector_potential(const grid_info<2>& _gi, const blas_ops& _blas) :gi(_gi), blas(_blas), gs(&_blas) {
+    intvVf.resize({gi.N_zv[0], gi.r});
+    intVf_R.resize({gi.r, gi.r});
+    Krhs.resize({gi.dxx_mult, gi.r});
+    KdtAhat.resize({gi.dxxh_mult, gi.r});
+    Stmp.resize({gi.r,gi.r});
+    ip_z = inner_product_from_const_weight(gi.h_zv[0], gi.N_zv[0]);
+  }
+
+private:
+  grid_info<2> gi;
+  const blas_ops& blas;
+  gram_schmidt gs;
+  mat intvVf, intVf_R;
+  mat Krhs, Kphi, Stmp;
+  cmat KdtAhat;
+  std::unique_ptr<fft2d<2>> fft;
+  std::function<double(double*,double*)> ip_z;
+};
+
+
+struct timestepper {
+
+  void operator()(double tau, lr2<double>& f, lr2<double>& dtA, double* ee=nullptr) {
     // phi 
-    blas.matmul(f.X,f.S,K); // f.X becomes f.K
+    blas.matmul(f.X,f.S,K);
 
     if(__Kphi == nullptr) {
       compute_phi(K, f.V, Kphi, Vphi);
@@ -543,16 +669,17 @@ lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, v
       Vphi = *__Vphi;
     }
 
-    double ee = electric_energy(Kphi, gi, blas);
-    fs_evolution << t << "\t" << ee << endl;
-    cout << "\rt=" << t;
-    cout.flush();
+    double _ee = electric_energy(Kphi, gi, blas);
+    if(ee != nullptr)
+      *ee = _ee;
 
     // K step
     C1 = ccoeff.compute_C1(f.V, blas);
     C2 = ccoeff.compute_C2(f.V, Vphi, blas);
+    C3 = ccoeff.compute_C3(f.V, dtA.V, blas);
+    blas.matmul(dtA.X, dtA.S, KdtA);
 
-    K_step(tau, K, Kphi, C1, C2, blas);
+    K_step(tau, K, Kphi, KdtA, C1, C2, C3, blas);
 
     f.X = K;
     gs(f.X, f.S, ip_xx);
@@ -562,19 +689,266 @@ lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, v
 
     // S step
     D2 = ccoeff.compute_D2(f.X, Xphi, blas);
-    S_step(tau, f.S, Sphi, C1, C2, D2);
+    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
+    S_step(tau, f.S, Sphi, dtA.S, C1, C2, C3, D2, D3);
 
     // L step
     D2 = ccoeff.compute_D2(f.X, Xphi, blas);
     blas.matmul_transb(Vphi,Sphi,Lphi);
     e = ccoeff.compute_e(D2, Lphi);
 
+    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
+    blas.matmul_transb(dtA.V,dtA.S,LdtA);
+    eA = ccoeff.compute_eA(D3, LdtA);
+
     blas.matmul_transb(f.V,f.S,L);
-    L_step(tau, L, e);
+    L_step(tau, L, e, eA);
 
     f.V = L;
     gs(f.V, f.S, ip_zv);
     transpose_inplace(f.S);
+  }
+
+  timestepper(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ip_xx(_ip_xx), ip_zv(_ip_zv), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), __Kphi(nullptr), __Vphi(nullptr) {
+    D2.resize({gi.r,gi.r,gi.r});
+    D3.resize({gi.r,gi.r,gi.r});
+    e.resize({gi.N_zv[0], gi.r, gi.r});
+    eA.resize({gi.N_zv[0], gi.r, gi.r});
+    C1.resize({gi.r, gi.r});
+    C2.resize({gi.r,gi.r,gi.r});
+    C3.resize({gi.r,gi.r,gi.r});
+
+    Lphi.resize({gi.N_zv[0], gi.r});
+    LdtA.resize({gi.N_zv[0], gi.r});
+    Sphi.resize({gi.r, gi.r});
+
+    K.resize({gi.dxx_mult, gi.r});
+    L.resize({gi.dzv_mult, gi.r});
+
+    Kphi.resize({gi.dxx_mult, gi.r});
+    KdtA.resize({gi.dxx_mult, gi.r});
+    Xphi.resize({gi.dxx_mult, gi.r});
+    Vphi.resize({gi.N_zv[0], gi.r});
+  }
+
+  mat *__Kphi, *__Vphi;
+
+private:
+  grid_info<2> gi;
+  const blas_ops& blas;
+  compute_coeff ccoeff;
+  PS_L_step L_step;
+  PS_K_step K_step;
+  PS_S_step S_step;
+  gram_schmidt gs;
+  scalar_potential compute_phi;
+  mat C1;
+  ten3 D2, e, eA, C2, C3, D3;
+  mat Lphi, Sphi, K, L, Kphi, Xphi, Vphi, LdtA, KdtA;
+  std::function<double(double*,double*)> ip_xx, ip_zv;
+
+};
+
+struct rectangular_QR {
+    int n, r;
+    Eigen::HouseholderQR<Eigen::MatrixXd> qr;
+
+    rectangular_QR(int _n, int _r) : n(_n), r(_r), qr(_n,_r) {}
+
+    rectangular_QR(Eigen::MatrixXd& A) : qr(A) {
+        n = A.rows();
+        r = A.cols();
+    }
+
+    void compute(const Eigen::MatrixXd& A) {
+        qr.compute(A);
+    }
+
+    Eigen::MatrixXd Q() {
+        // Internally Eigen stores the QR decomposition as a sequence of
+        // Householder transformations. We multiply with the 'identity' to only
+        // get the 'thin QR factorization'.
+        // If qr.householderQ() is directly assigned to a MatrixXd object, the full matrix
+        // is formed and performance suffers because of it.
+        return qr.householderQ()*Eigen::MatrixXd::Identity(n, r);
+    }
+
+    Eigen::MatrixXd R() {
+        Eigen::MatrixXd mr = qr.matrixQR().triangularView<Eigen::Upper>();
+        return mr.block(0,0,r,r);
+    }
+
+};
+
+
+void add_lr(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, lr2<double>& C, const blas_ops& blas) {
+  using namespace Eigen;
+
+  Index r = A.S.shape()[0];
+  Index nx = A.X.shape()[0];
+  Index nv = A.V.shape()[0];
+
+  MatrixXd S_large({2*r, 2*r});
+  S_large.setZero();
+  for(Index j=0;j<r;j++) {
+    for(Index i=0;i<r;i++) {
+      S_large(i, j) = alpha*A.S(i, j);
+      S_large(r+i,r+j) = beta*B.S(i, j);
+    }
+  }
+
+  // X_large
+  MatrixXd X_large(nx, 2*r);
+  for(Index k=0;k<r;k++) {
+    for(Index i=0;i<nx;i++) {
+      X_large(i, k) = A.X(i, k);
+      X_large(i, k+r) = B.X(i, k);
+    }
+  }
+
+  // V_large 
+  MatrixXd V_large(nv, 2*r);
+  for(Index k=0;k<r;k++) {
+    for(Index i=0;i<nv;i++) {
+      V_large(i, k) = A.V(i, k);
+      V_large(i, k+r) = B.V(i, k);
+    }
+  }
+
+  rectangular_QR qrX(nx, 2*r);
+  qrX.compute(X_large);
+  S_large = qrX.R()*S_large;
+  X_large = qrX.Q();
+
+  rectangular_QR qrV(nv, 2*r);
+  qrV.compute(V_large);
+  S_large = S_large*qrV.R().transpose();
+  V_large = qrV.Q();
+
+/* // to check the result
+  MatrixXd full = X_large*S_large*V_large.transpose();
+  
+  mat KA({nx, r}), A_full({nx, nv});
+  blas.matmul(A.X, A.S, KA);
+  blas.matmul_transb(KA, A.V, A_full);
+  
+  mat KB({nx, r}), B_full({nx, nv});
+  blas.matmul(B.X, B.S, KB);
+  blas.matmul_transb(KB, B.V, B_full);
+
+  double err = 0.0;
+  double m = 0.0;
+  for(Index j=0;j<nv;j++)
+    for(Index i=0;i<nx;i++) {
+      err = max(err, abs(full(i,j) - alpha*A_full(i,j) - beta*B_full(i,j)) );
+      m = max(m, abs(alpha*A_full(i,j) + beta*B_full(i,j)) );
+    }
+  cout << "add_lr: " << err << " " << m << endl;
+*/
+
+  JacobiSVD<MatrixXd> svd(S_large, ComputeThinU | ComputeThinV); 
+  MatrixXd S = svd.singularValues().asDiagonal();
+
+  // set S
+  for(Index j=0;j<r;j++)
+    for(Index i=0;i<r;i++)
+      C.S(i, j) = S(i,j);
+
+  X_large = X_large*svd.matrixU();
+  V_large = V_large*svd.matrixV();
+  //cout << X_large.rows() << " " << X_large.cols() << endl;
+
+  for(Index k=0;k<r;k++)
+    for(Index i=0;i<nx;i++)
+      C.X(i, k) = X_large(i, k);
+  
+  for(Index k=0;k<r;k++)
+    for(Index i=0;i<nv;i++)
+      C.V(i, k) = V_large(i, k);
+
+}
+
+lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, vector<const double*> X0, vector<const double*> V0, mat* __Kphi=nullptr, mat* __Vphi=nullptr) {
+
+  blas_ops blas;
+  gram_schmidt gs(&blas);
+
+  lr2<double> f(gi.r, {gi.dxx_mult, gi.dzv_mult});
+  lr2<double> ftmp(gi.r, {gi.dxx_mult, gi.dzv_mult});
+  std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(gi.h_xx[0]*gi.h_xx[1], gi.dxx_mult);
+  std::function<double(double*,double*)> ip_zv = inner_product_from_const_weight(gi.h_zv[0]*gi.h_zv[1], gi.dzv_mult);
+  initialize(f, X0, V0, ip_xx, ip_zv, blas);
+
+  timestepper timestep(gi, blas, ip_xx, ip_zv);
+
+  vector_potential compute_A(gi, blas);
+  lr2<double> dtA2(gi.r, {gi.dxx_mult, gi.N_zv[0]});
+  lr2<double> A0(gi.r, {gi.dxx_mult, gi.N_zv[0]});
+  lr2<double> A1(gi.r, {gi.dxx_mult, gi.N_zv[0]});
+  mat AK0({gi.dxx_mult, gi.r});
+  mat K({gi.dxx_mult, gi.r});
+
+  // initialize dtA by 0
+  lr2<double> dtA(gi.r, {gi.dxx_mult, gi.N_zv[0]});
+  std::function<double(double*,double*)> ip_z = inner_product_from_const_weight(gi.h_zv[0], gi.N_zv[0]);
+  initialize(dtA, vector<const double*>(), vector<const double*>(), ip_xx, ip_z, blas);
+
+/*
+  for(Index j=0;j<gi.r;j++) {
+  for(Index i=0;i<gi.r;i++)
+  cout << dtA.S(i,j) << " ";
+  cout << endl;
+  }
+*/
+  blas.matmul(f.X,f.S,K);
+  double ke0 = kinetic_energy(K, f.V, gi, blas);
+
+  ofstream fs_evolution("evolution.data");
+  fs_evolution.precision(16);
+  double t = 0.0;
+  Index n_steps = ceil(final_time/tau);
+  for(Index ts=0;ts<n_steps;ts++) {
+    if(final_time - t < tau)
+      tau = final_time - t;
+
+    blas.matmul(f.X,f.S,K);
+    double ke = kinetic_energy(K, f.V, gi, blas);
+
+
+    // compute \partial_t A
+    ftmp = f;
+    double eps = 1e-7;
+    timestep(eps, ftmp, dtA);
+
+    compute_A(f, A0.X, A0.V);
+    AK0 = A0.X;
+    //cout << "me: " << magnetic_energy(A0.X, gi, blas) << endl;
+    gs(A0.X, A0.S, ip_xx);
+
+    compute_A(ftmp, A1.X, A1.V);
+    //cout << "me1: " << magnetic_energy(A1.X, gi, blas) << endl;
+    gs(A1.X, A1.S, ip_xx);
+
+    add_lr(1.0/eps, A1, -1.0/eps, A0, dtA2, blas);
+    A0 = dtA;
+    add_lr(0.99, A0, 0.01, dtA2, dtA, blas);
+
+    //cout << "MM: " << magnetic_energy(dtA2.X, gi, blas) << endl;
+/*
+    for(Index j=0;j<gi.r;j++) {
+      for(Index i=0;i<gi.r;i++)
+        cout << dtA.S(i,j) << " ";
+    cout << endl;
+    }
+*/
+    // do the timestep
+    double ee;
+    timestep(tau, f, dtA, &ee);
+
+    double me = magnetic_energy(AK0, gi, blas);
+    fs_evolution << t << "\t" << ee << "\t" << me << "\t" << ke << "\t" << ke0 << endl;
+    cout << "\rt=" << t;
+    cout.flush();
 
     t += tau;
   }
@@ -773,25 +1147,29 @@ int main() {
 
   double rho_i = 1e-3;
   double kperp = 0.2/rho_i;
+  double kx = sqrt(0.5)*kperp;
+  double ky = sqrt(0.5)*kperp;
   double M_e = 1.0/1830.0;
+  double beta = 0.00219;
   double C_P = 1.0/pow(rho_i,2);
+  double C_A = beta/pow(rho_i,2);
   double kpar = 1.0;
   double Vmax = 6.0/sqrt(M_e);
-  double alpha = 1e-5;
+  double alpha = 1e-3;
 
   Index r = 5;
   mind<2> N_xx = {100, 100};
   mind<2> N_zv = {100, 100};
-  mfp<4> lim_xx = {0.0,2*M_PI/kperp,0.0,2*M_PI/kperp};
+  mfp<4> lim_xx = {0.0,2*M_PI/kx,0.0,2*M_PI/ky};
   mfp<4> lim_zv = {0.0,2*M_PI,-Vmax,Vmax};
-  grid_info<2> gi(r, N_xx, N_zv, lim_xx, lim_zv, M_e, C_P); 
+  grid_info<2> gi(r, N_xx, N_zv, lim_xx, lim_zv, M_e, C_P, C_A); 
 
 
   vec xx1({gi.dxx_mult}), xx2({gi.dxx_mult});
-  componentwise_vec_omp(gi.N_xx, [&xx1, &xx2, &gi, kperp](Index idx, array<Index,2> i) {
+  componentwise_vec_omp(gi.N_xx, [&xx1, &xx2, &gi, kx, ky](Index idx, array<Index,2> i) {
     mfp<2> x  = gi.x(i);
     xx1(idx) = 1.0;
-    xx2(idx) = cos(kperp*x[0])*cos(kperp*x[1]);
+    xx2(idx) = cos(kx*x[0])*cos(ky*x[1]);
   });
 
   vec vv1({gi.dzv_mult}), vv2({gi.dzv_mult});
@@ -806,5 +1184,5 @@ int main() {
   V.push_back(vv1.begin());
   V.push_back(vv2.begin());
 
-  integration(20.0, 5e-5, gi, X, V);
+  integration(20.0, 1e-4, gi, X, V);
 }
