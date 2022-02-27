@@ -1,3 +1,10 @@
+// TODO: Fix performance issues (RK4 has to be made more efficient I think)
+// TODO: use something else than Eigen for adding two lr representations
+// TODO: fix the things that are not compatible with OpenMP (see TODO in code)
+// TODO: more tests and probably tests in a different file
+// TODO: see if we can make use of the unconventional integrator here
+// TODO: GPU support
+
 #include <lr/lr.hpp>
 #include <generic/matrix.hpp>
 #include <generic/storage.hpp>
@@ -570,7 +577,7 @@ double kinetic_energy(const mat& K, const mat& V, const grid_info<2>& gi, const 
   integrate(K, gi.h_xx[0]*gi.h_xx[1], intK, blas);
 
   vec intvsqV({gi.r});
-  mat vsqV({gi.dxx_mult, gi.r});
+  mat vsqV({gi.dzv_mult, gi.r});
   componentwise_mat_omp(gi.r, gi.N_zv, [&vsqV, &V, &gi](Index idx, mind<2> i, Index r) {
     vsqV(idx, r) = pow(gi.v(1,i[1]), 2)*V(idx, r);
   });
@@ -697,8 +704,8 @@ struct timestepper {
       *ee = _ee;
 
     if(ee_max != nullptr) {
-      deriv_z(Kphi, dzKphi, gi);
-      *ee_max = max_norm_estimate(dzKphi, Vphi, gi, blas); 
+      deriv_z(Vphi, dzVphi, gi);
+      *ee_max = max_norm_estimate(Kphi, dzVphi, gi, blas); 
     }
 
     // K step
@@ -754,7 +761,7 @@ struct timestepper {
     L.resize({gi.dzv_mult, gi.r});
 
     Kphi.resize({gi.dxx_mult, gi.r});
-    dzKphi.resize({gi.dxx_mult, gi.r});
+    dzVphi.resize({gi.N_zv[0], gi.r});
     KdtA.resize({gi.dxx_mult, gi.r});
     Xphi.resize({gi.dxx_mult, gi.r});
     Vphi.resize({gi.N_zv[0], gi.r});
@@ -773,7 +780,7 @@ private:
   scalar_potential compute_phi;
   mat C1;
   ten3 D2, e, eA, C2, C3, D3;
-  mat Lphi, Sphi, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzKphi;
+  mat Lphi, Sphi, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi;
   std::function<double(double*,double*)> ip_xx, ip_zv;
 
 };
@@ -1022,6 +1029,8 @@ lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, v
   initialize(f, X0, V0, ip_xx, ip_zv, blas);
 
   timestepper timestep(gi, blas, ip_xx, ip_zv);
+  timestep.__Kphi = __Kphi;
+  timestep.__Vphi = __Vphi;
 
   vector_potential compute_A(gi, blas);
   lr2<double> dtA2(gi.r, {gi.dxx_mult, gi.N_zv[0]});
@@ -1035,13 +1044,7 @@ lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, v
   std::function<double(double*,double*)> ip_z = inner_product_from_const_weight(gi.h_zv[0], gi.N_zv[0]);
   initialize(dtA, vector<const double*>(), vector<const double*>(), ip_xx, ip_z, blas);
 
-/*
-  for(Index j=0;j<gi.r;j++) {
-  for(Index i=0;i<gi.r;i++)
-  cout << dtA.S(i,j) << " ";
-  cout << endl;
-  }
-*/
+  
   blas.matmul(f.X,f.S,K);
   double ke0 = kinetic_energy(K, f.V, gi, blas);
 
@@ -1100,7 +1103,7 @@ lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, v
   return f;
 }
 
-/*
+
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
@@ -1115,7 +1118,7 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
   mind<2> N_zv = {64, 64};
   mfp<4> lim_xx = {0.0,2*M_PI,0.0,2*M_PI};
   mfp<4> lim_zv = {0.0,2*M_PI,-6.0/sqrt(M_e), 6.0/sqrt(M_e)};
-  grid_info<2> gi(r, N_xx, N_zv, lim_xx, lim_zv, M_e, C_P); 
+  grid_info<2> gi(r, N_xx, N_zv, lim_xx, lim_zv, M_e, C_P, 0.0); 
 
   std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(gi.h_xx[0]*gi.h_xx[1], gi.dxx_mult);
   std::function<double(double*,double*)> ip_zv = inner_product_from_const_weight(gi.h_zv[0]*gi.h_zv[1], gi.dzv_mult);
@@ -1236,6 +1239,7 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
 
   SECTION("advection_v") {
     gi.debug_adv_z = false;
+    gi.debug_adv_vA = false;
 
     mat Kphi({gi.dxx_mult, gi.r});
     for(Index k=0;k<gi.r;k++) {
@@ -1285,8 +1289,8 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
   }
 
 }
-*/
 
+/*
 int main() {
 
   double rho_i = 1e-3;
@@ -1330,3 +1334,4 @@ int main() {
 
   integration(20.0, 5e-5, gi, X, V);
 }
+*/
