@@ -655,10 +655,33 @@ private:
   std::function<double(double*,double*)> ip_z;
 };
 
+double max_norm_estimate(const mat& K, const mat& V, const grid_info<2>& gi, const blas_ops& blas) {
+  mat Knorm({1,gi.r}), Vnorm({1,gi.r});
+
+  for(Index k=0;k<gi.r;k++) {
+    double max_K = 0.0;
+    for(Index i=0;i<K.shape()[0];i++) {
+      max_K = max(max_K, abs(K(i, k)));
+    }
+    Knorm(0, k) = max_K;
+  }
+  
+  for(Index k=0;k<gi.r;k++) {
+    double max_V = 0.0;
+    for(Index i=0;i<V.shape()[0];i++) {
+      max_V = max(max_V, abs(V(i, k)));
+    }
+    Vnorm(0, k) = max_V;
+  }
+
+  mat result({1,1});
+  blas.matmul_transb(Knorm, Vnorm, result);
+  return result(0,0);
+}
 
 struct timestepper {
 
-  void operator()(double tau, lr2<double>& f, lr2<double>& dtA, double* ee=nullptr) {
+  void operator()(double tau, lr2<double>& f, lr2<double>& dtA, double* ee=nullptr, double* ee_max=nullptr) {
     // phi 
     blas.matmul(f.X,f.S,K);
 
@@ -672,6 +695,11 @@ struct timestepper {
     double _ee = electric_energy(Kphi, gi, blas);
     if(ee != nullptr)
       *ee = _ee;
+
+    if(ee_max != nullptr) {
+      deriv_z(Kphi, dzKphi, gi);
+      *ee_max = max_norm_estimate(dzKphi, Vphi, gi, blas); 
+    }
 
     // K step
     C1 = ccoeff.compute_C1(f.V, blas);
@@ -726,6 +754,7 @@ struct timestepper {
     L.resize({gi.dzv_mult, gi.r});
 
     Kphi.resize({gi.dxx_mult, gi.r});
+    dzKphi.resize({gi.dxx_mult, gi.r});
     KdtA.resize({gi.dxx_mult, gi.r});
     Xphi.resize({gi.dxx_mult, gi.r});
     Vphi.resize({gi.N_zv[0], gi.r});
@@ -744,10 +773,122 @@ private:
   scalar_potential compute_phi;
   mat C1;
   ten3 D2, e, eA, C2, C3, D3;
-  mat Lphi, Sphi, K, L, Kphi, Xphi, Vphi, LdtA, KdtA;
+  mat Lphi, Sphi, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzKphi;
   std::function<double(double*,double*)> ip_xx, ip_zv;
 
 };
+
+
+struct timestepper_strang {
+
+  void operator()(double tau, lr2<double>& f, lr2<double>& dtA, double* ee=nullptr, double* ee_max=nullptr) {
+    // phi 
+    blas.matmul(f.X,f.S,K);
+
+    if(__Kphi == nullptr) {
+      compute_phi(K, f.V, Kphi, Vphi);
+    } else {
+      Kphi = *__Kphi;
+      Vphi = *__Vphi;
+    }
+
+    double _ee = electric_energy(Kphi, gi, blas);
+    if(ee != nullptr)
+      *ee = _ee;
+
+    if(ee_max != nullptr) {
+      deriv_z(Kphi, dzKphi, gi);
+      *ee_max = max_norm_estimate(dzKphi, Vphi, gi, blas); 
+    }
+
+    // K step 1
+    C1 = ccoeff.compute_C1(f.V, blas);
+    C2 = ccoeff.compute_C2(f.V, Vphi, blas);
+    C3 = ccoeff.compute_C3(f.V, dtA.V, blas);
+    blas.matmul(dtA.X, dtA.S, KdtA);
+
+    K_step(0.5*tau, K, Kphi, KdtA, C1, C2, C3, blas);
+
+    f.X = K;
+    gs(f.X, f.S, ip_xx);
+
+    Xphi = Kphi;
+    gs(Xphi, Sphi, ip_xx);
+
+    // S step 1
+    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
+    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
+    S_step(0.5*tau, f.S, Sphi, dtA.S, C1, C2, C3, D2, D3);
+
+    // L step
+    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
+    blas.matmul_transb(Vphi,Sphi,Lphi);
+    e = ccoeff.compute_e(D2, Lphi);
+
+    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
+    blas.matmul_transb(dtA.V,dtA.S,LdtA);
+    eA = ccoeff.compute_eA(D3, LdtA);
+
+    blas.matmul_transb(f.V,f.S,L);
+    L_step(tau, L, e, eA);
+
+    f.V = L;
+    gs(f.V, f.S, ip_zv);
+    transpose_inplace(f.S);
+
+    // S step 2
+    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
+    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
+    S_step(0.5*tau, f.S, Sphi, dtA.S, C1, C2, C3, D2, D3);
+
+
+  }
+
+  timestepper_strang(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ip_xx(_ip_xx), ip_zv(_ip_zv), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), __Kphi(nullptr), __Vphi(nullptr) {
+    D2.resize({gi.r,gi.r,gi.r});
+    D3.resize({gi.r,gi.r,gi.r});
+    e.resize({gi.N_zv[0], gi.r, gi.r});
+    eA.resize({gi.N_zv[0], gi.r, gi.r});
+    C1.resize({gi.r, gi.r});
+    C2.resize({gi.r,gi.r,gi.r});
+    C3.resize({gi.r,gi.r,gi.r});
+
+    Lphi.resize({gi.N_zv[0], gi.r});
+    LdtA.resize({gi.N_zv[0], gi.r});
+    Sphi.resize({gi.r, gi.r});
+
+    K.resize({gi.dxx_mult, gi.r});
+    L.resize({gi.dzv_mult, gi.r});
+
+    Kphi.resize({gi.dxx_mult, gi.r});
+    dzKphi.resize({gi.dxx_mult, gi.r});
+    KdtA.resize({gi.dxx_mult, gi.r});
+    Xphi.resize({gi.dxx_mult, gi.r});
+    Vphi.resize({gi.N_zv[0], gi.r});
+  }
+
+  mat *__Kphi, *__Vphi;
+
+private:
+  grid_info<2> gi;
+  const blas_ops& blas;
+  compute_coeff ccoeff;
+  PS_L_step L_step;
+  PS_K_step K_step;
+  PS_S_step S_step;
+  gram_schmidt gs;
+  scalar_potential compute_phi;
+  mat C1;
+  ten3 D2, e, eA, C2, C3, D3;
+  mat Lphi, Sphi, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzKphi;
+  std::function<double(double*,double*)> ip_xx, ip_zv;
+
+};
+
+
+
+
+
 
 struct rectangular_QR {
     int n, r;
@@ -868,6 +1009,7 @@ void add_lr(double alpha, const lr2<double>& A, double beta, const lr2<double>& 
 
 }
 
+
 lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, vector<const double*> X0, vector<const double*> V0, mat* __Kphi=nullptr, mat* __Vphi=nullptr) {
 
   blas_ops blas;
@@ -942,11 +1084,13 @@ lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, v
     }
 */
     // do the timestep
-    double ee;
-    timestep(tau, f, dtA, &ee);
+    double ee, max_ee;
+    timestep(tau, f, dtA, &ee, &max_ee);
 
     double me = magnetic_energy(AK0, gi, blas);
-    fs_evolution << t << "\t" << ee << "\t" << me << "\t" << ke << "\t" << ke0 << endl;
+    blas.matmul(dtA.X, dtA.S, AK0);
+    double max_dtA = max_norm_estimate(AK0, dtA.V, gi, blas);
+    fs_evolution << t << "\t" << ee << "\t" << me << "\t" << ke << "\t" << ke0 << "\t" << max_ee<< "\t" << max_dtA << endl;
     cout << "\rt=" << t;
     cout.flush();
 
@@ -1184,5 +1328,5 @@ int main() {
   V.push_back(vv1.begin());
   V.push_back(vv2.begin());
 
-  integration(20.0, 1e-4, gi, X, V);
+  integration(20.0, 5e-5, gi, X, V);
 }
