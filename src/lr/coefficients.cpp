@@ -63,6 +63,9 @@ template void integrate(const multi_array<float,2>& a, float w, multi_array<floa
 template<class T>
 void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, const multi_array<T,2>& c, T w, multi_array<T,3>& out, const blas_ops& blas) {
   if(a.sl == stloc::host){
+    #ifdef __OPENMP__
+    #pragma omp parallel for collapse(3)
+    #endif
     for(Index k=0;k<c.shape()[1];k++) {
       for(Index j=0;j<b.shape()[1];j++) {
         for(Index i=0;i<a.shape()[1];i++) {
