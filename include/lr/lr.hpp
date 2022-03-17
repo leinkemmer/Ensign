@@ -20,16 +20,57 @@ struct lr2 {
 
   lr2(Index r, array<Index,2> N, stloc sl=stloc::host) : S({r,r},sl), X({N[0],r},sl), V({N[1],r},sl) {}
 
-  Index problem_size_X() const {
+  Index size_X() const {
     return X.shape()[0];
   }
-  Index problem_size_V() const {
+  Index size_V() const {
     return V.shape()[0];
   }
   Index rank() const {
     return S.shape()[0];
   }
+
+  /* Computes the full matrix (can be very expensive and should not be used in production code)
+  */
+  multi_array<T,2> full(const blas_ops& blas) const {
+    multi_array<T, 2> K = X;
+    blas.matmul(X, S, K);
+    multi_array<T, 2> out({size_X(), size_V()});
+    blas.matmul_transb(K, V, out);
+    return out;
+  }
 };
+
+
+/*  Add two low-rank representations together.
+*
+*   Note that no truncation is performed by this function. To do that call lr_truncate.
+*/
+template<class T>
+void lr_add(T alpha, const lr2<T>& A, T beta, const lr2<T>& B, lr2<T>& out,
+            std::function<T(T*,T*)> inner_product_X,
+            std::function<T(T*,T*)> inner_product_V,
+            const blas_ops& blas);
+
+/*  Add three low-rank representations together.
+*
+*   Note that no truncation is performed by this function. To do that call lr_truncate.
+*/
+template<class T>
+void lr_add(T alpha, const lr2<T>& A, T beta, const lr2<T>& B,
+            T gamma, const lr2<T>& C, lr2<T>& out,
+            std::function<T(T*,T*)> inner_product_X,
+            std::function<T(T*,T*)> inner_product_V,
+            const blas_ops& blas);
+
+
+/*  Truncate a low-rank representation inplace to a fixed rank r.
+*
+*   The rank is determined by the size of out.
+*/
+template<class T>
+void lr_truncate(const lr2<T>& in, lr2<T>& out, const blas_ops& blas);
+
 
 /* Initializes (an already allocated) lr2 to \sum_i X_i V_i.
 *
@@ -39,9 +80,10 @@ struct lr2 {
 * X.size() == V.size() is required.
 */
 template<class T>
-void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, std::function<T(T*,T*)> inner_product_X,
-                std::function<T(T*,T*)> inner_product_V, const blas_ops& blas);
-
+void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V,
+                std::function<T(T*,T*)> inner_product_X,
+                std::function<T(T*,T*)> inner_product_V,
+                const blas_ops& blas);
 
 
 /* Return an inner product function object for use in, e.g., in gram_schmidt.

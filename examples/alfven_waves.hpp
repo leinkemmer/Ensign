@@ -1,10 +1,12 @@
-// TODO: use something else than Eigen for adding two lr representations
+
 // TODO: see if we can make use of the unconventional integrator here
-// TODO: more tests and probably tests in a different file
 // TODO: GPU support
 
-// SEEMS OK: Fix performance issues (RK4 has to be made more efficient I think)
+// OK: use something else than Eigen for adding two lr representations
+// OK: more tests and probably tests in a different file
+// OK: Fix performance issues (RK4 has to be made more efficient I think)
 // OK: fix the things that are not compatible with OpenMP (see TODO in code)
+// OK: tests in a separate file
 
 #include <lr/lr.hpp>
 #include <generic/matrix.hpp>
@@ -469,7 +471,7 @@ struct PS_L_step {
       Ltmp = L;
     }
 
-    if(gi.debug_adv_v) {
+    if(gi.debug_adv_v || gi.debug_adv_vA) {
       mat ez({gi.r,gi.r}), T({gi.r, gi.r});
       vec lambda({gi.r});
       mat M({gi.N_zv[1], gi.r}), Mout({gi.N_zv[1], gi.r});
@@ -478,7 +480,7 @@ struct PS_L_step {
 
         for(Index k2=0;k2<gi.r;k2++) {
           for(Index k1=0;k1<gi.r;k1++) {
-            ez(k1, k2) = e(iz, k1, k2) + double(gi.debug_adv_vA)*eA(iz, k1, k2);
+            ez(k1, k2) = double(gi.debug_adv_v)*e(iz, k1, k2) + double(gi.debug_adv_vA)*eA(iz, k1, k2);
           }
         }
 
@@ -557,9 +559,18 @@ void integrate_mulv_v(const mat& V, mat& intV, const grid_info<2>& gi) {
     for(Index i=0;i<gi.N_zv[0];i++)
       intV(i, k) = 0.0;
 
-  componentwise_mat_omp(gi.r, gi.N_zv, [&gi, &V, &intV](Index idx, mind<2> i, Index r) {
-    intV(i[0], r) += -gi.v(1, i[1])*V(idx, r)*gi.h_zv[1];
-  });
+
+  for(Index r=0;r<gi.r;r++) {
+    for(Index iz=0;iz<gi.N_zv[0];iz++) {
+      double s = 0.0;
+      for(Index iv=0;iv<gi.N_zv[1];iv++)
+        intV(iz, r) += -gi.v(1, iv)*V(gi.lin_idx_v({iz,iv}), r)*gi.h_zv[1];
+
+    }
+  }
+  //componentwise_mat_omp(gi.r, gi.N_zv, [&gi, &V, &intV](Index idx, mind<2> i, Index r) {
+  //  intV(i[0], r) += -gi.v(1, i[1])*V(idx, r)*gi.h_zv[1];
+  //});
 }
 
 struct scalar_potential {
@@ -1046,27 +1057,22 @@ void add_lr(double alpha, const lr2<double>& A, double beta, const lr2<double>& 
   S_large = S_large*qrV.R().transpose();
   V_large = qrV.Q();
 
-/* // to check the result
-  MatrixXd full = X_large*S_large*V_large.transpose();
-  
-  mat KA({nx, r}), A_full({nx, nv});
-  blas.matmul(A.X, A.S, KA);
-  blas.matmul_transb(KA, A.V, A_full);
-  
-  mat KB({nx, r}), B_full({nx, nv});
-  blas.matmul(B.X, B.S, KB);
-  blas.matmul_transb(KB, B.V, B_full);
+/*
+  C.X.resize({X_large.rows(), X_large.cols()});
+  for(Index k=0;k<C.X.shape()[1];k++)
+    for(Index i=0;i<C.X.shape()[0];i++)
+      C.X(i, k) = X_large(i, k);
 
-  double err = 0.0;
-  double m = 0.0;
-  for(Index j=0;j<nv;j++)
-    for(Index i=0;i<nx;i++) {
-      err = max(err, abs(full(i,j) - alpha*A_full(i,j) - beta*B_full(i,j)) );
-      m = max(m, abs(alpha*A_full(i,j) + beta*B_full(i,j)) );
-    }
-  cout << "add_lr: " << err << " " << m << endl;
+  C.V.resize({V_large.rows(), V_large.cols()});
+  for(Index k=0;k<C.V.shape()[1];k++)
+    for(Index i=0;i<C.V.shape()[0];i++)
+      C.V(i, k) = V_large(i, k);
+
+  C.S.resize({S_large.rows(), S_large.cols()});
+  for(Index k=0;k<C.S.shape()[1];k++)
+    for(Index i=0;i<C.S.shape()[0];i++)
+      C.S(i, k) = S_large(i, k);
 */
-
   JacobiSVD<MatrixXd> svd(S_large, ComputeThinU | ComputeThinV); 
   MatrixXd S = svd.singularValues().asDiagonal();
 
@@ -1091,7 +1097,7 @@ void add_lr(double alpha, const lr2<double>& A, double beta, const lr2<double>& 
 }
 
 
-lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, vector<const double*> X0, vector<const double*> V0, mat* __Kphi=nullptr, mat* __Vphi=nullptr) {
+lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, vector<const double*> X0, vector<const double*> V0, mat* __Kphi=nullptr, mat* __Vphi=nullptr, lr2<double>* __dtA=nullptr) {
 
   blas_ops blas;
   gram_schmidt gs(&blas);
@@ -1108,6 +1114,7 @@ lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, v
 
   vector_potential compute_A(gi, blas);
   lr2<double> dtA2(gi.r, {gi.dxx_mult, gi.N_zv[0]});
+  lr2<double> dtA_large(gi.r*3, {gi.dxx_mult, gi.N_zv[0]});
   lr2<double> A0(gi.r, {gi.dxx_mult, gi.N_zv[0]});
   lr2<double> A1(gi.r, {gi.dxx_mult, gi.N_zv[0]});
   mat AK0({gi.dxx_mult, gi.r});
@@ -1132,36 +1139,74 @@ lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, v
         if(final_time - t < tau)
         tau = final_time - t;
 
+        gt::start("timeloop_diagnostic");
         blas.matmul(f.X,f.S,K);
         double ke = kinetic_energy(K, f.V, gi, blas);
+        gt::stop("timeloop_diagnostic");
 
-        // compute \partial_t A
-        ftmp = f;
-        double eps = 1e-7;
-        timestep(eps, ftmp, dtA);
+        if(__dtA == nullptr) { // compute dtA from solution
+          // compute \partial_t A
+          ftmp = f;
+          double eps = 1e-7;
+          gt::start("timeloop_step");
+          timestep(eps, ftmp, dtA);
+          gt::stop("timeloop_step");
 
-        compute_A(f, A0.X, A0.V);
-        AK0 = A0.X;
-        gs(A0.X, A0.S, ip_xx);
+          gt::start("timeloop_A");
+          compute_A(f, A0.X, A0.V);
+          AK0 = A0.X;
+          gs(A0.X, A0.S, ip_xx);
 
-        compute_A(ftmp, A1.X, A1.V);
-        gs(A1.X, A1.S, ip_xx);
+          compute_A(ftmp, A1.X, A1.V);
+          gs(A1.X, A1.S, ip_xx);
 
-        add_lr(1.0/eps, A1, -1.0/eps, A0, dtA2, blas);
-        A0 = dtA;
-        add_lr(0.99, A0, 0.01, dtA2, dtA, blas);
+/*
+          gt::start("lr_add");
+          add_lr(1.0/eps, A1, -1.0/eps, A0, dtA2, blas);
+          A0 = dtA;
+          add_lr(0.99, A0, 0.01, dtA2, dtA, blas);
+          gt::stop("lr_add");
+         */ 
+          gt::start("lr_add");
+          lr_add(0.99, dtA, 0.01/eps, A1, -0.01/eps, A0, dtA_large, ip_xx, ip_z, blas);
+          lr_truncate(dtA_large, dtA, blas);
+          gt::stop("lr_add");
+          gt::stop("timeloop_A");
+          
+          /*
+          cout << dtA_large.size_X() << " " << dtA_large.size_V() << endl;
+          mat res2 = dtA_large.full(blas);
+          double err = 0.0;
+          for(Index j=0;j<res2.shape()[1];j++)
+          for(Index i=0;i<res2.shape()[0];i++) {
+            double val = abs(res2(i,j));
+            if(std::isnan(val)) 
+              err = std::numeric_limits<double>::infinity();
+            else
+              err = max(err, val);
+          }
+          cout << "ERROR: " << err << endl;
+          //exit(1);
+          */
+        } else { // use the specified dtA (used for testing)
+          dtA = *__dtA;
+        }
 
 
         // do the timestep
         double ee, max_ee;
+        gt::start("timeloop_step");
         timestep(tau, f, dtA, &ee, &max_ee);
+        gt::stop("timeloop_step");
 
+        gt::start("timeloop_diagnostic");
         double me = magnetic_energy(AK0, gi, blas);
         blas.matmul(dtA.X, dtA.S, AK0);
         double max_dtA = max_norm_estimate(AK0, dtA.V, gi, blas);
         fs_evolution << t << "\t" << ee << "\t" << me << "\t" << ke << "\t" << ke0 << "\t" << max_ee<< "\t" << max_dtA << endl;
         cout << "\rt=" << t;
         cout.flush();
+        gt::stop("timeloop_diagnostic");
 
         t += tau;
         gt::stop("timestep");

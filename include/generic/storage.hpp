@@ -307,13 +307,14 @@ struct multi_array {
       return false;
     } else {
       for(Index i=0;i<lhs.num_elements();i++){
+        if(std::isnan(lhs.v[i]) || std::isnan(v[i])) 
+          return false;
         if(std::abs((lhs.v[i] - v[i])) > T(1000)*std::numeric_limits<T>::epsilon())
-        return false;
+          return false;
       }
       return true;
     }
   }
-
 
 private:
   #ifdef __CUDACC__
@@ -353,4 +354,14 @@ void dump(string fn, const multi_array<complex<double>,d>& ma) {
   for(Index idx=0;idx<ma.num_elements();idx++)
     fs << h_ma.v[idx].real() << " " << h_ma.v[idx].imag() << endl;
   fs.close();
+}
+
+template<class T>
+void print(const multi_array<T,2>& ma) {
+  for(Index i=0;i<ma.shape()[0];i++) {
+    for(Index j=0;j<ma.shape()[1];j++)
+      cout << ma(i,j) << " ";
+    cout << endl;
+  }
+  cout << endl;
 }

@@ -1,6 +1,9 @@
 #include <generic/kernels.hpp>
 #include <lr/lr.hpp>
 #include <generic/matrix.hpp>
+#include <generic/timer.hpp>
+
+#include <cstring>
 
 template<class T>
 std::function<T(T*,T*)> inner_product_from_weight(T* w, Index N) {
@@ -225,13 +228,13 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, std::functio
       #ifdef __OPENMP__
       #pragma omp parallel for
       #endif
-      for(Index i=0;i<lr.problem_size_X();i++) {
+      for(Index i=0;i<lr.size_X();i++) {
         lr.X(i, k) = X[k][i];
       }
       #ifdef __OPENMP__
       #pragma omp parallel for
       #endif
-      for(Index i=0;i<lr.problem_size_V();i++) {
+      for(Index i=0;i<lr.size_V();i++) {
         lr.V(i, k) = V[k][i];
       }
     }
@@ -239,13 +242,13 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, std::functio
       #ifdef __OPENMP__
       #pragma omp parallel for
       #endif
-      for(Index i=0;i<lr.problem_size_X();i++) {
+      for(Index i=0;i<lr.size_X();i++) {
         lr.X(i, k) = distribution(generator);
       }
       #ifdef __OPENMP__
       #pragma omp parallel for
       #endif
-      for(Index i=0;i<lr.problem_size_V();i++) {
+      for(Index i=0;i<lr.size_V();i++) {
         lr.V(i, k) = distribution(generator);
       }
     }
@@ -274,3 +277,133 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, std::functio
 };
 template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const blas_ops& blas);
 //template void initialize(lr2<float>& lr, vector<const float*> X, vector<const float*> V, std::function<float(float*,float*)> inner_product_X, std::function<float(float*,float*)> inner_product_V, const blas_ops& blas);
+
+
+
+
+template<class T>
+void lr_add(vector<const lr2<T>*> A, const vector<T>& alpha, lr2<T>& out,
+            std::function<T(T*,T*)> inner_product_X,
+            std::function<T(T*,T*)> inner_product_V,
+            const blas_ops& blas) {
+
+  // check dimensions
+  Index total_r=0;
+  for(size_t k=0;k<A.size();k++) {
+    total_r += A[k]->rank();
+    if(A[k]->size_X() != out.size_X()) {
+      cout << "ERROR in lr_add: shape of X does not match in input " << k << " and output." << endl;
+      exit(1);
+    }
+    if(A[k]->size_V() != out.size_V()) {
+      cout << "ERROR in lr_add: shape of V does not match in input " << k << " and output." << endl;
+      exit(1);
+    }
+  }
+  if(total_r != out.rank()) {
+    cout << "ERROR in lr_add: output rank does not match sum of input ranks." << endl;
+    exit(1);
+  }
+
+  gram_schmidt gs(&blas);
+
+  // copy elements of X in out.V and orthogonalize
+  {
+    Index offset = 0;
+    for(Index k=0;k<A.size();k++) {
+      Index size = A[k]->size_X()*A[k]->rank();
+      std::memcpy(out.X.data()+offset, A[k]->X.data(), sizeof(T)*size);
+      offset += size;
+    }
+  }
+
+  multi_array<T, 2> R_X({out.rank(), out.rank()});
+  gs(out.X, R_X, inner_product_X);
+
+  // copy elements of V in out.V and orthogonalize
+  {
+    Index offset = 0;
+    for(Index k=0;k<A.size();k++) {
+      Index size = A[k]->size_V()*A[k]->rank();
+      std::memcpy(out.V.data()+offset, A[k]->V.data(), sizeof(T)*size);
+      offset += size;
+    }
+  }
+
+  multi_array<T, 2> R_V({out.rank(), out.rank()});
+  gs(out.V, R_V, inner_product_V);
+
+  // copy elements of S in out.S
+  {
+    std::fill(out.S.begin(), out.S.end(), 0.0);
+    Index offset = 0;
+    for(Index k=0;k<A.size();k++) {
+      Index r_k = A[k]->rank();
+
+      for(Index j=0;j<r_k;j++)
+        for(Index i=0;i<r_k;i++)
+          out.S(i + offset, j + offset) = alpha[k]*A[k]->S(i, j);
+
+      offset += r_k;
+    }
+  }
+
+  multi_array<T,2> tmp = out.S;
+  blas.matmul(R_X, tmp, out.S);
+
+  tmp = out.S;
+  blas.matmul_transb(tmp, R_V, out.S);
+}
+
+
+template<class T>
+void lr_add(T alpha, const lr2<T>& A, T beta, const lr2<T>& B, lr2<T>& out,
+            std::function<T(T*,T*)> inner_product_X,
+            std::function<T(T*,T*)> inner_product_V,
+            const blas_ops& blas) {
+
+  lr_add({&A, &B}, {alpha, beta}, out, inner_product_X, inner_product_V, blas);
+}
+
+template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, lr2<double>& out, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const blas_ops& blas);
+
+
+template<class T>
+void lr_add(T alpha, const lr2<T>& A, T beta, const lr2<T>& B,
+            T gamma, const lr2<T>& C, lr2<T>& out,
+            std::function<T(T*,T*)> inner_product_X,
+            std::function<T(T*,T*)> inner_product_V,
+            const blas_ops& blas) {
+
+  lr_add({&A, &B, &C}, {alpha, beta, gamma}, out, inner_product_X, inner_product_V, blas);
+}
+
+  
+template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, double gamma, const lr2<double>& C, lr2<double>& out, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const blas_ops& blas);
+
+
+
+template<class T>
+void lr_truncate(const lr2<T>& in, lr2<T>& out, const blas_ops& blas) {
+  if(out.rank() > in.rank()) {
+    cout << "ERROR in lr_truncate: rank of output is larger than rank of input." << endl;
+    exit(1);
+  }
+
+  // compute the SVD
+  multi_array<T, 2> U({in.rank(), in.rank()}); 
+  multi_array<T, 2> V({in.rank(), in.rank()}); 
+  multi_array<T, 1> sv({in.rank()});
+  svd(in.S, U, V, sv, blas);
+
+  // Here we use that for blas.matmul the rows of the output can be smaller than
+  // the rows of the input. Only the desired partial result is then computed.
+  blas.matmul(in.X, U, out.X);
+  blas.matmul(in.V, V, out.V);
+
+  for(Index j=0;j<out.rank();j++)
+    for(Index i=0;i<out.rank();i++)
+      out.S(i, j) = (i==j) ? sv(i) : 0.0;
+}
+
+template void lr_truncate(const lr2<double>& in, lr2<double>& out, const blas_ops& blas);

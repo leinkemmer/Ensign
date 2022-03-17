@@ -14,9 +14,9 @@ int main() {
   double Vmax = 6.0/sqrt(M_e);
   double alpha = 1e-3;
 
-  Index r = 10;
-  mind<2> N_xx = {200, 200};
-  mind<2> N_zv = {200, 200};
+  Index r = 5;
+  mind<2> N_xx = {100, 100};
+  mind<2> N_zv = {100, 100};
   mfp<4> lim_xx = {0.0,2*M_PI/kx,0.0,2*M_PI/ky};
   mfp<4> lim_zv = {0.0,2*M_PI,-Vmax,Vmax};
   grid_info<2> gi(r, N_xx, N_zv, lim_xx, lim_zv, M_e, C_P, C_A); 
@@ -41,7 +41,7 @@ int main() {
   V.push_back(vv1.begin());
   V.push_back(vv2.begin());
 
-  //integration(20.0, 5e-5, gi, X, V);
-  integration(0.001, 5e-5, gi, X, V);
+  integration(20.0, 5e-5, gi, X, V);
+  //integration(0.001, 5e-5, gi, X, V);
 }
 

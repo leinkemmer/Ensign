@@ -39,34 +39,31 @@ TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
     REQUIRE(bool(R2 == Ac));
 
   }
+    
+  array<double,4> x1 = {1.0,2.0,4.0,2.0};
+  array<double,4> x2 = {3.0,0.0,4.0,5.0};
+  array<double,4> x3 = {5.0,1.0,8.0,7.0};
+
+  array<double,4> v1 = {1.0,5.0,2.0,3.0};
+  array<double,4> v2 = {2.0,6.0,5.0,4.0};
+  array<double,4> v3 = {1.0,2.0,3.0,15.0};
+
+  vector<const double*> X;
+  X.push_back(x1.begin());
+  X.push_back(x2.begin());
+  X.push_back(x3.begin());
+
+  vector<const double*> V;
+  V.push_back(v1.begin());
+  V.push_back(v2.begin());
+  V.push_back(v3.begin());
+  
+
 
   SECTION("Initialization low rank structure"){
-
-    array<double,4> x1 = {1.0,2.0,4.0,2.0};
-    array<double,4> x2 = {3.0,0.0,4.0,5.0};
-    array<double,4> x3 = {5.0,1.0,8.0,7.0};
-
-    array<double,4> v1 = {1.0,5.0,2.0,3.0};
-    array<double,4> v2 = {2.0,6.0,5.0,4.0};
-    array<double,4> v3 = {1.0,2.0,3.0,15.0};
-
-
-    vector<const double*> X;
-    X.push_back(x1.begin());
-    X.push_back(x2.begin());
-    X.push_back(x3.begin());
-
-    vector<const double*> V;
-    V.push_back(v1.begin());
-    V.push_back(v2.begin());
-    V.push_back(v3.begin());
-
-
-    std::function<double(double*,double*)> ip = inner_product_from_const_weight(1.0, 4);
-
+    
     lr2<double> lr0(3,{4,4});
-
-    blas_ops blas;
+    std::function<double(double*,double*)> ip = inner_product_from_const_weight(1.0, 4);
     initialize(lr0, X, V, ip, ip, blas);
 
     multi_array<double,2> id({3,3});
@@ -107,7 +104,60 @@ TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
     blas.matmul_transb(XX,VV,RR);
 
     REQUIRE(bool(RR == RRR));
+  }
 
+  array<double,4> x21 = {0.5,0.4,1.0,2.0};
+  array<double,4> x22 = {0.7,0.3,0.4,7.0};
+
+  array<double,4> v21 = {2.0,3.0,1.0,3.0};
+  array<double,4> v22 = {2.0,1.0,2.0,2.0};
+
+  vector<const double*> X2;
+  X2.push_back(x21.begin());
+  X2.push_back(x22.begin());
+
+  vector<const double*> V2;
+  V2.push_back(v21.begin());
+  V2.push_back(v22.begin());
+
+  SECTION("Add two low-rank representations") {
+    
+    std::function<double(double*,double*)> ip = inner_product_from_const_weight(0.25, 4);
+
+    lr2<double> lr0(3,{4,4});
+    initialize(lr0, X, V, ip, ip, blas);
+
+    lr2<double> lr1(2,{4,4});
+    initialize(lr1, X2, V2, ip, ip, blas);
+
+    lr2<double> out(5,{4,4});
+    lr_add(1.5, lr0, -0.5, lr1, out, ip, ip, blas);
+
+    multi_array<double,2> lr0_full = lr0.full(blas);
+    multi_array<double,2> lr1_full = lr1.full(blas);
+    multi_array<double,2> exact({4,4});
+    for(Index j=0;j<exact.shape()[1];j++)
+      for(Index i=0;i<exact.shape()[0];i++)
+        exact(i,j) = 1.5*lr0_full(i,j) - 0.5*lr1_full(i,j);
+
+    REQUIRE(bool(out.full(blas)==exact)); // check without truncation
+
+
+    lr2<double> out_truncated(4,{4,4});
+    lr_truncate(out, out_truncated, blas);
+    multi_array<double,2> out_truncated_full = out_truncated.full(blas);
+
+    double err = 0.0;
+    for(Index j=0;j<4;j++)
+      for(Index i=0;i<4;i++)
+        if(std::isnan(out_truncated_full(i,j))) 
+          err = std::numeric_limits<double>::infinity();
+        else
+          err = max(err, std::abs(out_truncated_full(i,j)-exact(i,j))); 
+
+    cout << "truncation error: " << err << endl;
+    REQUIRE( err < 1e-10 );
 
   }
+
 }

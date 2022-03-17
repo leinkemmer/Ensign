@@ -37,6 +37,9 @@ struct blas_ops {
   ~blas_ops();
 
   /* Matrix multiplication (computes c = a b)
+  *
+  * The number of rows in matrix c can be smaller than the number of rows in matrix a. In this
+  * case only a partial result is computed.
   */
   template<class T>
   void matmul(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c) const;
@@ -88,3 +91,8 @@ private:
   int lwork; 
   #endif
 };
+
+/* Computes the singular value decomposition of the matrix input
+*/
+template<class T>
+void svd(const multi_array<T,2>& input, multi_array<T,2>& U, multi_array<T,2>& V, multi_array<T,1>& sigma_diag, const blas_ops& blas);
