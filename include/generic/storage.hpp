@@ -73,7 +73,7 @@ struct multi_array {
     e = _e;
     Index num_elements = prod(e);
     if(sl == stloc::host) {
-      v = (T*)aligned_alloc(64,sizeof(T)*num_elements);
+      v = (T*)malloc(sizeof(T)*num_elements);
     } else {
       #ifdef __CUDACC__
       v = (T*)gpu_malloc(sizeof(T)*num_elements);

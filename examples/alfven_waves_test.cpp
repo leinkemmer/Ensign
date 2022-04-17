@@ -147,14 +147,15 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     gi.debug_adv_vA = false;
 
     double t_final = 0.1;
-    lr2<double> f_final = integration(t_final, 1e-3, gi, X, V); 
 
-    mat K({gi.dxx_mult,gi.r});
-    blas.matmul(f_final.X, f_final.S, K);
-    mat f_full({gi.dxx_mult, gi.dzv_mult});
-    blas.matmul_transb(K, f_final.V, f_full);
+
+    lr2<double> f_final = integration("lie", t_final, 1e-3, gi, X, V); 
+    mat f_full = f_final.full(blas);
+
+    lr2<double> f_unconv_final = integration("unconventional", t_final, 1e-3, gi, X, V); 
+    mat f_unconv_full = f_unconv_final.full(blas);
     
-    double err = 0.0;
+    double err_lie = 0.0, err_unconv = 0.0;
     for(Index jv=0;jv<gi.N_zv[1];jv++) {
       for(Index jz=0;jz<gi.N_zv[0];jz++) {
         for(Index iy=0;iy<gi.N_xx[1];iy++) {
@@ -163,19 +164,20 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
             mfp<2> zv = gi.v({jz, jv});
             double expected = sqrt(gi.M_e/M_PI)*(1.0+0.5*cos(zv[0]-t_final*zv[1])*cos(xy[0])*cos(xy[1]))*exp(-gi.M_e*pow(zv[1],2));
             double val = f_full(ix+gi.N_xx[0]*iy,jz+gi.N_zv[0]*jv);
-            if(std::isnan(val)) 
-              err = std::numeric_limits<double>::infinity();
-            else
-              err = max(err, abs(val - expected));
+            err_lie = max_err(err_lie, abs(val - expected));
+            double val_unconv = f_unconv_full(ix+gi.N_xx[0]*iy,jz+gi.N_zv[0]*jv);
+            err_unconv = max_err(err_unconv, abs(val_unconv - expected));
           }
         }
       }
     }
             
-    cout << "Error advection z: " << err << endl;
-    REQUIRE( err <= 3e-5 );
-  }
+    cout << "Error advection z (Lie): " << err_lie << endl;
+    cout << "Error advection z (Unconventional): " << err_unconv << endl;
 
+    REQUIRE( err_lie <= 3e-5 );
+    REQUIRE( err_unconv <= 1e-4 );
+  }
 
   /*
   *  advection using the scalar potential in the v direction
@@ -203,14 +205,14 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     }
     
     double t_final = 0.2;
-    lr2<double> f_final = integration(t_final, 1e-2, gi, X, V, &Kphi, &Vphi); 
 
-    mat K({gi.dxx_mult,gi.r});
-    blas.matmul(f_final.X, f_final.S, K);
-    mat f_full({gi.dxx_mult, gi.dzv_mult});
-    blas.matmul_transb(K, f_final.V, f_full);
+    lr2<double> f_final = integration("lie", t_final, 1e-2, gi, X, V, &Kphi, &Vphi); 
+    mat f_full = f_final.full(blas);
     
-    double err = 0.0;
+    lr2<double> f_final_unconv = integration("unconventional", t_final, 1e-2, gi, X, V, &Kphi, &Vphi); 
+    mat f_unconv_full = f_final_unconv.full(blas);
+
+    double err_lie = 0.0, err_unconv = 0.0;
     for(Index jv=0;jv<gi.N_zv[1];jv++) {
       for(Index jz=0;jz<gi.N_zv[0];jz++) {
         for(Index iy=0;iy<gi.N_xx[1];iy++) {
@@ -219,19 +221,20 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
             mfp<2> zv = gi.v({jz, jv});
             double expected = sqrt(gi.M_e/M_PI)*(1.0+0.5*cos(zv[0])*cos(xy[0])*cos(xy[1]))*exp(-gi.M_e*pow(zv[1]-t_final/gi.M_e*cos(zv[0]),2));
             double val = f_full(ix+gi.N_xx[0]*iy,jz+gi.N_zv[0]*jv);
-            if(std::isnan(val)) 
-              err = std::numeric_limits<double>::infinity();
-            else
-              err = max(err, abs(val - expected));
+            err_lie = max_err(err_lie, abs(val - expected));
+            double val_unconv = f_unconv_full(ix+gi.N_xx[0]*iy,jz+gi.N_zv[0]*jv);
+            err_unconv = max_err(err_unconv, abs(val_unconv - expected));
           }
         }
       }
     }
             
-    cout << "Error advection v: " << err << endl;
-    REQUIRE( err <= 5e-3 );
-  }
+    cout << "Error advection v (Lie): " << err_lie << endl;
+    cout << "Error advection v (Unconventional): " << err_unconv << endl;
 
+    REQUIRE( err_lie <= 5e-3 );
+    REQUIRE( err_unconv <= 7e-3 );
+  }
 
   /*
   *  advection using the scalar and magnetic potential in the v direction
@@ -246,13 +249,13 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     componentwise_vec_omp(gi.N_xx, [&dtA_xx1, &gi](Index idx, array<Index,2> i) {
       double x = gi.x(0, i[0]);
       double y = gi.x(1, i[1]);
-      dtA_xx1(idx) = sin(x)*cos(y);
+      dtA_xx1(idx) = /*sin(x)* */ cos(x);
     });
 
     vec dtA_vv1({gi.N_zv[0]});
     for(Index i=0;i<gi.N_zv[0];i++) {
       double z = gi.v(0, i);
-      dtA_vv1(i) = sin(z);
+      dtA_vv1(i) = 1.0;
     }
 
     vector<const double*> dtA_X, dtA_V;
@@ -261,34 +264,39 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     lr2<double> dtA(gi.r, {gi.dxx_mult, gi.N_zv[0]});
     initialize(dtA, dtA_X, dtA_V, ip_xx, ip_z, blas);
     
-    double t_final = 0.2;
-    lr2<double> f_final = integration(t_final, 1e-2, gi, X, V, nullptr, nullptr, &dtA); 
+    double t_final = 1e-2;
 
-    mat K({gi.dxx_mult,gi.r});
-    blas.matmul(f_final.X, f_final.S, K);
-    mat f_full({gi.dxx_mult, gi.dzv_mult});
-    blas.matmul_transb(K, f_final.V, f_full);
+
+    lr2<double> f_unconv_final = integration("unconventional", t_final, 1e-4, gi, X, V, nullptr, nullptr, &dtA); 
+    mat f_unconv_full = f_unconv_final.full(blas);
+
+    lr2<double> f_final = integration("lie", t_final, 1e-4, gi, X, V, nullptr, nullptr, &dtA); 
+    mat f_full = f_final.full(blas);
     
-    double err = 0.0;
+
+    double err_lie = 0.0, err_unconv = 0.0;
     for(Index jv=0;jv<gi.N_zv[1];jv++) {
       for(Index jz=0;jz<gi.N_zv[0];jz++) {
         for(Index iy=0;iy<gi.N_xx[1];iy++) {
           for(Index ix=0;ix<gi.N_xx[0];ix++) {
             mfp<2> xy = gi.x({ix, iy});
             mfp<2> zv = gi.v({jz, jv});
-            double expected = sqrt(gi.M_e/M_PI)*(1.0+0.5*cos(zv[0])*cos(xy[0])*cos(xy[1]))*exp(-gi.M_e*pow(zv[1]-t_final/gi.M_e*sin(zv[0])*sin(xy[0])*cos(xy[1]),2));
+            //double expected = sqrt(gi.M_e/M_PI)*(1.0+0.5*cos(zv[0])*cos(xy[0])*cos(xy[1]))*exp(-gi.M_e*pow(zv[1]-t_final/gi.M_e*sin(zv[0]) * sin(xy[0])*cos(xy[1]),2));
+            double expected = sqrt(gi.M_e/M_PI)*(1.0+0.5*cos(zv[0])*cos(xy[0])*cos(xy[1]))*exp(-gi.M_e*pow(zv[1]-t_final/gi.M_e*cos(xy[0]),2));
             double val = f_full(ix+gi.N_xx[0]*iy,jz+gi.N_zv[0]*jv);
-            if(std::isnan(val)) 
-              err = std::numeric_limits<double>::infinity();
-            else
-              err = max(err, abs(val - expected));
+            err_lie = max_err(err_lie, abs(val - expected));
+            double val_unconv = f_unconv_full(ix+gi.N_xx[0]*iy,jz+gi.N_zv[0]*jv);
+            err_unconv = max_err(err_unconv, abs(val_unconv - expected));
           }
         }
       }
     }
             
-    cout << "Error advection v: " << err << endl;
-    REQUIRE( err <= 6e-3 );
+    cout << "Error advection v (Lie): " << err_lie << endl;
+    cout << "Error advection v (Unconventional): " << err_unconv << endl;
+
+    REQUIRE( err_lie <= 6e-3 );
+    REQUIRE( err_unconv <= 6e-3 );
   }
 
 

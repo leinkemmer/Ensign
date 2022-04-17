@@ -7,6 +7,7 @@ template<size_t d, size_t dim>
 struct fft {
 
     fft(array<Index,dim> dims_, multi_array<double,d>& real, multi_array<complex<double>,d>& freq);
+    ~fft();
 
     void forward(multi_array<double,d>& real, multi_array<complex<double>,d>& freq); 
     void backward(multi_array<complex<double>,d>& freq, multi_array<double,d>& real);

@@ -176,6 +176,24 @@ fft<1, 1>::fft(array<Index,1> dims_, multi_array<double,1>& real, multi_array<co
   }
 }
 
+template<size_t d, size_t dim>
+fft<d,dim>::~fft() {
+  if(plans[0] != nullptr) {
+    destroy_plans(plans);
+  }
+
+  #ifdef __CUDACC__
+  if(cuda_plans[0] != nullptr)
+    destroy_plans(cuda_plans);
+  }
+  #endif
+}
+template fft<1, 1>::~fft();
+template fft<2, 1>::~fft();
+template fft<1, 2>::~fft();
+template fft<2, 2>::~fft();
+template fft<1, 3>::~fft();
+template fft<2, 3>::~fft();
 
 
 template<size_t d, size_t dim>

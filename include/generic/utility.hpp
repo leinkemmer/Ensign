@@ -74,3 +74,12 @@ array<Index,d> parse(string s) {
     return out;
 }
 
+/* Maximum function which treats NaNs correctly
+*/
+template<class T>
+double max_err(T err, T diff) {
+  if(std::isnan(diff)) 
+    return std::numeric_limits<T>::infinity();
+  else
+    return max(err, diff);
+}
