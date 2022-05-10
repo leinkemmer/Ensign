@@ -496,6 +496,7 @@ struct PS_L_step {
           }
         }
 
+
         // solve equation in diagonalized form
         for(Index ir=0;ir<gi.r;ir++) {
           for(Index iv=0;iv<gi.N_zv[1];iv++) {
@@ -669,7 +670,10 @@ double electric_energy(const mat& Kphi, const grid_info<2>& gi, const blas_ops& 
 }
 
 double magnetic_energy(const mat& KA, const grid_info<2>& gi, const blas_ops& blas) {
-  return gi.C_P/gi.C_A*electric_energy(KA, gi, blas);
+  if(gi.C_A < 1e-10)
+    return 0.0;
+  else
+    return gi.C_P/gi.C_A*electric_energy(KA, gi, blas);
 }
 
 struct vector_potential {
@@ -746,7 +750,26 @@ double max_norm_estimate(const mat& K, const mat& V, const grid_info<2>& gi, con
   return result(0,0);
 }
 
+
 struct timestepper {
+
+  timestepper() : __Kphi(nullptr), __Vphi(nullptr) {}
+  virtual ~timestepper() {}
+
+  virtual void operator()(double tau, lr2<double>& f, lr2<double>& dtA, double* ee=nullptr, double* ee_max=nullptr) = 0;
+
+  void set_Kphi(mat* Kphi) {
+    __Kphi = Kphi;
+  }
+  
+  void set_Vphi(mat* Vphi) {
+    __Vphi = Vphi;
+  }
+
+  mat *__Kphi, *__Vphi;
+};
+
+struct timestepper_lie : timestepper {
 
   void operator()(double tau, lr2<double>& f, lr2<double>& dtA, double* ee=nullptr, double* ee_max=nullptr) {
     gt::start("step");
@@ -826,7 +849,7 @@ struct timestepper {
     gt::stop("step");
   }
 
-  timestepper(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ip_xx(_ip_xx), ip_zv(_ip_zv), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), __Kphi(nullptr), __Vphi(nullptr) {
+  timestepper_lie(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ip_xx(_ip_xx), ip_zv(_ip_zv), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas){
     D2.resize({gi.r,gi.r,gi.r});
     D3.resize({gi.r,gi.r,gi.r});
     e.resize({gi.N_zv[0], gi.r, gi.r});
@@ -849,8 +872,6 @@ struct timestepper {
     Vphi.resize({gi.N_zv[0], gi.r});
   }
 
-  mat *__Kphi, *__Vphi;
-
 private:
   grid_info<2> gi;
   const blas_ops& blas;
@@ -868,7 +889,150 @@ private:
 };
 
 
-struct timestepper_strang {
+struct timestepper_unconventional: timestepper {
+
+  void operator()(double tau, lr2<double>& f, lr2<double>& dtA, double* ee=nullptr, double* ee_max=nullptr) {
+    gt::start("step");
+
+    // phi 
+    blas.matmul(f.X,f.S,K);
+
+    if(__Kphi == nullptr) {
+      compute_phi(K, f.V, Kphi, Vphi);
+    } else {
+      Kphi = *__Kphi;
+      Vphi = *__Vphi;
+    }
+
+    double _ee = electric_energy(Kphi, gi, blas);
+    if(ee != nullptr)
+      *ee = _ee;
+
+    if(ee_max != nullptr) {
+      deriv_z(Vphi, dzVphi, gi);
+      *ee_max = max_norm_estimate(Kphi, dzVphi, gi, blas); 
+    }
+
+    // backup initial value
+    X0 = f.X;
+    V0 = f.V;
+
+    // compute the coefficients
+    C1 = ccoeff.compute_C1(f.V, blas);
+    C2 = ccoeff.compute_C2(f.V, Vphi, blas);
+    C3 = ccoeff.compute_C3(f.V, dtA.V, blas);
+
+    Xphi = Kphi;
+    gt::start("gs");
+    gs(Xphi, Sphi, ip_xx);
+    gt::stop("gs");
+
+    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
+    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
+
+    blas.matmul_transb(Vphi,Sphi,Lphi);
+    e = ccoeff.compute_e(D2, Lphi);
+    
+    blas.matmul_transb(dtA.V,dtA.S,LdtA);
+    eA = ccoeff.compute_eA(D3, LdtA);
+
+    // K step
+    blas.matmul(dtA.X, dtA.S, KdtA);
+    gt::start("K_step");
+    K_step(tau, K, Kphi, KdtA, C1, C2, C3, blas);
+    gt::stop("K_step");
+
+    // L step
+    gt::start("L_step");
+    blas.matmul_transb(f.V,f.S,L);
+    L_step(tau, L, e, eA);
+    gt::stop("L_step");
+
+    gt::start("gs");
+    f.X = K;
+    gs(f.X, unused, ip_xx);
+    f.V = L;
+    gs(f.V, unused, ip_zv);
+    gt::stop("gs");
+
+    gt::start("projection");
+    
+    // computer the S matrix transformed to the new basis
+    mat M({gi.r,gi.r}), N({gi.r,gi.r});
+
+    coeff(f.X, X0, gi.h_xx[0]*gi.h_xx[1], M, blas);
+    coeff(f.V, V0, gi.h_zv[0]*gi.h_zv[1], N, blas);
+
+    mat Stmp({gi.r,gi.r});
+    blas.matmul(M, f.S, Stmp);
+    blas.matmul_transb(Stmp, N, f.S);
+    gt::stop("projection");
+
+    // recompute the required coefficients (with the new basis functions)
+    C1 = ccoeff.compute_C1(f.V, blas);
+    C2 = ccoeff.compute_C2(f.V, Vphi, blas);
+    C3 = ccoeff.compute_C3(f.V, dtA.V, blas);
+
+    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
+    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
+
+    // do the S step
+    gt::start("S_step");
+    // Note that the S_step is implemented for the projector splitting which uses
+    // the negative of the rhs that we require here.
+    S_step(-tau, f.S, Sphi, dtA.S, C1, C2, C3, D2, D3);
+    gt::stop("S_step");
+
+    gt::stop("step");
+  }
+
+  timestepper_unconventional(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ip_xx(_ip_xx), ip_zv(_ip_zv), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas) {
+    D2.resize({gi.r,gi.r,gi.r});
+    D3.resize({gi.r,gi.r,gi.r});
+    e.resize({gi.N_zv[0], gi.r, gi.r});
+    eA.resize({gi.N_zv[0], gi.r, gi.r});
+    C1.resize({gi.r, gi.r});
+    C2.resize({gi.r,gi.r,gi.r});
+    C3.resize({gi.r,gi.r,gi.r});
+
+    Lphi.resize({gi.N_zv[0], gi.r});
+    LdtA.resize({gi.N_zv[0], gi.r});
+    Sphi.resize({gi.r, gi.r});
+    unused.resize({gi.r, gi.r});
+
+    K.resize({gi.dxx_mult, gi.r});
+    L.resize({gi.dzv_mult, gi.r});
+
+    Kphi.resize({gi.dxx_mult, gi.r});
+    dzVphi.resize({gi.N_zv[0], gi.r});
+    KdtA.resize({gi.dxx_mult, gi.r});
+    Xphi.resize({gi.dxx_mult, gi.r});
+    Vphi.resize({gi.N_zv[0], gi.r});
+
+    X0.resize({gi.dxx_mult, gi.r});
+    V0.resize({gi.dzv_mult, gi.r});
+  }
+
+private:
+  grid_info<2> gi;
+  const blas_ops& blas;
+  compute_coeff ccoeff;
+  PS_L_step L_step;
+  PS_K_step K_step;
+  PS_S_step S_step;
+  gram_schmidt gs;
+  scalar_potential compute_phi;
+  mat C1;
+  ten3 D2, e, eA, C2, C3, D3;
+  mat Lphi, Sphi, unused, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi, X0, V0;
+  std::function<double(double*,double*)> ip_xx, ip_zv;
+
+};
+
+
+
+
+struct timestepper_strang : timestepper {
 
   void operator()(double tau, lr2<double>& f, lr2<double>& dtA, double* ee=nullptr, double* ee_max=nullptr) {
     // phi 
@@ -1097,7 +1261,7 @@ void add_lr(double alpha, const lr2<double>& A, double beta, const lr2<double>& 
 }
 
 
-lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, vector<const double*> X0, vector<const double*> V0, mat* __Kphi=nullptr, mat* __Vphi=nullptr, lr2<double>* __dtA=nullptr) {
+lr2<double> integration(string method, double final_time, double tau, const grid_info<2>& gi, vector<const double*> X0, vector<const double*> V0, mat* __Kphi=nullptr, mat* __Vphi=nullptr, lr2<double>* __dtA=nullptr) {
 
   blas_ops blas;
   gram_schmidt gs(&blas);
@@ -1108,9 +1272,18 @@ lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, v
   std::function<double(double*,double*)> ip_zv = inner_product_from_const_weight(gi.h_zv[0]*gi.h_zv[1], gi.dzv_mult);
   initialize(f, X0, V0, ip_xx, ip_zv, blas);
 
-  timestepper timestep(gi, blas, ip_xx, ip_zv);
-  timestep.__Kphi = __Kphi;
-  timestep.__Vphi = __Vphi;
+  std::unique_ptr<timestepper> timestep;
+  if(method == "lie")
+    timestep = make_unique_ptr<timestepper_lie>(gi, blas, ip_xx, ip_zv);
+  else if(method == "unconventional")
+    timestep = make_unique_ptr<timestepper_unconventional>(gi, blas, ip_xx, ip_zv);
+  else {
+    cout << "ERROR: the method " << method << " is not valid for integration" << endl;
+    exit(1);
+  }
+
+  timestep->set_Kphi(__Kphi);
+  timestep->set_Vphi(__Vphi);
 
   vector_potential compute_A(gi, blas);
   lr2<double> dtA2(gi.r, {gi.dxx_mult, gi.N_zv[0]});
@@ -1130,8 +1303,10 @@ lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, v
   double ke0 = kinetic_energy(K, f.V, gi, blas);
 
   ofstream fs_evolution("evolution.data");
+  fs_evolution << "#PARAMETERS: final_time=" << final_time << " deltat=" << tau << " r=" << gi.r << " n=(" << gi.N_xx[0] << "," << gi.N_xx[1] << "," << gi.N_zv[0] << "," << gi.N_zv[1] << ") lim_xx=(" << gi.lim_xx[0] << "," << gi.lim_xx[1] << "," << gi.lim_xx[2] << "," << gi.lim_xx[3] << ") lim_zv=(" << gi.lim_zv[0] << "," << gi.lim_zv[1] << "," << gi.lim_zv[2] << "," << gi.lim_zv[3] << ") M_e=" << gi.M_e << " C_P=" << gi.C_P << " C_A=" << gi.C_A << endl;
   fs_evolution.precision(16);
-  double t = 0.0;
+
+    double t = 0.0;
     Index n_steps = ceil(final_time/tau);
     for(Index ts=0;ts<n_steps;ts++) {
         gt::start("timestep");
@@ -1149,7 +1324,7 @@ lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, v
           ftmp = f;
           double eps = 1e-7;
           gt::start("timeloop_step");
-          timestep(eps, ftmp, dtA);
+          timestep->operator()(eps, ftmp, dtA);
           gt::stop("timeloop_step");
 
           gt::start("timeloop_A");
@@ -1196,7 +1371,7 @@ lr2<double> integration(double final_time, double tau, const grid_info<2>& gi, v
         // do the timestep
         double ee, max_ee;
         gt::start("timeloop_step");
-        timestep(tau, f, dtA, &ee, &max_ee);
+        timestep->operator()(tau, f, dtA, &ee, &max_ee);
         gt::stop("timeloop_step");
 
         gt::start("timeloop_diagnostic");

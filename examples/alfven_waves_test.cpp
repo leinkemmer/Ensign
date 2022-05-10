@@ -176,7 +176,7 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     cout << "Error advection z (Unconventional): " << err_unconv << endl;
 
     REQUIRE( err_lie <= 3e-5 );
-    REQUIRE( err_unconv <= 1e-4 );
+    REQUIRE( err_unconv <= 3e-5 );
   }
 
   /*
