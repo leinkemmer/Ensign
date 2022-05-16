@@ -1,6 +1,7 @@
 #include <generic/kernels.hpp>
 #include <lr/lr.hpp>
 #include <generic/matrix.hpp>
+#include <curand.h>
 
 template<class T>
 std::function<T(T*,T*)> inner_product_from_weight(T* w, Index N) {
@@ -150,18 +151,25 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
 #endif
 
 
-gram_schmidt::gram_schmidt(const blas_ops* _blas) {
+gram_schmidt::gram_schmidt(const blas_ops* _blas) : gen(0) {
   blas = _blas;
 
   #ifdef __CUDACC__
-  curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
-  curandSetPseudoRandomGeneratorSeed(gen,1234);
+  if(blas->gpu) {
+    curandStatus_t status = curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
+    if(status != CURAND_STATUS_SUCCESS) {
+        cout << "ERROR: curandCreateGenerator failsed. Error code: " << status <<  endl;
+        exit(1);
+    }
+    curandSetPseudoRandomGeneratorSeed(gen,1234);
+  }
   #endif
 }
 
 gram_schmidt::~gram_schmidt() {
   #ifdef __CUDACC__
-  curandDestroyGenerator(gen);
+  if(gen)
+      curandDestroyGenerator(gen);
   #endif
 }
 

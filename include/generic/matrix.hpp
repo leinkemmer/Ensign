@@ -33,7 +33,7 @@ void transpose_inplace(multi_array<T,2>& a);
 
 struct blas_ops {
 
-  blas_ops();
+  blas_ops(bool gpu);
   ~blas_ops();
 
   /* Matrix multiplication (computes c = a b)
@@ -66,6 +66,7 @@ struct blas_ops {
   template<class T>
   void matvec_trans(const multi_array<T,2>& a, const multi_array<T,1>& b, multi_array<T,1>& c) const;
 
+  bool gpu;
   #ifdef __CUDACC__
   cublasHandle_t  handle;
   cublasHandle_t  handle_devres; // cuBLAS routines return scalar results on device

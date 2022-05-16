@@ -48,11 +48,11 @@ typedef ptrdiff_t Index;
 enum class stloc { host, device };
 
 #ifdef __CUDACC__
-  const int n_threads = 128;
+const int n_threads = 128;
 #endif
 
 #ifdef __OPENMP__
-  const int n_threads_omp = 32;
+const int n_threads_omp = 32;
 #endif
 
 

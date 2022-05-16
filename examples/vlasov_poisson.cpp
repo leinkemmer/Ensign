@@ -1239,7 +1239,7 @@ int main(int argc, char** argv){
   int nsteps_ei = 1;
   int nsteps_rk4 = 1;
 
-  blas_ops blas;
+  blas_ops blas(!CPU);
 
   // Setup the initial value
   string problem = result["problem"].as<string>();

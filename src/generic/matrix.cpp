@@ -154,21 +154,28 @@ template void transpose_inplace(multi_array<double,2>&);
 //template void transpose_inplace(multi_array<float,2>&);
 
 
-blas_ops::blas_ops() {
+blas_ops::blas_ops(bool _gpu) : gpu(_gpu), handle(0), handle_devres(0) {
   #ifdef __CUDACC__
-  cublasCreate(&handle);
+  if(gpu) {
+    cublasStatus_t status = cublasCreate(&handle);
+    if (status != CUBLAS_STATUS_SUCCESS) {
+      cout << "ERROR: cublasCreate failed. Error code: " << status << endl;
+      exit(1);
+    }
 
-
-  cublasCreate (&handle_devres);
-  cublasSetPointerMode(handle_devres, CUBLAS_POINTER_MODE_DEVICE);
+    cublasCreate (&handle_devres);
+    cublasSetPointerMode(handle_devres, CUBLAS_POINTER_MODE_DEVICE);
+  }
   #endif
 }
 
 blas_ops::~blas_ops() {
   #ifdef __CUDACC__
-  cublasDestroy(handle);
-  
-  cublasDestroy(handle_devres);
+  if(handle)
+      cublasDestroy(handle);
+ 
+  if(handle_devres)
+      cublasDestroy(handle_devres);
   #endif
 }
 
