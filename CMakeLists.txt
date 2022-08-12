@@ -85,6 +85,7 @@ else()
     UPDATE_COMMAND ""
   )
   set(OPENBLAS_LIBRARIES "${PROJECT_BINARY_DIR}/extern/OpenBLAS/opt/OpenBLAS/lib/libopenblas.a")
+  include_directories("${PROJECT_BINARY_DIR}/extern/OpenBLAS/opt/OpenBLAS/include")
 endif()
 find_package(Threads REQUIRED)
 
