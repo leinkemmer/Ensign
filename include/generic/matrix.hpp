@@ -33,7 +33,7 @@ void transpose_inplace(multi_array<T,2>& a);
 
 struct blas_ops {
 
-  blas_ops(bool gpu);
+  blas_ops(bool gpu = false);
   ~blas_ops();
 
   /* Matrix multiplication (computes c = a b)
