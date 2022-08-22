@@ -1,3 +1,4 @@
 /build*/*
 /plots/*.txt
 .DS_STORE
+.vscode
