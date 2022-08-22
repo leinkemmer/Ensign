@@ -5,7 +5,7 @@
 
 TEST_CASE( "matrix basic operations", "[matrix]" ) {
 
-  blas_ops blas;
+  blas_ops blas(true);
 
   SECTION("initializations (CPU)"){
     multi_array<double, 2> a({2,3});
