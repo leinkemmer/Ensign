@@ -155,9 +155,80 @@ TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
         else
           err = max(err, std::abs(out_truncated_full(i,j)-exact(i,j))); 
 
-    cout << "truncation error: " << err << endl;
+    cout << "add truncation error: " << err << endl;
     REQUIRE( err < 1e-10 );
 
+  }
+
+  SECTION("Multiply two low-rank representations") {
+
+    std::function<double(double*,double*)> ip = inner_product_from_const_weight(0.25, 4);
+
+    lr2<double> lr0(3,{4,4});
+    initialize(lr0, X, V, ip, ip, blas);
+
+    lr2<double> lr1(2,{4,4});
+    initialize(lr1, X2, V2, ip, ip, blas);
+
+    lr2<double> out(6,{4,4});
+    lr_mul(lr0, lr1, out, ip, ip, blas);
+
+    multi_array<double,2> lr0_full = lr0.full(blas);
+    multi_array<double,2> lr1_full = lr1.full(blas);
+    multi_array<double,2> out_full = out.full(blas);
+    multi_array<double,2> exact({4,4});
+    for(Index j=0;j<exact.shape()[1];j++)
+      for(Index i=0;i<exact.shape()[0];i++) {
+        exact(i,j) = lr0_full(i,j)*lr1_full(i,j);
+        cout << exact(i,j) - out_full(i,j) << endl;
+      }
+    
+    REQUIRE(bool(out.full(blas)==exact)); // check without truncation
+
+
+    lr2<double> out_truncated(4,{4,4});
+    lr_truncate(out, out_truncated, blas);
+    multi_array<double,2> out_truncated_full = out_truncated.full(blas);
+
+    double err = 0.0;
+    for(Index j=0;j<4;j++)
+      for(Index i=0;i<4;i++)
+        if(std::isnan(out_truncated_full(i,j))) 
+          err = std::numeric_limits<double>::infinity();
+        else
+          err = max(err, std::abs(out_truncated_full(i,j)-exact(i,j))); 
+
+    cout << "mul truncation error: " << err << endl;
+    REQUIRE( err < 1e-10 );
+  }
+
+  SECTION("Compute inner products of low-rank representations") {
+    double w = 0.25;
+    std::function<double(double*,double*)> ip = inner_product_from_const_weight(w, 4);
+
+    lr2<double> lr0(3,{4,4});
+    initialize(lr0, X, V, ip, ip, blas);
+
+    lr2<double> lr1(2,{4,4});
+    initialize(lr1, X2, V2, ip, ip, blas);
+    
+    multi_array<double,2> lr0_full = lr0.full(blas);
+    multi_array<double,2> lr1_full = lr1.full(blas);
+    double expected_ip = 0.0, expected_norm_sq = 0.0;
+    for(Index j=0;j<4;j++) {
+      for(Index i=0;i<4;i++) {
+        expected_ip += w*w*lr0_full(i,j)*lr1_full(i,j);
+        expected_norm_sq += w*w*pow(lr0_full(i,j),2);
+      }
+    }
+
+    double lr_ip = lr_inner_product(lr0, lr1, w*w, blas);
+    double norm_sq = lr_norm_sq(lr0, blas);
+
+    cout << "norm err: " << abs(expected_norm_sq-norm_sq) << endl;
+    cout << "inner product error: " << abs(expected_ip-lr_ip) << endl;
+    REQUIRE( abs(expected_norm_sq - norm_sq) < 1e-10 );
+    REQUIRE( abs(expected_ip - lr_ip) < 1e-10 );
   }
 
 }

@@ -2,6 +2,7 @@
 #include <lr/lr.hpp>
 #include <generic/matrix.hpp>
 #include <generic/timer.hpp>
+#include <lr/coefficients.hpp>
 
 #include <cstring>
 
@@ -382,6 +383,64 @@ void lr_add(T alpha, const lr2<T>& A, T beta, const lr2<T>& B,
 template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, double gamma, const lr2<double>& C, lr2<double>& out, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const blas_ops& blas);
 
 
+template<class T>
+void lr_mul(const lr2<T>& A, const lr2<T>& B, lr2<T>& out,
+            std::function<T(T*,T*)> inner_product_X,
+            std::function<T(T*,T*)> inner_product_V,
+            const blas_ops& blas) {
+
+  // check dimensions
+  if(A.size_X() != out.size_X()) {
+    cout << "ERROR in lr_mul: shape of X does not match in input A and output." << endl;
+    exit(1);
+  }
+  if(A.size_V() != out.size_V()) {
+    cout << "ERROR in lr_mul: shape of V does not match in input B and output." << endl;
+    exit(1);
+  }
+  Index r_A = A.rank();
+  Index r_B = B.rank();
+  if(r_A*r_B != out.rank()) {
+    cout << "ERROR in lr_mul: output rank does not match sum of input ranks." << endl;
+    exit(1);
+  }
+
+  gram_schmidt gs(&blas);
+
+  // construct the new X basis and orthogonalize
+  for(Index k=0;k<r_B;k++)
+    for(Index i=0;i<r_A;i++)
+      for(Index n=0;n<A.size_X();n++)
+        out.X(n, i+r_A*k) = A.X(n,i)*B.X(n,k);
+
+  multi_array<T, 2> R_X({out.rank(), out.rank()});
+  gs(out.X, R_X, inner_product_X);
+
+  // construct the new V basis and orthogonalize
+  for(Index l=0;l<r_B;l++)
+      for(Index j=0;j<r_A;j++)
+        for(Index n=0;n<A.size_V();n++)
+          out.V(n, j+r_A*l) = A.V(n,j)*B.V(n,l);
+
+    multi_array<T, 2> R_V({out.rank(), out.rank()});
+    gs(out.V, R_V, inner_product_V);
+
+    // construct S
+  for(Index k=0;k<r_B;k++)
+    for(Index i=0;i<r_A;i++)
+      for(Index l=0;l<r_B;l++)
+        for(Index j=0;j<r_A;j++)
+          out.S(i+r_A*k, j+r_A*l) = A.S(i,j)*B.S(k,l);
+
+  multi_array<T,2> tmp = out.S;
+  blas.matmul(R_X, tmp, out.S);
+    
+  tmp = out.S;
+  blas.matmul_transb(tmp, R_V, out.S);
+}
+
+template void lr_mul(const lr2<double>& A, const lr2<double>& B, lr2<double>& out, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const blas_ops& blas);
+
 
 template<class T>
 void lr_truncate(const lr2<T>& in, lr2<T>& out, const blas_ops& blas) {
@@ -404,6 +463,41 @@ void lr_truncate(const lr2<T>& in, lr2<T>& out, const blas_ops& blas) {
   for(Index j=0;j<out.rank();j++)
     for(Index i=0;i<out.rank();i++)
       out.S(i, j) = (i==j) ? sv(i) : 0.0;
+
 }
 
 template void lr_truncate(const lr2<double>& in, lr2<double>& out, const blas_ops& blas);
+
+
+template<class T>
+double lr_inner_product(const lr2<T>& A, const lr2<T>&B, T w, const blas_ops& blas) {
+  multi_array<double,2> XtX({A.rank(), B.rank()});
+  blas.matmul_transa(A.X, B.X, XtX);
+  
+  multi_array<double,2> VtV({A.rank(), B.rank()});
+  blas.matmul_transa(A.V, B.V, VtV);
+
+  multi_array<double,2> C({A.rank(), B.rank()}), D({A.rank(), B.rank()});
+  blas.matmul_transa(A.S, XtX, C);
+  blas.matmul_transb(VtV, B.S, D);
+
+  double ip = 0.0;
+  for(Index j=0;j<B.rank();j++)
+    for(Index i=0;i<A.rank();i++)
+      ip += w*C(i,j)*D(i,j);
+  return ip;
+}
+
+template double lr_inner_product(const lr2<double>& A, const lr2<double>&B, double w, const blas_ops& blas);
+
+
+template<class T>
+double lr_norm_sq(const lr2<T>& A, const blas_ops& blas) {
+  double norm_sq = 0.0;
+  for(Index j=0;j<A.rank();j++)
+    for(Index i=0;i<A.rank();i++)
+      norm_sq += pow(A.S(i,j), 2);
+  return norm_sq;
+}
+
+template double lr_norm_sq(const lr2<double>& A, const blas_ops& blas);

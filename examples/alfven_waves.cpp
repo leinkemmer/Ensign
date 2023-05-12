@@ -13,13 +13,14 @@ int main(int argc, char** argv) {
   ("r,rank", "Rank of the simulation", cxxopts::value<int>()->default_value("5"))
   ("n", "Number of grid points (as a whitespace separated list)", cxxopts::value<string>()->default_value("100 100 100 100"))
   ("omp_threads", "Number of OpenMP threads used in CPU parallelization (by default half the number of processes reported by the operating system are used)", cxxopts::value<int>()->default_value("-1"))
-  ("kx", "wavenumber in the x-direction", cxxopts::value<double>()->default_value("0.141421"))
-  ("ky", "wavenumber in the y-direction", cxxopts::value<double>()->default_value("0.141421"))
-  ("kz", "wavenumber in the z-direction", cxxopts::value<double>()->default_value("6.28318530718"))
-  ("Me", "fraction of electron to ion mass", cxxopts::value<double>()->default_value("0.000546448"))
-  ("beta", "plasma beta", cxxopts::value<double>()->default_value("0.00219"))
+  ("kx", "wavenumber in the x-direction", cxxopts::value<double>()->default_value("0.14142135623730950"))
+  ("ky", "wavenumber in the y-direction", cxxopts::value<double>()->default_value("0.14142135623730950"))
+  ("kz", "wavenumber in the z-direction", cxxopts::value<double>()->default_value("6.2831853071795865"))
+  ("Me", "fraction of electron to ion mass", cxxopts::value<double>()->default_value("0.00054644808743169399"))
+  ("betaMe", "plasma beta", cxxopts::value<double>()->default_value("4.0"))
   ("rho_i", "ion gyro/Larmor radius", cxxopts::value<double>()->default_value("1.0"))
   ("alpha", "strength of perturbation", cxxopts::value<double>()->default_value("1e-2"))
+  ("discretization", "space and time discretization used", cxxopts::value<string>()->default_value("fft"))
   ("h,help", "Help message")
   ;
   auto result = options.parse(argc, argv);
@@ -47,12 +48,25 @@ int main(int argc, char** argv) {
   double kx = result["kx"].as<double>();
   double ky = result["kx"].as<double>();
   double M_e = result["Me"].as<double>();
-  double beta = result["beta"].as<double>();
+  double betaMe = result["betaMe"].as<double>();
+  double beta = betaMe*M_e;
   double C_P = 1.0/pow(rho_i,2);
   double C_A = beta/pow(rho_i,2);
   double kpar = result["kz"].as<double>();
   double Vmax = 6.0/sqrt(M_e);
   double alpha = result["alpha"].as<double>();
+  //double impl_tol = result["impl_tol"].as<double>();
+  discretization discr;
+  string str_discr = result["discretization"].as<string>();
+  if(str_discr == "fft") {
+    discr = discretization::fft;
+  } else if(str_discr == "lw") {
+    discr = discretization::lw;
+  } else {
+    cout << "ERROR: Discretization " << str_discr << " is not known." << endl;
+    exit(1);
+  }
+
 
   Index r = result["r"].as<int>();
   mind<4> N = parse<4>(result["n"].as<string>());
@@ -61,7 +75,8 @@ int main(int argc, char** argv) {
   mfp<4> lim_xx = {0.0,2*M_PI/kx,0.0,2*M_PI/ky};
   //mfp<4> lim_zv = {0.0,2*M_PI,-Vmax,Vmax};
   mfp<4> lim_zv = {0.0,2.0*M_PI/kpar,-Vmax,Vmax};
-  grid_info<2> gi(r, N_xx, N_zv, lim_xx, lim_zv, M_e, C_P, C_A); 
+  grid_info<2> gi(r, N_xx, N_zv, lim_xx, lim_zv, M_e, C_P, C_A,discr); 
+//gi.debug_adv_vA = false; // TODO: remove
 
   double t_final = result["final_time"].as<double>();
   double deltat = result["deltat"].as<double>();

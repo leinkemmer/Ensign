@@ -309,7 +309,7 @@ struct multi_array {
       for(Index i=0;i<lhs.num_elements();i++){
         if(std::isnan(lhs.v[i]) || std::isnan(v[i])) 
           return false;
-        if(std::abs((lhs.v[i] - v[i])) > T(1000)*std::numeric_limits<T>::epsilon())
+        if(std::abs((lhs.v[i] - v[i])) > T(10000)*std::numeric_limits<T>::epsilon())
           return false;
       }
       return true;

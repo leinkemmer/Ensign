@@ -1,12 +1,5 @@
-
-// TODO: see if we can make use of the unconventional integrator here
 // TODO: GPU support
-
-// OK: use something else than Eigen for adding two lr representations
-// OK: more tests and probably tests in a different file
-// OK: Fix performance issues (RK4 has to be made more efficient I think)
-// OK: fix the things that are not compatible with OpenMP (see TODO in code)
-// OK: tests in a separate file
+// TODO: should only use a single scalar potential (see TODO)
 
 #include <lr/lr.hpp>
 #include <generic/matrix.hpp>
@@ -25,6 +18,7 @@ using mat  = multi_array<double,2>;
 using cmat  = multi_array<complex<double>,2>;
 using ten3  = multi_array<double,3>;
 using vec  = multi_array<double,1>;
+using cvec  = multi_array<complex<double>,1>;
 
 Index freq(Index k, Index n) {
   if(k < n/2)
@@ -35,19 +29,38 @@ Index freq(Index k, Index n) {
     return k-n;
 }
 
+/*
+double norm2(mat& m, const blas_ops& blas) {
+
+  multi_array<double,2> U(m);
+  multi_array<double,2> V(m);
+  multi_array<double,1> sigma({m.shape()[0]});
+  svd(m, U, V, sigma, blas);
+
+  double norm = 0.0;
+  for(Index i=0;i<m.shape()[0];i++)
+      norm += pow(sigma(i),2);
+  return sqrt(norm/double(m.shape()[0]));
+}
+*/
+
+enum class discretization { fft, lw };
+
+
 template<size_t d>
 struct grid_info {
   Index r;
   mind<d>  N_xx, N_zv;
   mfp<2*d> lim_xx, lim_zv;
   mfp<d>   h_xx, h_zv;
-  Index dxx_mult, dzv_mult, dxxh_mult;
+  Index dxx_mult, dzv_mult, dxxh_mult, dzvh_mult;
   double M_e, C_P, C_A;
+  discretization discr;
 
   bool debug_adv_z, debug_adv_v, debug_adv_vA;
 
-  grid_info(Index _r, mind<d> _N_xx, mind<d> _N_zv, mfp<2*d> _lim_xx, mfp<2*d> _lim_zv, double _M_e, double _C_P, double _C_A)
-    : r(_r), N_xx(_N_xx), N_zv(_N_zv), lim_xx(_lim_xx), lim_zv(_lim_zv), M_e(_M_e), C_P(_C_P), C_A(_C_A), debug_adv_z(true), debug_adv_v(true), debug_adv_vA(true) {
+  grid_info(Index _r, mind<d> _N_xx, mind<d> _N_zv, mfp<2*d> _lim_xx, mfp<2*d> _lim_zv, double _M_e, double _C_P, double _C_A, discretization _discr)
+    : r(_r), N_xx(_N_xx), N_zv(_N_zv), lim_xx(_lim_xx), lim_zv(_lim_zv), M_e(_M_e), C_P(_C_P), C_A(_C_A), discr(_discr), debug_adv_z(true), debug_adv_v(true), debug_adv_vA(true) {
 
     // compute h_xx and h_zv
     for(int ii = 0; ii < 2; ii++){
@@ -59,6 +72,7 @@ struct grid_info {
     dxx_mult  = N_xx[0]*N_xx[1];
     dzv_mult  = N_zv[0]*N_zv[1];
     dxxh_mult = N_xx[1]*(N_xx[0]/2 + 1);
+    dzvh_mult = N_zv[1]*(N_zv[0]/2 + 1);
   }
 
   Index lin_idx_x(mind<d> i) const {
@@ -150,58 +164,178 @@ void componentwise_mat_fourier_omp(Index r, const mind<2>& N,  func F) {
 
 
 void deriv_z(const mat& in, mat& out, const grid_info<2>& gi) {
-  if(in.shape()[0] == gi.N_zv[0] && out.shape()[0] == gi.N_zv[0]) {
-    // only depends on z
-    for(Index ir=0;ir<gi.r;ir++) {
-      for(Index iz=0;iz<gi.N_zv[0];iz++)
-        out(iz, ir) = (in((iz+1)%gi.N_zv[0], ir) - in((iz-1+gi.N_zv[0])%gi.N_zv[0], ir))/(2.0*gi.h_zv[0]);
-    }
-  } else if(in.shape()[0] == gi.N_zv[0] && out.shape()[0] != gi.N_zv[0]) {
-    // depends on both z and v
-    for(Index ir=0;ir<gi.r;ir++) {
-      for(Index iv=0;iv<gi.N_zv[1];iv++) {
+  if(gi.discr == discretization::lw) {
+    mat tmp(out); // in order to allow for in and out to be the same
+    
+    // finite differences
+    if(in.shape()[0] == gi.N_zv[0] && out.shape()[0] == gi.N_zv[0]) {
+      // only depends on z
+      for(Index ir=0;ir<gi.r;ir++) {
         for(Index iz=0;iz<gi.N_zv[0];iz++)
-          out(gi.lin_idx_v({iz,iv}), ir) = (in((iz+1)%gi.N_zv[0], ir) - in((iz-1+gi.N_zv[0])%gi.N_zv[0], ir))/(2.0*gi.h_zv[0]);
+          tmp(iz, ir) = (in((iz+1)%gi.N_zv[0], ir) - in((iz-1+gi.N_zv[0])%gi.N_zv[0], ir))/(2.0*gi.h_zv[0]);
+      }
+    } else if(in.shape()[0] == gi.N_zv[0] && out.shape()[0] != gi.N_zv[0]) {
+      // out depends on both z and v, but in does only depend on z
+      for(Index ir=0;ir<gi.r;ir++) {
+        for(Index iv=0;iv<gi.N_zv[1];iv++) {
+          for(Index iz=0;iz<gi.N_zv[0];iz++)
+            tmp(gi.lin_idx_v({iz,iv}), ir) = (in((iz+1)%gi.N_zv[0], ir) - in((iz-1+gi.N_zv[0])%gi.N_zv[0], ir))/(2.0*gi.h_zv[0]);
+        }
+      }
+    } else {
+      // both input and output depends on both z and v
+      for(Index ir=0;ir<gi.r;ir++) {
+        for(Index iv=0;iv<gi.N_zv[1];iv++) {
+          for(Index iz=0;iz<gi.N_zv[0];iz++)
+            tmp(gi.lin_idx_v({iz,iv}), ir) = (in(gi.lin_idx_v({(iz+1)%gi.N_zv[0],iv}), ir) - in(gi.lin_idx_v({(iz-1+gi.N_zv[0])%gi.N_zv[0],iv}), ir))/(2.0*gi.h_zv[0]);
+        }
       }
     }
+
+    out = tmp;
   } else {
-    // depends on both z and v
-    for(Index ir=0;ir<gi.r;ir++) {
-      for(Index iv=0;iv<gi.N_zv[1];iv++) {
-        for(Index iz=0;iz<gi.N_zv[0];iz++)
-          out(gi.lin_idx_v({iz,iv}), ir) = (in(gi.lin_idx_v({(iz+1)%gi.N_zv[0],iv}), ir) - in(gi.lin_idx_v({(iz-1+gi.N_zv[0])%gi.N_zv[0],iv}), ir))/(2.0*gi.h_zv[0]);
+
+    // FFT
+    if(in.shape()[0] == gi.N_zv[0]) {
+      cmat hat({gi.N_zv[0]/2+1, gi.r});
+      fft1d<2> fft({gi.N_zv[0]}, (mat&)in, hat);
+
+      fft.forward((mat&)in, hat);
+
+      double ncz = 1.0/double(gi.N_zv[0]);
+      for(Index ir=0;ir<gi.r;ir++) {
+        for(Index iz=0;iz<gi.N_zv[0]/2+1;iz++) {
+          complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(gi.lim_zv[1]-gi.lim_zv[0])*iz);
+          hat(iz, ir) *= lambdaz*ncz;
+        }
       }
+
+      if(out.shape()[0] == gi.N_zv[0]) {
+        // both input and output only depend on z
+        fft.backward(hat, out);
+      } else {
+        // output depends on z and v, but input only depends on z
+        mat tmp({gi.N_zv[0], gi.r});
+        fft.backward(hat, tmp);
+        for(Index ir=0;ir<gi.r;ir++) {
+          for(Index iv=0;iv<gi.N_zv[1];iv++) {
+            for(Index iz=0;iz<gi.N_zv[0];iz++)
+              out(gi.lin_idx_v({iz,iv}), ir) = tmp(iz, ir);
+          }
+        }
+      }
+    } else {
+      // both input and output depend on z and v
+      cmat hat({gi.dzvh_mult, gi.r});
+      fft2d<2> fft(gi.N_zv, (mat&)in, hat);
+
+      fft.forward((mat&)in, hat);
+
+      double nczv = 1.0/double(gi.N_zv[0]*gi.N_zv[1]);
+      componentwise_mat_fourier_omp(gi.r, gi.N_zv, [nczv,&gi,&hat](Index idx, mind<2> i, Index r) {
+        complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(gi.lim_zv[1]-gi.lim_zv[0])*i[0]);
+            
+        hat(idx, r) *= lambdaz*nczv;
+      });
+
+      fft.backward(hat, out);
     }
   }
 }
 
 void deriv_v(const mat& in, mat& out, const grid_info<2>& gi) {
-  // depends on both z and v
-  for(Index ir=0;ir<gi.r;ir++) {
-    for(Index iv=0;iv<gi.N_zv[1];iv++) {
-      for(Index iz=0;iz<gi.N_zv[0];iz++)
-        out(gi.lin_idx_v({iz,iv}), ir) = (in(gi.lin_idx_v({iz,(iv+1)%gi.N_zv[1]}), ir) - in(gi.lin_idx_v({iz, (iv-1+gi.N_zv[1])%gi.N_zv[1]}), ir))/(2.0*gi.h_zv[1]);
+  if(gi.discr == discretization::lw) {
+
+    // finite differences
+    // depends on both z and v
+    for(Index ir=0;ir<gi.r;ir++) {
+      for(Index iv=0;iv<gi.N_zv[1];iv++) {
+        for(Index iz=0;iz<gi.N_zv[0];iz++)
+          out(gi.lin_idx_v({iz,iv}), ir) = (in(gi.lin_idx_v({iz,(iv+1)%gi.N_zv[1]}), ir) - in(gi.lin_idx_v({iz, (iv-1+gi.N_zv[1])%gi.N_zv[1]}), ir))/(2.0*gi.h_zv[1]);
+      }
     }
+
+  } else {
+
+    // FFT
+    cmat hat({gi.dzvh_mult, gi.r});
+    fft2d<2> fft(gi.N_zv, (mat&)in, hat);
+
+    fft.forward((mat&)in, hat);
+
+    double nczv = 1.0/double(gi.N_zv[0]*gi.N_zv[1]);
+    componentwise_mat_fourier_omp(gi.r, gi.N_zv, [nczv,&gi,&hat](Index idx, mind<2> i, Index r) {
+      Index mult_j = freq(i[1], gi.N_zv[1]);
+      complex<double> lambdav = complex<double>(0.0,2.0*M_PI/(gi.lim_zv[3]-gi.lim_zv[2])*mult_j);
+          
+      hat(idx, r) *= lambdav*nczv;
+    });
+
+    fft.backward(hat, out);
   }
+
 }
 
 
 
 void deriv_x(const mat& in, mat& out, const grid_info<2>& gi) {
-  for(Index ir=0;ir<gi.r;ir++) {
-    for(Index ix=0;ix<gi.N_xx[0];ix++) {
-      for(Index iy=0;iy<gi.N_xx[1];iy++)
-        out(gi.lin_idx_x({ix,iy}), ir) = (in(gi.lin_idx_x({(ix+1)%gi.N_xx[0],iy}), ir) - in(gi.lin_idx_x({(ix-1+gi.N_xx[0])%gi.N_xx[0], iy}), ir))/(2.0*gi.h_xx[0]);
+  if(gi.discr == discretization::lw) {
+  
+    // centered differences
+    for(Index ir=0;ir<gi.r;ir++) {
+      for(Index ix=0;ix<gi.N_xx[0];ix++) {
+        for(Index iy=0;iy<gi.N_xx[1];iy++)
+          out(gi.lin_idx_x({ix,iy}), ir) = (in(gi.lin_idx_x({(ix+1)%gi.N_xx[0],iy}), ir) - in(gi.lin_idx_x({(ix-1+gi.N_xx[0])%gi.N_xx[0], iy}), ir))/(2.0*gi.h_xx[0]);
+      }
     }
+
+  } else {
+
+    // FFT
+    cmat hat({gi.dxxh_mult, gi.r});
+    fft2d<2> fft(gi.N_xx, (mat&)in, hat);
+
+    fft.forward((mat&)in, hat);
+
+    double ncxx = 1.0/double(gi.N_xx[0]*gi.N_xx[1]);
+    componentwise_mat_fourier_omp(gi.r, gi.N_xx, [ncxx,&gi,&hat](Index idx, mind<2> i, Index r) {
+      complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(gi.lim_xx[1]-gi.lim_xx[0])*i[0]);
+          
+      hat(idx, r) *= lambdax*ncxx;
+    });
+
+    fft.backward(hat, out);
   }
 }
 
 void deriv_y(const mat& in, mat& out, const grid_info<2>& gi) {
-  for(Index ir=0;ir<gi.r;ir++) {
-    for(Index ix=0;ix<gi.N_xx[0];ix++) {
-      for(Index iy=0;iy<gi.N_xx[1];iy++)
-        out(gi.lin_idx_x({ix,iy}), ir) = (in(gi.lin_idx_x({ix,(iy+1)%gi.N_xx[1]}), ir) - in(gi.lin_idx_x({ix, (iy-1+gi.N_xx[1])%gi.N_xx[1]}), ir))/(2.0*gi.h_xx[1]);
+  if(gi.discr == discretization::lw) {
+
+    // centered differences
+    for(Index ir=0;ir<gi.r;ir++) {
+      for(Index ix=0;ix<gi.N_xx[0];ix++) {
+        for(Index iy=0;iy<gi.N_xx[1];iy++)
+          out(gi.lin_idx_x({ix,iy}), ir) = (in(gi.lin_idx_x({ix,(iy+1)%gi.N_xx[1]}), ir) - in(gi.lin_idx_x({ix, (iy-1+gi.N_xx[1])%gi.N_xx[1]}), ir))/(2.0*gi.h_xx[1]);
+      }
     }
+
+  } else {
+
+    // FFT
+    cmat hat({gi.dxxh_mult, gi.r});
+    fft2d<2> fft(gi.N_xx, (mat&)in, hat);
+
+    fft.forward((mat&)in, hat);
+
+    double ncxx = 1.0/double(gi.N_xx[0]*gi.N_xx[1]);
+    componentwise_mat_fourier_omp(gi.r, gi.N_xx, [ncxx,&gi,&hat](Index idx, mind<2> i, Index r) {
+      Index mult_j = freq(i[1], gi.N_xx[1]);
+      complex<double> lambday = complex<double>(0.0,2.0*M_PI/(gi.lim_xx[3]-gi.lim_xx[2])*mult_j);
+          
+      hat(idx, r) *= lambday*ncxx;
+    });
+
+    fft.backward(hat, out);
   }
 }
 
@@ -458,15 +592,54 @@ struct PS_L_step {
   void operator()(double tau, mat& L, const ten3& e, const ten3& eA) {
     // Here use use a splitting scheme between the advection in z and the advection in v
 
+    vec tmp({gi.N_zv[0]});
+    cvec Lhat({gi.N_zv[0]/2+1});
+    fft1d<1> fft({gi.N_zv[0]}, tmp, Lhat);
+
+    mat M({gi.N_zv[1], gi.r});
+    mat Mtmp({gi.N_zv[1], gi.r});
+    cmat Mhat({gi.N_zv[1]/2+1, gi.r});
+    fft1d<2> fft2({gi.N_zv[1]}, M, Mhat);
+
     if(gi.debug_adv_z) {
-      // the term -v \partial_z L using a Lax-Wendroff scheme
-      componentwise_mat_omp(gi.r, gi.N_zv, [this, tau, &L](Index idx, mind<2> i, Index r) {
-        Index idx_p1 = gi.lin_idx_v({(i[0]+1)%gi.N_zv[0],i[1]});
-        Index idx_m1 = gi.lin_idx_v({(i[0]-1+gi.N_zv[0])%gi.N_zv[0],i[1]});
-        double v = gi.v(1, i[1]);
-        Ltmp(idx, r) = L(idx,r) - 0.5*tau/gi.h_zv[0]*v*(L(idx_p1, r) - L(idx_m1, r))
-                        +0.5*pow(tau,2)/pow(gi.h_zv[0],2)*pow(v,2)*(L(idx_p1,r)-2.0*L(idx,r)+L(idx_m1,r));
-      });
+
+      if(gi.discr == discretization::lw) {
+        // the term -v \partial_z L using a Lax-Wendroff scheme
+        componentwise_mat_omp(gi.r, gi.N_zv, [this, tau, &L](Index idx, mind<2> i, Index r) {
+          Index idx_p1 = gi.lin_idx_v({(i[0]+1)%gi.N_zv[0],i[1]});
+          Index idx_m1 = gi.lin_idx_v({(i[0]-1+gi.N_zv[0])%gi.N_zv[0],i[1]});
+          double v = gi.v(1, i[1]);
+          Ltmp(idx, r) = L(idx,r) - 0.5*tau/gi.h_zv[0]*v*(L(idx_p1, r) - L(idx_m1, r))
+                          +0.5*pow(tau,2)/pow(gi.h_zv[0],2)*pow(v,2)*(L(idx_p1,r)-2.0*L(idx,r)+L(idx_m1,r));
+        });
+
+      } else { // fft
+
+        // the term -v \partial_z L using FFT
+        double ncz = 1.0/double(gi.N_zv[0]);
+        for(Index ir=0;ir<gi.r;ir++) {
+          for(Index iv=0;iv<gi.N_zv[1];iv++) {
+
+            for(Index iz=0;iz<gi.N_zv[0];iz++) {
+              tmp(iz) = L(gi.lin_idx_v({iz,iv}), ir);
+            }
+
+            fft.forward((vec&)tmp, Lhat);
+
+            double v = gi.v(1, iv);
+            for(Index iz=0;iz<gi.N_zv[0]/2+1;iz++) {
+              complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(gi.lim_zv[1]-gi.lim_zv[0])*iz);
+              Lhat(iz) *= exp(-tau*lambdaz*v)*ncz;
+            }
+
+            fft.backward(Lhat, tmp);
+
+            for(Index iz=0;iz<gi.N_zv[0];iz++)
+              Ltmp(gi.lin_idx_v({iz,iv}), ir) = tmp(iz);
+          }
+        }
+      }
+
     } else {
       Ltmp = L;
     }
@@ -474,7 +647,7 @@ struct PS_L_step {
     if(gi.debug_adv_v || gi.debug_adv_vA) {
       mat ez({gi.r,gi.r}), T({gi.r, gi.r});
       vec lambda({gi.r});
-      mat M({gi.N_zv[1], gi.r}), Mout({gi.N_zv[1], gi.r});
+      mat Mout({gi.N_zv[1], gi.r});
 
       for(Index iz=0;iz<gi.N_zv[0];iz++) {
 
@@ -498,14 +671,50 @@ struct PS_L_step {
 
 
         // solve equation in diagonalized form
+        if(gi.discr == discretization::lw) {
+
+          // Lax-Wendroff scheme
+          for(Index ir=0;ir<gi.r;ir++) {
+            for(Index iv=0;iv<gi.N_zv[1];iv++) {
+              Index iv_p1 = (iv+1)%gi.N_zv[1];
+              Index iv_m1 = (iv-1+gi.N_zv[1])%gi.N_zv[1];
+              Mout(iv, ir) = M(iv, ir) - 0.5*tau/gi.h_zv[1]*lambda(ir)/gi.M_e*(M(iv_p1, ir) - M(iv_m1, ir))
+                                      + 0.5*pow(tau,2)/pow(gi.h_zv[1],2)*pow(lambda(ir)/gi.M_e,2)*(M(iv_p1,ir)-2.0*M(iv,ir)+M(iv_m1,ir));
+
+            }
+          }
+
+        } else { // fft
+
+          // FFT based scheme
+          fft2.forward(M, Mhat);
+          double ncv = 1.0/double(gi.N_zv[1]);
+          for(Index ir=0;ir<gi.r;ir++) {
+            for(Index iv=0;iv<gi.N_zv[1]/2+1;iv++) {
+                complex<double> lambdav = complex<double>(0.0,2.0*M_PI/(gi.lim_zv[3]-gi.lim_zv[2])*iv);
+                Mhat(iv, ir) *= exp(-tau*lambdav*lambda(ir)/gi.M_e)*ncv;
+              }
+          }
+          fft2.backward(Mhat, Mout);
+
+        }
+        /*
+        ofstream test("test.data");
+        for(Index iv=0;iv<gi.N_zv[1];iv++) {
+          test << gi.v(1, iv) << " " << M(iv, 1) << " " << Mtmp(iv, 1)-M(iv,1) << " " << Mout(iv, 1)-M(iv,1) << endl;
+        }
+        */
+        /*
+        double res=0.0, res2=0.0, res3=0.0;
         for(Index ir=0;ir<gi.r;ir++) {
           for(Index iv=0;iv<gi.N_zv[1];iv++) {
-            Index iv_p1 = (iv+1)%gi.N_zv[1];
-            Index iv_m1 = (iv-1+gi.N_zv[1])%gi.N_zv[1];
-            Mout(iv, ir) = M(iv, ir) - 0.5*tau/gi.h_zv[1]*lambda(ir)/gi.M_e*(M(iv_p1, ir) - M(iv_m1, ir))
-                                     + 0.5*pow(tau,2)/pow(gi.h_zv[1],2)*pow(lambda(ir)/gi.M_e,2)*(M(iv_p1,ir)-2.0*M(iv,ir)+M(iv_m1,ir));
+            res = max(res, abs(Mout(iv, ir) - M(iv, ir)));
+            res2 = max(res2, abs(Mout(iv, ir) - Mtmp(iv, ir)));
+            res3 = max(res3, abs(M(iv, ir) - Mtmp(iv, ir)));
           }
         }
+        cout << res << " " << res2 << " " << res3 << endl;*/
+
 
         // compute L from M
         for(Index ir=0;ir<gi.r;ir++) {
@@ -576,20 +785,22 @@ void integrate_mulv_v(const mat& V, mat& intV, const grid_info<2>& gi) {
 
 struct scalar_potential {
 
-  void operator()(const mat& Kf, const mat& Vf, mat& Kphi, mat& Vphi) {
+  void operator()(const mat& Kf, const mat& Vf, mat& Kphi, mat& Vphi, mat* Kmrho=nullptr) {
     // compute the basis of <V_j^f>_v
     integrate_v(Vf, intVf, gi);
     gs(intVf, intVf_R, ip_z);
 
-    // expand 1 in that basis
+    // expand 1 in th/dtA_at basis
     integrate(intVf, gi.h_zv[0], expansion_1, blas);
 
     // Construct the K for the rhs of the quasi-neutrality equation
-    componentwise_mat_omp(gi.r, gi.N_xx, [this, &Kf](Index idx, mind<2> i, Index j) {
+    componentwise_mat_omp(gi.r, gi.N_xx, [this, &Kf, &Kmrho](Index idx, mind<2> i, Index j) {
       double val = 0.0;
       for(Index k=0;k<gi.r;k++)
         val += Kf(idx, k)*intVf_R(j, k);
       Krhs(idx, j) =  gi.C_P*(expansion_1(j) - val);
+      if(Kmrho != nullptr)
+        Kmrho->operator()(idx, j) = val;
     });
 
     // Solve the system
@@ -606,7 +817,6 @@ struct scalar_potential {
       complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(gi.lim_xx[1]-gi.lim_xx[0])*i[0]);
       complex<double> lambday = complex<double>(0.0,2.0*M_PI/(gi.lim_xx[3]-gi.lim_xx[2])*mult_j);
           
-      // TODO: why is there a minus here? otherwise it does not work
       Kphihat(idx, r) *= (i[0]==0 && mult_j==0) ? 0.0 : -1.0/(pow(lambdax,2) + pow(lambday,2))*ncxx;
     });
 
@@ -700,7 +910,7 @@ struct vector_potential {
       complex<double> lambday = complex<double>(0.0,2.0*M_PI/(gi.lim_xx[3]-gi.lim_xx[2])*mult_j);
           
       // TODO: why is there a minus here? otherwise it does not work
-      KdtAhat(idx, r) *= (i[0]==0 && mult_j==0) ? 0.0 : -gi.C_A/(pow(lambdax,2) + pow(lambday,2))*ncxx;
+      KdtAhat(idx, r) *= (i[0]==0 && mult_j==0) ? 0.0 : gi.C_A/(pow(lambdax,2) + pow(lambday,2))*ncxx;
     });
 
     fft->backward(KdtAhat, KA);
@@ -1261,6 +1471,149 @@ void add_lr(double alpha, const lr2<double>& A, double beta, const lr2<double>& 
 }
 
 
+
+void integrate_mulvsq(const mat& V, mat& intV, const grid_info<2>& gi) {
+  for(Index r=0;r<gi.r;r++) {
+    for(Index iz=0;iz<gi.N_zv[0];iz++) {
+      double s = 0.0;
+      for(Index iv=0;iv<gi.N_zv[1];iv++)
+        s += pow(gi.v(1, iv),2)*V(gi.lin_idx_v({iz,iv}), r)*gi.h_zv[1];
+      intV(iz, r) = s;
+    }
+  }
+}
+
+
+struct dtA_iterative_solver {
+
+  void compute_rhs(const lr2<double>& f, const lr2<double>& E, const lr2<double>& mrho) {
+    // \partial_z \int v^2 f dv
+    int_vsq_z.X = f.X;
+    int_vsq_z.S = f.S;
+    integrate_mulvsq(f.V, int_vsq_z.V, gi);
+    deriv_z(int_vsq_z.V, int_vsq_z.V, gi);
+
+    // E (1-\rho)
+    lr_mul(E, mrho, prod, ip_xx, ip_z, blas);
+
+    // add them together and truncate
+    lr_add(gi.C_A, int_vsq_z, -gi.C_A/gi.M_e, prod, large, ip_xx, ip_z, blas);
+    lr_truncate(large, rhs, blas);
+  }
+
+  void apply_lhs(lr2<double>& dtA, const lr2<double>& mrho) {
+    // (1-rho) \partial_t A
+    lr_mul(mrho, dtA, prod, ip_xx, ip_z, blas);
+
+    // (-\partial_xx - \partial_yy) A
+    if(fft == nullptr)
+      fft = make_unique_ptr<fft2d<2>>(gi.N_xx, dtA.X, Xhat);
+
+    fft->forward(dtA.X, Xhat);
+
+    double ncxx = 1.0/double(gi.N_xx[0]*gi.N_xx[1]);
+    componentwise_mat_fourier_omp(gi.r, gi.N_xx, [this, ncxx](Index idx, mind<2> i, Index r) {
+      Index mult_j = freq(i[1], gi.N_xx[1]);
+      complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(gi.lim_xx[1]-gi.lim_xx[0])*i[0]);
+      complex<double> lambday = complex<double>(0.0,2.0*M_PI/(gi.lim_xx[3]-gi.lim_xx[2])*mult_j);
+          
+      Xhat(idx, r) *= -(pow(lambdax,2) + pow(lambday,2))*ncxx;
+    });
+
+    fft->backward(Xhat, dtA.X);
+
+    lr_add(1.0, dtA, gi.C_A/gi.M_e, prod, large, ip_xx, ip_z, blas);
+    lr_truncate(large, dtA, blas);
+  }
+
+  void operator()(lr2<double>& dtA, const lr2<double>& f, const lr2<double>& E, const lr2<double>& mrho, lr2<double>* _rhs=nullptr) {
+    if(_rhs == nullptr)
+      compute_rhs(f, E, mrho);
+    else
+      rhs = *_rhs;
+
+    Ap = dtA;
+    apply_lhs(Ap, mrho);
+
+    lr_add(1.0, rhs, -1.0, Ap, medium, ip_xx, ip_z, blas);
+    lr_truncate(medium, r, blas);
+    p = r;
+    double r_norm_sq = lr_norm_sq(r, blas);
+
+    for(Index it=0;it<200;it++) {
+      //cout << "dtA: " << lr_norm_sq(dtA, blas) << endl;
+      //cout << "dtAsingular: ";
+      //for(Index i=0;i<gi.r;i++)
+      //  cout << dtA.S(i,i) << " ";
+      //cout << endl;
+
+      Ap = p;
+      apply_lhs(Ap, mrho);
+
+/*
+      cout << "Apsingular: ";
+      for(Index i=0;i<large.rank();i++)
+        cout << large.S(i,i) << " ";
+      cout << endl;
+*/
+      double alpha = r_norm_sq / lr_inner_product(p, Ap, gi.h_xx[0]*gi.h_xx[1]*gi.h_zv[0], blas);
+      //cout << alpha << " " << r_norm_sq << " " << lr_inner_product(p, Ap, gi.h_xx[0]*gi.h_xx[1]*gi.h_zv[0], blas) << endl;
+      //cout << alpha << " " << lr_norm_sq(p, blas) << " " << lr_inner_product(p, Ap, gi.h_xx[0]*gi.h_xx[1]*gi.h_zv[0], blas) << endl;
+
+      //cout << "dtA2: " << lr_norm_sq(dtA, blas) << endl;
+      lr_add(1.0, dtA, alpha, p, medium, ip_xx, ip_z, blas);
+      lr_truncate(medium, dtA, blas);
+      //cout << "dtA3: " << lr_norm_sq(dtA, blas) << endl;
+
+
+      lr_add(1.0, r, -alpha, Ap, medium, ip_xx, ip_z, blas);
+      lr_truncate(medium, r, blas);
+
+      double r_norm_sq_new = lr_norm_sq(r, blas);
+      cout << "it: " << it << " r_norm: " << sqrt(r_norm_sq_new) << endl;
+      if(sqrt(r_norm_sq_new) < 1e-12) {
+        break;
+      }
+
+      double beta = r_norm_sq_new/r_norm_sq;
+      lr_add(1.0, r, beta, p, medium, ip_xx, ip_z, blas);
+      lr_truncate(medium, p, blas);
+
+      r_norm_sq = r_norm_sq_new;
+     /* 
+      // only to double check
+      Ap = dtA;
+      apply_lhs(Ap, mrho);
+      lr_add(1.0, rhs, -1.0, Ap, medium, ip_xx, ip_z, blas);
+      cout << "residual: " << lr_norm_sq(medium, blas) << endl;
+      */
+    }
+    //cout << dtA.S << endl;
+    //cout << dtA.V << endl;
+    //cout << dtA.X << endl;
+  }
+
+
+  dtA_iterative_solver(const grid_info<2>& _gi, const blas_ops& _blas)
+    : gi(_gi), blas(_blas), int_vsq_z(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), prod(_gi.r*_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),
+      large(_gi.r*_gi.r + _gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), rhs(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),
+      medium(2*_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),
+      r(_gi.r, {gi.dxx_mult, gi.N_zv[0]}), p(_gi.r, {gi.dxx_mult, gi.N_zv[0]}), Ap(_gi.r, {gi.dxx_mult, gi.N_zv[0]}) {
+    Xhat.resize({gi.dxxh_mult, gi.r});
+    ip_xx = inner_product_from_const_weight(gi.h_xx[0]*gi.h_xx[1], gi.dxx_mult);
+    ip_z = inner_product_from_const_weight(gi.h_zv[0], gi.N_zv[0]);
+  }
+
+  grid_info<2> gi;
+  const blas_ops& blas;
+  std::function<double(double*,double*)> ip_xx, ip_z;
+  lr2<double> int_vsq_z, prod, medium, large, rhs, r, p, Ap;
+  cmat Xhat;
+  std::unique_ptr<fft2d<2>> fft;
+};
+
+
+
 lr2<double> integration(string method, double final_time, double tau, const grid_info<2>& gi, vector<const double*> X0, vector<const double*> V0, mat* __Kphi=nullptr, mat* __Vphi=nullptr, lr2<double>* __dtA=nullptr) {
 
   blas_ops blas;
@@ -1288,16 +1641,18 @@ lr2<double> integration(string method, double final_time, double tau, const grid
   vector_potential compute_A(gi, blas);
   lr2<double> dtA2(gi.r, {gi.dxx_mult, gi.N_zv[0]});
   lr2<double> dtA_large(gi.r*3, {gi.dxx_mult, gi.N_zv[0]});
+  lr2<double> dtA_medium(gi.r*2, {gi.dxx_mult, gi.N_zv[0]});
   lr2<double> A0(gi.r, {gi.dxx_mult, gi.N_zv[0]});
   lr2<double> A1(gi.r, {gi.dxx_mult, gi.N_zv[0]});
   mat AK0({gi.dxx_mult, gi.r});
   mat K({gi.dxx_mult, gi.r});
 
   // initialize dtA by 0
-  lr2<double> dtA(gi.r, {gi.dxx_mult, gi.N_zv[0]});
+  lr2<double> dtA(gi.r, {gi.dxx_mult, gi.N_zv[0]}), E(gi.r, {gi.dxx_mult, gi.N_zv[0]}), rho(gi.r, {gi.dxx_mult, gi.N_zv[0]});
   std::function<double(double*,double*)> ip_z = inner_product_from_const_weight(gi.h_zv[0], gi.N_zv[0]);
   initialize(dtA, vector<const double*>(), vector<const double*>(), ip_xx, ip_z, blas);
-
+  dtA_iterative_solver dtA_it(gi, blas);
+  scalar_potential compute_phi(gi, blas); // TODO: there should only be one scalar potential (here is another one in timestep)
   
   blas.matmul(f.X,f.S,K);
   double ke0 = kinetic_energy(K, f.V, gi, blas);
@@ -1320,6 +1675,7 @@ lr2<double> integration(string method, double final_time, double tau, const grid
         gt::stop("timeloop_diagnostic");
 
         if(__dtA == nullptr) { // compute dtA from solution
+        /*
           // compute \partial_t A
           ftmp = f;
           double eps = 1e-7;
@@ -1335,19 +1691,75 @@ lr2<double> integration(string method, double final_time, double tau, const grid
           compute_A(ftmp, A1.X, A1.V);
           gs(A1.X, A1.S, ip_xx);
 
-/*
-          gt::start("lr_add");
-          add_lr(1.0/eps, A1, -1.0/eps, A0, dtA2, blas);
-          A0 = dtA;
-          add_lr(0.99, A0, 0.01, dtA2, dtA, blas);
-          gt::stop("lr_add");
-         */ 
+          // gt::start("lr_add");
+          // add_lr(1.0/eps, A1, -1.0/eps, A0, dtA2, blas);
+          // A0 = dtA;
+          // add_lr(0.99, A0, 0.01, dtA2, dtA, blas);
+          // gt::stop("lr_add");
+          // gt::stop("timeloop_A");
           gt::start("lr_add");
           lr_add(0.99, dtA, 0.01/eps, A1, -0.01/eps, A0, dtA_large, ip_xx, ip_z, blas);
           lr_truncate(dtA_large, dtA, blas);
           gt::stop("lr_add");
           gt::stop("timeloop_A");
-          
+*/
+
+
+          compute_A(f, A0.X, A0.V);
+          AK0 = A0.X;
+          /*
+          gs(A0.X, A0.S, ip_xx);
+          double delta = 1e10;
+          double gamma = 0.01;
+          for(Index it=0;it<num_it;it++) {
+            gt::start("timeloop_step");
+            ftmp = f;
+            timestep->operator()(tau, ftmp, dtA);
+            gt::stop("timeloop_step");
+
+            gt::start("timeloop_A");
+            compute_A(ftmp, A1.X, A1.V);
+            gs(A1.X, A1.S, ip_xx);
+            gt::stop("timeloop_A");
+
+            gt::start("lr_add");
+            lr_add(1.0-gamma, dtA, gamma/tau, A1, -gamma/tau, A0, dtA_large, ip_xx, ip_z, blas);
+            lr_truncate(dtA_large, dtA, blas);
+            gt::stop("lr_add");
+
+
+            gt::start("timeloop_A");
+            //lr_add(gamma/tau, A1, -gamma/tau, A0, dtA_medium, ip_xx, ip_z, blas);
+            lr_add(1.0/tau, A1, -1.0/tau, A0, dtA_medium, ip_xx, ip_z, blas);
+            double delta_prev = delta;
+            double norm_dtA = norm2(dtA_large.S, blas);
+            delta = norm2(dtA_medium.S, blas)/norm_dtA;
+            gt::stop("timeloop_A");
+
+            cout << "it+" << it <<  ", delta=" << delta << ", mag: " << norm_dtA << " gamma: " << gamma << endl;
+            //if(delta > delta_prev)
+            //  gamma *= 0.5;
+            //if(delta < impl_tol)
+            //  break;
+            //if(it==999) {
+            //  cout << "ERROR: dtA did not converge in 100 iterations" << endl; 
+            //  exit(1);
+            //}
+          }
+*/
+          blas.matmul(f.X,f.S,K);
+          compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
+          deriv_z(rho.V, E.V, gi);
+          for(Index j=0;j<gi.r;j++) {
+            for(Index i=0;i<gi.r;i++) {
+              rho.S(i,j) = double(i==j);
+              E.S(i,j)   = double(i==j);
+            }
+          }
+          dtA_it.operator()(dtA, f, E, rho);
+
+
+
           /*
           cout << dtA_large.size_X() << " " << dtA_large.size_V() << endl;
           mat res2 = dtA_large.full(blas);
@@ -1385,6 +1797,7 @@ lr2<double> integration(string method, double final_time, double tau, const grid
 
         t += tau;
         gt::stop("timestep");
+        cout << "time: " << gt::average("timestep") << endl;
     }
 
     cout << endl << gt::sorted_output() << endl;

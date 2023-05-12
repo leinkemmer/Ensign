@@ -3,6 +3,8 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
+
+
 TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
 
   blas_ops blas;
@@ -15,7 +17,7 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
   mind<2> N_zv = {64, 64};
   mfp<4> lim_xx = {0.0,2*M_PI,0.0,2*M_PI};
   mfp<4> lim_zv = {0.0,2*M_PI,-6.0/sqrt(M_e), 6.0/sqrt(M_e)};
-  grid_info<2> gi(r, N_xx, N_zv, lim_xx, lim_zv, M_e, C_P, C_A); 
+  grid_info<2> gi(r, N_xx, N_zv, lim_xx, lim_zv, M_e, C_P, C_A, discretization::lw); 
 
   std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(gi.h_xx[0]*gi.h_xx[1], gi.dxx_mult);
   std::function<double(double*,double*)> ip_zv = inner_product_from_const_weight(gi.h_zv[0]*gi.h_zv[1], gi.dzv_mult);
@@ -86,7 +88,9 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     mat Kphi({gi.dxx_mult,gi.r});
     mat Vphi({gi.N_zv[0],gi.r});
     scalar_potential compute_phi(gi, blas);
-    compute_phi(K, f.V, Kphi, Vphi);
+    
+    mat Kmrho({gi.dxx_mult,gi.r});
+    compute_phi(K, f.V, Kphi, Vphi, &Kmrho);
 
     mat phi({gi.dxx_mult, gi.N_zv[0]});
     blas.matmul_transb(Kphi, Vphi, phi);
@@ -135,6 +139,215 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     }
     cout << "Error scalar potential: " << err << endl;
     REQUIRE( err < 1e-13 );
+  }
+
+
+  /*
+  *  Iterative solver for the vector potential
+  */
+
+  SECTION("dtA_iterative_solver") {
+    // initialize rho
+    vec xx1({gi.dxx_mult}), xx2({gi.dxx_mult});
+    componentwise_vec_omp(gi.N_xx, [&xx1, &xx2, &gi](Index idx, array<Index,2> i) {
+      mfp<2> x  = gi.x(i);
+      xx1(idx) = 1.0;
+      xx2(idx) = cos(x[0])*cos(x[1]);
+    });
+
+    vec vv1({gi.N_zv[0]}), vv2({gi.N_zv[0]});
+    for(Index jz=0;jz<gi.N_zv[0];jz++) {
+      double z = gi.v(0, jz);
+      vv1(jz) = 1.0;
+      vv2(jz) = 0.5*cos(z);
+    }
+
+    lr2<double> rho(gi.r, {gi.dxx_mult, gi.N_zv[0]});
+    vector<const double*> X = {xx1.data(), xx2.data()};
+    vector<const double*> V = {vv1.data(), vv2.data()};
+    initialize(rho, X, V, ip_xx, ip_z, blas);
+
+    // set E to zero
+    lr2<double> E(gi.r, {gi.dxx_mult, gi.N_zv[0]});
+    memset(E.S.data(), 0, E.rank()*E.rank()*sizeof(double));
+
+    // check the rhs
+    dtA_iterative_solver dtA_it(gi, blas);
+    dtA_it.compute_rhs(f, E, rho);
+    mat dtA_full = dtA_it.rhs.full(blas);
+
+    double err = 0.0;
+    for(Index jz=0;jz<gi.N_zv[0];jz++) {
+      for(Index iy=0;iy<gi.N_xx[1];iy++) {
+        for(Index ix=0;ix<gi.N_xx[0];ix++) {
+          mfp<2> xy = gi.x({ix, iy});
+          double z = gi.v(0, jz);
+          double expected = -gi.C_A*cos(xy[0])*cos(xy[1])*sin(z)/(4.0*gi.M_e);
+          err = max(err, abs(dtA_full(ix+gi.N_xx[0]*iy,jz) - expected));
+        }
+      }
+    }
+    
+    cout << "Error dtA iterative solver rhs1: " << err << endl;
+    if(gi.discr == discretization::fft)
+      REQUIRE( err < 1e-12);
+    else
+      REQUIRE( err < 3e-3);
+
+    // initialize E with something non-zero and check rhs
+    componentwise_vec_omp(gi.N_xx, [&xx1, &xx2, &gi](Index idx, array<Index,2> i) {
+      mfp<2> x  = gi.x(i);
+      xx1(idx) = 1.0;
+      xx2(idx) = sin(x[0])*sin(x[1]);
+    });
+
+    for(Index jz=0;jz<gi.N_zv[0];jz++) {
+      double z = gi.v(0, jz);
+      vv1(jz) = 1.0;
+      vv2(jz) = 0.5*sin(z);
+    }
+    X = {xx1.data(), xx2.data()};
+    V = {vv1.data(), vv2.data()};
+    initialize(E, X, V, ip_xx, ip_z, blas);
+
+    dtA_it.compute_rhs(f, E, rho);
+    dtA_full = dtA_it.rhs.full(blas);
+    lr2<double> rhs_backup = dtA_it.rhs;
+
+    err = 0.0;
+    for(Index jz=0;jz<gi.N_zv[0];jz++) {
+      for(Index iy=0;iy<gi.N_xx[1];iy++) {
+        for(Index ix=0;ix<gi.N_xx[0];ix++) {
+          mfp<2> xy = gi.x({ix, iy});
+          double z = gi.v(0, jz);
+          double expected = -gi.C_A*cos(xy[0])*cos(xy[1])*sin(z)/(4.0*gi.M_e)
+                            -gi.C_A/gi.M_e*(1+0.5*cos(xy[0])*cos(xy[1])*cos(z))*(1+0.5*sin(xy[0])*sin(xy[1])*sin(z));
+          err = max(err, abs(dtA_full(ix+gi.N_xx[0]*iy,jz) - expected));
+        }
+      }
+    }
+    
+    cout << "Error dtA iterative solver rhs2: " << err << endl;
+    if(gi.discr == discretization::fft)
+      REQUIRE( err < 1e-12);
+    else
+      REQUIRE( err < 3e-3);
+
+    // check the lhs
+    lr2<double> lhs = E;
+    dtA_it.apply_lhs(lhs, rho);
+    mat lhs_full = lhs.full(blas);
+
+    err = 0.0;
+    for(Index jz=0;jz<gi.N_zv[0];jz++) {
+      for(Index iy=0;iy<gi.N_xx[1];iy++) {
+        for(Index ix=0;ix<gi.N_xx[0];ix++) {
+          mfp<2> xy = gi.x({ix, iy});
+          double z = gi.v(0, jz);
+          double expected = sin(xy[0])*sin(xy[1])*sin(z)
+                          + gi.C_A/gi.M_e*(1.0 + 0.5*cos(xy[0])*cos(xy[1])*cos(z))*(1.0 + 0.5*sin(xy[0])*sin(xy[1])*sin(z));
+          err = max(err, abs(lhs_full(ix+gi.N_xx[0]*iy,jz) - expected));
+        }
+      }
+    }
+
+    cout << "Error dtA iterative solver lhs: " << err << endl;
+    REQUIRE( err < 1e-12);
+
+
+    // check CG solver
+    lr2<double> dtA(gi.r, {gi.dxx_mult, gi.N_zv[0]});
+    memset(dtA.S.data(), 0, dtA.rank()*dtA.rank()*sizeof(double));
+
+    // setup the manufactured rhs
+    componentwise_vec_omp(gi.N_xx, [&xx1, &xx2, &gi](Index idx, array<Index,2> i) {
+      mfp<2> x  = gi.x(i);
+      xx1(idx) = (2.0 + gi.C_A/gi.M_e)*sin(x[0])*sin(x[1]);
+      xx2(idx) = 0.5*gi.C_A/gi.M_e*sin(x[0])*cos(x[0])*sin(x[1])*cos(x[1]);
+    });
+
+    for(Index jz=0;jz<gi.N_zv[0];jz++) {
+      double z = gi.v(0, jz);
+      vv1(jz) = sin(z);
+      vv2(jz) = cos(z)*sin(z);
+    }
+
+    lr2<double> manufactured_rhs(gi.r, {gi.dxx_mult, gi.N_zv[0]});
+    X = {xx1.data(), xx2.data()};
+    V = {vv1.data(), vv2.data()};
+    initialize(manufactured_rhs, X, V, ip_xx, ip_z, blas);
+
+
+    // setup rho = 1 + 0.5*cos(x)*cos(y)*cos(z)
+    componentwise_vec_omp(gi.N_xx, [&xx1, &xx2, &gi](Index idx, array<Index,2> i) {
+      mfp<2> x  = gi.x(i);
+      xx1(idx) = 1.0;
+      xx2(idx) = cos(x[0])*cos(x[1]);
+    });
+
+    for(Index jz=0;jz<gi.N_zv[0];jz++) {
+      double z = gi.v(0, jz);
+      vv1(jz) = 1.0;
+      vv2(jz) = 0.5*cos(z);
+    }
+
+    X = {xx1.data(), xx2.data()};
+    V = {vv1.data(), vv2.data()};
+    initialize(rho, X, V, ip_xx, ip_z, blas);
+
+
+    // run the CG iteration
+    dtA_it.operator()(dtA, f, E, rho, &manufactured_rhs);
+    dtA_full = dtA.full(blas);
+
+/*
+    componentwise_vec_omp(gi.N_xx, [&xx1, &xx2, &gi](Index idx, array<Index,2> i) {
+      mfp<2> x  = gi.x(i);
+      xx1(idx) = sin(x[0])*sin(x[1]);
+    });
+    for(Index jz=0;jz<gi.N_zv[0];jz++) {
+      double z = gi.v(0, jz);
+      vv1(jz) = sin(z);
+    }
+    X = {xx1.data()};
+    V = {vv1.data()};
+    lr2<double> sol(gi.r, {gi.dxx_mult, gi.N_zv[0]});
+    initialize(sol, X, V, ip_xx, ip_z, blas);
+
+    lr2<double> Ap = sol;
+    dtA_it.apply_lhs(Ap, rho);
+    lr_add(1.0, manufactured_rhs, -1.0, Ap, dtA_it.medium, ip_xx, ip_z, blas);
+    cout << "residual: " << lr_norm_sq(dtA_it.medium, blas) << endl;
+    mat medium_full = dtA_it.medium.full(blas);
+    mat Ap_full = Ap.full(blas);
+    mat manufactured_rhs_full = manufactured_rhs.full(blas);
+*/
+    err = 0.0;
+    //ofstream fs ("debug.txt");
+    for(Index jz=0;jz<gi.N_zv[0];jz++) {
+      for(Index iy=0;iy<gi.N_xx[1];iy++) {
+        for(Index ix=0;ix<gi.N_xx[0];ix++) {
+          mfp<2> xy = gi.x({ix, iy});
+          double z = gi.v(0, jz);
+          double expected = sin(xy[0])*sin(xy[1])*sin(z);
+          err = max(err, abs(dtA_full(ix+gi.N_xx[0]*iy,jz) - expected));
+
+          //if(abs(dtA_full(ix+gi.N_xx[0]*iy,jz) - expected) > 0.05)
+          //  cout << xy[0] << " " << xy[1] << " " << z << " " << dtA_full(ix+gi.N_xx[0]*iy,jz) << " " << expected << endl;
+
+          /*        
+          if(jz==gi.N_zv[0]/5 && iy==gi.N_xx[0]/5)
+            fs << xy[0] << " " << expected << " " << dtA_full(ix+gi.N_xx[0]*iy,jz) << " " << medium_full(ix+gi.N_xx[0]*iy,jz) << " " << Ap_full(ix+gi.N_xx[0]*iy,jz) << " " << manufactured_rhs_full(ix+gi.N_xx[0]*iy,jz) << endl;
+            */
+        }
+      }
+    }
+
+    //cout << dtA.S << endl;
+    //cout << dtA.V << endl;
+    //cout << dtA.X << endl;
+    cout << "Error dtA iterative solver CG: " << err << endl;
+    REQUIRE( err < 5e-8 );
   }
 
 

@@ -708,12 +708,14 @@ void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_arr
   int m_V = V.shape()[0];
   #endif
 
+  multi_array<double,2> input_copy = input; // Lapack overwrites the input data
+
   vector<double> work({1});
-  dgesvd_(&mode, &mode, &m, &n, input.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &work_query, &info);
+  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &work_query, &info);
 
   size = work[0];
   work.resize({size});
-  dgesvd_(&mode, &mode, &m, &n, input.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &size, &info);
+  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &size, &info);
 
   // lapack actually computes V^T and not V
   transpose_inplace(V);
