@@ -311,7 +311,7 @@ void lr_add(vector<const lr2<T>*> A, const vector<T>& alpha, lr2<T>& out,
   // copy elements of X in out.V and orthogonalize
   {
     Index offset = 0;
-    for(Index k=0;k<A.size();k++) {
+    for(Index k=0;k<(Index)A.size();k++) {
       Index size = A[k]->size_X()*A[k]->rank();
       std::memcpy(out.X.data()+offset, A[k]->X.data(), sizeof(T)*size);
       offset += size;
@@ -324,7 +324,7 @@ void lr_add(vector<const lr2<T>*> A, const vector<T>& alpha, lr2<T>& out,
   // copy elements of V in out.V and orthogonalize
   {
     Index offset = 0;
-    for(Index k=0;k<A.size();k++) {
+    for(Index k=0;k<(Index)A.size();k++) {
       Index size = A[k]->size_V()*A[k]->rank();
       std::memcpy(out.V.data()+offset, A[k]->V.data(), sizeof(T)*size);
       offset += size;
@@ -338,7 +338,7 @@ void lr_add(vector<const lr2<T>*> A, const vector<T>& alpha, lr2<T>& out,
   {
     std::fill(out.S.begin(), out.S.end(), 0.0);
     Index offset = 0;
-    for(Index k=0;k<A.size();k++) {
+    for(Index k=0;k<(Index)A.size();k++) {
       Index r_k = A[k]->rank();
 
       for(Index j=0;j<r_k;j++)

@@ -21,6 +21,8 @@ int main(int argc, char** argv) {
   ("rho_i", "ion gyro/Larmor radius", cxxopts::value<double>()->default_value("1.0"))
   ("alpha", "strength of perturbation", cxxopts::value<double>()->default_value("1e-2"))
   ("discretization", "space and time discretization used", cxxopts::value<string>()->default_value("fft"))
+  ("time_adaptive", "adaptive step size control", cxxopts::value<bool>()->default_value("false"))
+  ("time_tol", "tolerance for time adaptivity", cxxopts::value<double>()->default_value("1e-5"))
   ("h,help", "Help message")
   ;
   auto result = options.parse(argc, argv);
@@ -55,7 +57,6 @@ int main(int argc, char** argv) {
   double kpar = result["kz"].as<double>();
   double Vmax = 6.0/sqrt(M_e);
   double alpha = result["alpha"].as<double>();
-  //double impl_tol = result["impl_tol"].as<double>();
   discretization discr;
   string str_discr = result["discretization"].as<string>();
   if(str_discr == "fft") {
@@ -77,6 +78,8 @@ int main(int argc, char** argv) {
   mfp<4> lim_zv = {0.0,2.0*M_PI/kpar,-Vmax,Vmax};
   grid_info<2> gi(r, N_xx, N_zv, lim_xx, lim_zv, M_e, C_P, C_A,discr); 
 //gi.debug_adv_vA = false; // TODO: remove
+  bool   time_adaptive = result["time_adaptive"].as<bool>();
+  double time_tol = result["time_tol"].as<double>();
 
   double t_final = result["final_time"].as<double>();
   double deltat = result["deltat"].as<double>();
@@ -101,6 +104,7 @@ int main(int argc, char** argv) {
   V.push_back(vv1.begin());
   V.push_back(vv2.begin());
 
-  integration(method, t_final, deltat, gi, X, V);
+  integrator integrate(method, t_final, deltat, time_adaptive, time_tol, gi, X, V);
+  integrate.run();
 }
 

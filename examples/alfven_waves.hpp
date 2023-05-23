@@ -772,7 +772,6 @@ void integrate_mulv_v(const mat& V, mat& intV, const grid_info<2>& gi) {
 
   for(Index r=0;r<gi.r;r++) {
     for(Index iz=0;iz<gi.N_zv[0];iz++) {
-      double s = 0.0;
       for(Index iv=0;iv<gi.N_zv[1];iv++)
         intV(iz, r) += -gi.v(1, iv)*V(gi.lin_idx_v({iz,iv}), r)*gi.h_zv[1];
 
@@ -1059,7 +1058,7 @@ struct timestepper_lie : timestepper {
     gt::stop("step");
   }
 
-  timestepper_lie(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ip_xx(_ip_xx), ip_zv(_ip_zv), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas){
+  timestepper_lie(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv){
     D2.resize({gi.r,gi.r,gi.r});
     D3.resize({gi.r,gi.r,gi.r});
     e.resize({gi.N_zv[0], gi.r, gi.r});
@@ -1196,7 +1195,8 @@ struct timestepper_unconventional: timestepper {
     gt::stop("step");
   }
 
-  timestepper_unconventional(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ip_xx(_ip_xx), ip_zv(_ip_zv), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas) {
+
+  timestepper_unconventional(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv) {
     D2.resize({gi.r,gi.r,gi.r});
     D3.resize({gi.r,gi.r,gi.r});
     e.resize({gi.N_zv[0], gi.r, gi.r});
@@ -1307,7 +1307,8 @@ struct timestepper_strang : timestepper {
 
   }
 
-  timestepper_strang(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ip_xx(_ip_xx), ip_zv(_ip_zv), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), __Kphi(nullptr), __Vphi(nullptr) {
+  timestepper_strang(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) 
+    : __Kphi(nullptr), __Vphi(nullptr), gi(_gi), blas(_blas), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv) {
     D2.resize({gi.r,gi.r,gi.r});
     D3.resize({gi.r,gi.r,gi.r});
     e.resize({gi.N_zv[0], gi.r, gi.r});
@@ -1596,8 +1597,8 @@ struct dtA_iterative_solver {
 
   dtA_iterative_solver(const grid_info<2>& _gi, const blas_ops& _blas)
     : gi(_gi), blas(_blas), int_vsq_z(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), prod(_gi.r*_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),
-      large(_gi.r*_gi.r + _gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), rhs(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),
-      medium(2*_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),
+      medium(2*_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), large(_gi.r*_gi.r + _gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),
+      rhs(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),
       r(_gi.r, {gi.dxx_mult, gi.N_zv[0]}), p(_gi.r, {gi.dxx_mult, gi.N_zv[0]}), Ap(_gi.r, {gi.dxx_mult, gi.N_zv[0]}) {
     Xhat.resize({gi.dxxh_mult, gi.r});
     ip_xx = inner_product_from_const_weight(gi.h_xx[0]*gi.h_xx[1], gi.dxx_mult);
@@ -1613,189 +1614,108 @@ struct dtA_iterative_solver {
 };
 
 
+struct integrator {
 
-lr2<double> integration(string method, double final_time, double tau, const grid_info<2>& gi, vector<const double*> X0, vector<const double*> V0, mat* __Kphi=nullptr, mat* __Vphi=nullptr, lr2<double>* __dtA=nullptr) {
+  void step(double tau, lr2<double>& f, double* ee, double* max_ee, bool keep_ak0=false) {
+    if(__dtA == nullptr) { // compute dtA from solution
+      compute_A(f, A0.X, A0.V);
+      if(keep_ak0)
+        AK0 = A0.X;
+      
+      blas.matmul(f.X,f.S,K);
+      compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
+      deriv_z(rho.V, E.V, gi);
+      for(Index j=0;j<gi.r;j++) {
+        for(Index i=0;i<gi.r;i++) {
+          rho.S(i,j) = double(i==j);
+          E.S(i,j)   = double(i==j);
+        }
+      }
+      dtA_it.operator()(dtA, f, E, rho);
 
-  blas_ops blas;
-  gram_schmidt gs(&blas);
+    } else { // use the specified dtA (used for testing)
+      dtA = *__dtA;
+    }
 
-  lr2<double> f(gi.r, {gi.dxx_mult, gi.dzv_mult});
-  lr2<double> ftmp(gi.r, {gi.dxx_mult, gi.dzv_mult});
-  std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(gi.h_xx[0]*gi.h_xx[1], gi.dxx_mult);
-  std::function<double(double*,double*)> ip_zv = inner_product_from_const_weight(gi.h_zv[0]*gi.h_zv[1], gi.dzv_mult);
-  initialize(f, X0, V0, ip_xx, ip_zv, blas);
-
-  std::unique_ptr<timestepper> timestep;
-  if(method == "lie")
-    timestep = make_unique_ptr<timestepper_lie>(gi, blas, ip_xx, ip_zv);
-  else if(method == "unconventional")
-    timestep = make_unique_ptr<timestepper_unconventional>(gi, blas, ip_xx, ip_zv);
-  else {
-    cout << "ERROR: the method " << method << " is not valid for integration" << endl;
-    exit(1);
+    // do the timestep
+    gt::start("timeloop_step");
+    timestep->operator()(tau, f, dtA, ee, max_ee);
+    gt::stop("timeloop_step");
   }
 
-  timestep->set_Kphi(__Kphi);
-  timestep->set_Vphi(__Vphi);
+  double compute_ee(lr2<double>& f) {
+    blas.matmul(f.X,f.S,K);
+    compute_phi(K, f.V, Kphi, Vphi);
+    return electric_energy(Kphi, gi, blas);
+  }
 
-  vector_potential compute_A(gi, blas);
-  lr2<double> dtA2(gi.r, {gi.dxx_mult, gi.N_zv[0]});
-  lr2<double> dtA_large(gi.r*3, {gi.dxx_mult, gi.N_zv[0]});
-  lr2<double> dtA_medium(gi.r*2, {gi.dxx_mult, gi.N_zv[0]});
-  lr2<double> A0(gi.r, {gi.dxx_mult, gi.N_zv[0]});
-  lr2<double> A1(gi.r, {gi.dxx_mult, gi.N_zv[0]});
-  mat AK0({gi.dxx_mult, gi.r});
-  mat K({gi.dxx_mult, gi.r});
+  lr2<double> run() {
 
-  // initialize dtA by 0
-  lr2<double> dtA(gi.r, {gi.dxx_mult, gi.N_zv[0]}), E(gi.r, {gi.dxx_mult, gi.N_zv[0]}), rho(gi.r, {gi.dxx_mult, gi.N_zv[0]});
-  std::function<double(double*,double*)> ip_z = inner_product_from_const_weight(gi.h_zv[0], gi.N_zv[0]);
-  initialize(dtA, vector<const double*>(), vector<const double*>(), ip_xx, ip_z, blas);
-  dtA_iterative_solver dtA_it(gi, blas);
-  scalar_potential compute_phi(gi, blas); // TODO: there should only be one scalar potential (here is another one in timestep)
-  
-  blas.matmul(f.X,f.S,K);
-  double ke0 = kinetic_energy(K, f.V, gi, blas);
+    blas.matmul(f.X,f.S,K);
+    double ke0 = kinetic_energy(K, f.V, gi, blas);
 
-  ofstream fs_evolution("evolution.data");
-  fs_evolution << "#PARAMETERS: final_time=" << final_time << " deltat=" << tau << " r=" << gi.r << " n=(" << gi.N_xx[0] << "," << gi.N_xx[1] << "," << gi.N_zv[0] << "," << gi.N_zv[1] << ") lim_xx=(" << gi.lim_xx[0] << "," << gi.lim_xx[1] << "," << gi.lim_xx[2] << "," << gi.lim_xx[3] << ") lim_zv=(" << gi.lim_zv[0] << "," << gi.lim_zv[1] << "," << gi.lim_zv[2] << "," << gi.lim_zv[3] << ") M_e=" << gi.M_e << " C_P=" << gi.C_P << " C_A=" << gi.C_A << endl;
-  fs_evolution.precision(16);
+    ofstream fs_evolution("evolution.data");
+    fs_evolution << "#PARAMETERS: final_time=" << final_time << " deltat=" << tau << " r=" << gi.r << " n=(" << gi.N_xx[0] << "," << gi.N_xx[1] << "," << gi.N_zv[0] << "," << gi.N_zv[1] << ") lim_xx=(" << gi.lim_xx[0] << "," << gi.lim_xx[1] << "," << gi.lim_xx[2] << "," << gi.lim_xx[3] << ") lim_zv=(" << gi.lim_zv[0] << "," << gi.lim_zv[1] << "," << gi.lim_zv[2] << "," << gi.lim_zv[3] << ") M_e=" << gi.M_e << " C_P=" << gi.C_P << " C_A=" << gi.C_A << endl;
+    fs_evolution.precision(16);
 
     double t = 0.0;
-    Index n_steps = ceil(final_time/tau);
-    for(Index ts=0;ts<n_steps;ts++) {
+    bool final_step = false;
+    while(t<final_time && !final_step) {
         gt::start("timestep");
 
-        if(final_time - t < tau)
-        tau = final_time - t;
+        if(final_time - t < tau) {
+          tau = final_time - t;
+          final_step = true;
+        }
 
         gt::start("timeloop_diagnostic");
         blas.matmul(f.X,f.S,K);
         double ke = kinetic_energy(K, f.V, gi, blas);
         gt::stop("timeloop_diagnostic");
 
-        if(__dtA == nullptr) { // compute dtA from solution
-        /*
-          // compute \partial_t A
-          ftmp = f;
-          double eps = 1e-7;
-          gt::start("timeloop_step");
-          timestep->operator()(eps, ftmp, dtA);
-          gt::stop("timeloop_step");
-
-          gt::start("timeloop_A");
-          compute_A(f, A0.X, A0.V);
-          AK0 = A0.X;
-          gs(A0.X, A0.S, ip_xx);
-
-          compute_A(ftmp, A1.X, A1.V);
-          gs(A1.X, A1.S, ip_xx);
-
-          // gt::start("lr_add");
-          // add_lr(1.0/eps, A1, -1.0/eps, A0, dtA2, blas);
-          // A0 = dtA;
-          // add_lr(0.99, A0, 0.01, dtA2, dtA, blas);
-          // gt::stop("lr_add");
-          // gt::stop("timeloop_A");
-          gt::start("lr_add");
-          lr_add(0.99, dtA, 0.01/eps, A1, -0.01/eps, A0, dtA_large, ip_xx, ip_z, blas);
-          lr_truncate(dtA_large, dtA, blas);
-          gt::stop("lr_add");
-          gt::stop("timeloop_A");
-*/
-
-
-          compute_A(f, A0.X, A0.V);
-          AK0 = A0.X;
-          /*
-          gs(A0.X, A0.S, ip_xx);
-          double delta = 1e10;
-          double gamma = 0.01;
-          for(Index it=0;it<num_it;it++) {
-            gt::start("timeloop_step");
-            ftmp = f;
-            timestep->operator()(tau, ftmp, dtA);
-            gt::stop("timeloop_step");
-
-            gt::start("timeloop_A");
-            compute_A(ftmp, A1.X, A1.V);
-            gs(A1.X, A1.S, ip_xx);
-            gt::stop("timeloop_A");
-
-            gt::start("lr_add");
-            lr_add(1.0-gamma, dtA, gamma/tau, A1, -gamma/tau, A0, dtA_large, ip_xx, ip_z, blas);
-            lr_truncate(dtA_large, dtA, blas);
-            gt::stop("lr_add");
-
-
-            gt::start("timeloop_A");
-            //lr_add(gamma/tau, A1, -gamma/tau, A0, dtA_medium, ip_xx, ip_z, blas);
-            lr_add(1.0/tau, A1, -1.0/tau, A0, dtA_medium, ip_xx, ip_z, blas);
-            double delta_prev = delta;
-            double norm_dtA = norm2(dtA_large.S, blas);
-            delta = norm2(dtA_medium.S, blas)/norm_dtA;
-            gt::stop("timeloop_A");
-
-            cout << "it+" << it <<  ", delta=" << delta << ", mag: " << norm_dtA << " gamma: " << gamma << endl;
-            //if(delta > delta_prev)
-            //  gamma *= 0.5;
-            //if(delta < impl_tol)
-            //  break;
-            //if(it==999) {
-            //  cout << "ERROR: dtA did not converge in 100 iterations" << endl; 
-            //  exit(1);
-            //}
-          }
-*/
-          blas.matmul(f.X,f.S,K);
-          compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
-          deriv_z(rho.V, E.V, gi);
-          for(Index j=0;j<gi.r;j++) {
-            for(Index i=0;i<gi.r;i++) {
-              rho.S(i,j) = double(i==j);
-              E.S(i,j)   = double(i==j);
-            }
-          }
-          dtA_it.operator()(dtA, f, E, rho);
-
-
-
-          /*
-          cout << dtA_large.size_X() << " " << dtA_large.size_V() << endl;
-          mat res2 = dtA_large.full(blas);
-          double err = 0.0;
-          for(Index j=0;j<res2.shape()[1];j++)
-          for(Index i=0;i<res2.shape()[0];i++) {
-            double val = abs(res2(i,j));
-            if(std::isnan(val)) 
-              err = std::numeric_limits<double>::infinity();
-            else
-              err = max(err, val);
-          }
-          cout << "ERROR: " << err << endl;
-          //exit(1);
-          */
-        } else { // use the specified dtA (used for testing)
-          dtA = *__dtA;
-        }
-
-
-        // do the timestep
         double ee, max_ee;
-        gt::start("timeloop_step");
-        timestep->operator()(tau, f, dtA, &ee, &max_ee);
-        gt::stop("timeloop_step");
+        double tau_new=tau;
+        if(!time_adaptive) {
+          step(tau, f, &ee, &max_ee);
+        } else {
+          ftmp2 = f;
+
+          ftmp = f;
+          double ee1, max_ee1;
+          step(tau, ftmp, &ee1, &max_ee1, true);
+          double ee_tau = compute_ee(ftmp);
+          
+          step(0.5*tau, f, &ee, &max_ee);
+          step(0.5*tau, f, &ee1, &max_ee);
+          double ee_tauhalf = compute_ee(f);
+
+          double err = abs(ee_tau-ee_tauhalf)/3.0/time_tol;
+          if(err < 1.0) {
+            // accept the step and adjust tau
+            tau_new = 0.8*tau*pow(1.0/err, 0.5);
+            cout << "tau: " << tau << " " << tau_new << " " << ee1-ee << endl;
+          } else {
+            // reject the step
+            f = ftmp2;
+            tau = std::min(0.8*tau*pow(1.0/err, 0.5), 0.25*tau);
+            cout << "step rejected " << tau << endl;
+            continue;
+          }
+        }
 
         gt::start("timeloop_diagnostic");
         double me = magnetic_energy(AK0, gi, blas);
         blas.matmul(dtA.X, dtA.S, AK0);
         double max_dtA = max_norm_estimate(AK0, dtA.V, gi, blas);
-        fs_evolution << t << "\t" << ee << "\t" << me << "\t" << ke << "\t" << ke0 << "\t" << max_ee<< "\t" << max_dtA << endl;
+        fs_evolution << t << "\t" << ee << "\t" << me << "\t" << ke << "\t" << ke0 << "\t" << max_ee<< "\t" << max_dtA << " " << tau << endl;
         cout << "\rt=" << t;
         cout.flush();
         gt::stop("timeloop_diagnostic");
 
         t += tau;
+        if(time_adaptive)
+          tau = tau_new;
+
         gt::stop("timestep");
         cout << "time: " << gt::average("timestep") << endl;
     }
@@ -1803,4 +1723,65 @@ lr2<double> integration(string method, double final_time, double tau, const grid
     cout << endl << gt::sorted_output() << endl;
 
     return f;
-}
+  }
+
+  integrator(string method, double _final_time, double _tau, bool _time_adaptive, double _time_tol, const grid_info<2>& _gi, vector<const double*> X0, vector<const double*> V0, mat* __Kphi=nullptr, mat* __Vphi=nullptr, lr2<double>* ___dtA=nullptr)
+    :  final_time(_final_time), tau(_tau), time_adaptive(_time_adaptive), time_tol(_time_tol), gi(_gi), gs(&blas),
+      f(_gi.r, {_gi.dxx_mult, _gi.dzv_mult}),
+      ftmp(_gi.r, {_gi.dxx_mult, _gi.dzv_mult}),
+      ftmp2(_gi.r, {_gi.dxx_mult, _gi.dzv_mult}),
+      dtA2(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),
+      dtA_large(_gi.r*3, {_gi.dxx_mult, _gi.N_zv[0]}),
+      dtA_medium(_gi.r*2, {_gi.dxx_mult, _gi.N_zv[0]}),
+      A0(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),
+      A1(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),
+      dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),
+      E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),
+      rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),
+      AK0({_gi.dxx_mult, _gi.r}),
+      K({_gi.dxx_mult, _gi.r}),
+      Kphi({_gi.dxx_mult, _gi.r}),
+      Vphi({gi.N_zv[0], _gi.r}),
+      compute_A(_gi, blas),
+      dtA_it(_gi, blas),
+      compute_phi(_gi, blas),
+      __dtA(___dtA) {
+    
+    ip_xx = inner_product_from_const_weight(gi.h_xx[0]*gi.h_xx[1], gi.dxx_mult);
+    ip_zv = inner_product_from_const_weight(gi.h_zv[0]*gi.h_zv[1], gi.dzv_mult);
+    
+    initialize(f, X0, V0, ip_xx, ip_zv, blas);
+
+    if(method == "lie")
+      timestep = make_unique_ptr<timestepper_lie>(gi, blas, ip_xx, ip_zv);
+    else if(method == "unconventional")
+      timestep = make_unique_ptr<timestepper_unconventional>(gi, blas, ip_xx, ip_zv);
+    else {
+      cout << "ERROR: the method " << method << " is not valid for integration" << endl;
+      exit(1);
+    }
+
+    timestep->set_Kphi(__Kphi);
+    timestep->set_Vphi(__Vphi);
+
+    // initialize dtA by 0
+    ip_z = inner_product_from_const_weight(gi.h_zv[0], gi.N_zv[0]);
+    initialize(dtA, vector<const double*>(), vector<const double*>(), ip_xx, ip_z, blas);
+  }
+
+  double final_time, tau;
+  bool time_adaptive;
+  double time_tol;
+  blas_ops blas;
+  grid_info<2> gi;
+  gram_schmidt gs;
+  lr2<double> f, ftmp, ftmp2, dtA2, dtA_large, dtA_medium, A0, A1, dtA, E, rho;
+  mat AK0, K, Kphi, Vphi;
+  std::function<double(double*,double*)> ip_xx, ip_zv, ip_z;
+  std::unique_ptr<timestepper> timestep;
+  vector_potential compute_A;
+  dtA_iterative_solver dtA_it;
+  scalar_potential compute_phi;
+  lr2<double>* __dtA;
+
+};

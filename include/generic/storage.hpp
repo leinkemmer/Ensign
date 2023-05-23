@@ -10,7 +10,7 @@ struct multi_array {
   T* v;
   stloc sl;
 
-  multi_array(stloc _sl=stloc::host) : sl(_sl), v(nullptr) {
+  multi_array(stloc _sl=stloc::host) : v(nullptr), sl(_sl) {
     fill(e.begin(), e.end(), 0);
   }
 

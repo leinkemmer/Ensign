@@ -362,10 +362,12 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     double t_final = 0.1;
 
 
-    lr2<double> f_final = integration("lie", t_final, 1e-3, gi, X, V); 
+    integrator integrate("lie", t_final, 1e-3, false, 0, gi, X, V);
+    lr2<double> f_final = integrate.run();
     mat f_full = f_final.full(blas);
 
-    lr2<double> f_unconv_final = integration("unconventional", t_final, 1e-3, gi, X, V); 
+    integrator integrate_unconv("unconventional", t_final, 1e-3, false, 0, gi, X, V);
+    lr2<double> f_unconv_final = integrate_unconv.run(); 
     mat f_unconv_full = f_unconv_final.full(blas);
     
     double err_lie = 0.0, err_unconv = 0.0;
@@ -419,10 +421,13 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     
     double t_final = 0.2;
 
-    lr2<double> f_final = integration("lie", t_final, 1e-2, gi, X, V, &Kphi, &Vphi); 
+    integrator integrate("lie", t_final, 1e-2, false, 0, gi, X, V, &Kphi, &Vphi);
+    lr2<double> f_final = integrate.run();
     mat f_full = f_final.full(blas);
     
-    lr2<double> f_final_unconv = integration("unconventional", t_final, 1e-2, gi, X, V, &Kphi, &Vphi); 
+
+    integrator integrate_unconv("unconventional", t_final, 1e-2, false, 0, gi, X, V, &Kphi, &Vphi);
+    lr2<double> f_final_unconv = integrate_unconv.run();
     mat f_unconv_full = f_final_unconv.full(blas);
 
     double err_lie = 0.0, err_unconv = 0.0;
@@ -480,10 +485,12 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     double t_final = 1e-2;
 
 
-    lr2<double> f_unconv_final = integration("unconventional", t_final, 1e-4, gi, X, V, nullptr, nullptr, &dtA); 
+    integrator integration("unconventional", t_final, 1e-4, false, 0, gi, X, V, nullptr, nullptr, &dtA); 
+    lr2<double> f_unconv_final = integration.run();
     mat f_unconv_full = f_unconv_final.full(blas);
 
-    lr2<double> f_final = integration("lie", t_final, 1e-4, gi, X, V, nullptr, nullptr, &dtA); 
+    integrator integration_lie("lie", t_final, 1e-4, false, 0, gi, X, V, nullptr, nullptr, &dtA); 
+    lr2<double> f_final = integration_lie.run();
     mat f_full = f_final.full(blas);
     
 
