@@ -842,6 +842,37 @@ private:
   std::function<double(double*,double*)> ip_z;
 };
 
+
+double mass(const mat& K, const mat& V, const grid_info<2>& gi, const blas_ops& blas) {
+  vec intK({gi.r});
+  integrate(K, gi.h_xx[0]*gi.h_xx[1], intK, blas);
+
+  vec intV({gi.r});
+  integrate(V, gi.h_zv[0]*gi.h_zv[1], intV, blas);
+
+  double val = 0.0;
+  for(Index i=0;i<gi.r;i++)
+    val += intK(i)*intV(i);
+  return val;
+}
+
+double momentum(const mat& K, const mat& V, const grid_info<2>& gi, const blas_ops& blas) {
+  vec intK({gi.r});
+  integrate(K, gi.h_xx[0]*gi.h_xx[1], intK, blas);
+
+  vec intvV({gi.r});
+  mat vV({gi.dzv_mult, gi.r});
+  componentwise_mat_omp(gi.r, gi.N_zv, [&vV, &V, &gi](Index idx, mind<2> i, Index r) {
+    vV(idx, r) = gi.v(1,i[1])*V(idx, r);
+  });
+  integrate(vV, gi.h_zv[0]*gi.h_zv[1], intvV, blas);
+
+  double val = 0.0;
+  for(Index i=0;i<gi.r;i++)
+    val += intK(i)*intvV(i);
+  return val;
+}
+
 double kinetic_energy(const mat& K, const mat& V, const grid_info<2>& gi, const blas_ops&blas) {
   vec intK({gi.r});
   integrate(K, gi.h_xx[0]*gi.h_xx[1], intK, blas);
@@ -860,7 +891,7 @@ double kinetic_energy(const mat& K, const mat& V, const grid_info<2>& gi, const 
 }
 
 double electric_energy(const mat& Kphi, const grid_info<2>& gi, const blas_ops& blas) {
-  // TODO: this is inefficient
+  // TODO: this might be inefficient
 
   mat dx({gi.r,gi.r}), dy({gi.r,gi.r});
 
@@ -1671,12 +1702,14 @@ struct integrator {
         gt::start("timeloop_diagnostic");
         blas.matmul(f.X,f.S,K);
         double ke = kinetic_energy(K, f.V, gi, blas);
+        double m = mass(K, f.V, gi, blas);
+        double mom = momentum(K, f.V, gi, blas);
         gt::stop("timeloop_diagnostic");
 
         double ee, max_ee;
         double tau_new=tau;
         if(!time_adaptive) {
-          step(tau, f, &ee, &max_ee);
+          step(tau, f, &ee, &max_ee, true);
         } else {
           ftmp2 = f;
 
@@ -1707,7 +1740,7 @@ struct integrator {
         double me = magnetic_energy(AK0, gi, blas);
         blas.matmul(dtA.X, dtA.S, AK0);
         double max_dtA = max_norm_estimate(AK0, dtA.V, gi, blas);
-        fs_evolution << t << "\t" << ee << "\t" << me << "\t" << ke << "\t" << ke0 << "\t" << max_ee<< "\t" << max_dtA << " " << tau << endl;
+        fs_evolution << t << "\t" << ee << "\t" << me << "\t" << ke << "\t" << ke0 << "\t" << m << "\t" << mom << "\t" << max_ee<< "\t" << max_dtA << " " << tau << endl;
         cout << "\rt=" << t;
         cout.flush();
         gt::stop("timeloop_diagnostic");
