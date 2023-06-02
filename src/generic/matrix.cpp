@@ -714,7 +714,7 @@ void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_arr
   dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &work_query, &info);
 
   size = work[0];
-  work.resize({size});
+  work.resize({(size_t)size});
   dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &size, &info);
 
   // lapack actually computes V^T and not V

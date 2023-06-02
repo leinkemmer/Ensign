@@ -20,6 +20,12 @@ struct lr2 {
 
   lr2(Index r, array<Index,2> N, stloc sl=stloc::host) : S({r,r},sl), X({N[0],r},sl), V({N[1],r},sl) {}
 
+  void resize(Index r, array<Index,2> N) {
+    S.resize({r,r});
+    X.resize({N[0],r});
+    V.resize({N[1],r});
+  }
+
   Index size_X() const {
     return X.shape()[0];
   }
