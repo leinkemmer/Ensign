@@ -7,6 +7,7 @@
 #include <lr/coefficients.hpp>
 #include <generic/timer.hpp>
 #include <generic/fft.hpp>
+#include <iomanip>
 
 // TODO: using lapack
 #include <eigen3/Eigen/Core>
@@ -116,6 +117,12 @@ struct grid_info {
   }
 };
 
+template<size_t d>
+grid_info<d> modify_r(grid_info<d> gi, Index r) {
+  gi.r = r;
+  return gi;
+}
+
 
 // Note that using a std::function object has a non-negligible performance overhead
 template<class func>
@@ -164,19 +171,20 @@ void componentwise_mat_fourier_omp(Index r, const mind<2>& N,  func F) {
 
 
 void deriv_z(const mat& in, mat& out, const grid_info<2>& gi) {
+  Index r = in.shape()[1];
   if(gi.discr == discretization::lw) {
     mat tmp(out); // in order to allow for in and out to be the same
     
     // finite differences
     if(in.shape()[0] == gi.N_zv[0] && out.shape()[0] == gi.N_zv[0]) {
       // only depends on z
-      for(Index ir=0;ir<gi.r;ir++) {
+      for(Index ir=0;ir<r;ir++) {
         for(Index iz=0;iz<gi.N_zv[0];iz++)
           tmp(iz, ir) = (in((iz+1)%gi.N_zv[0], ir) - in((iz-1+gi.N_zv[0])%gi.N_zv[0], ir))/(2.0*gi.h_zv[0]);
       }
     } else if(in.shape()[0] == gi.N_zv[0] && out.shape()[0] != gi.N_zv[0]) {
       // out depends on both z and v, but in does only depend on z
-      for(Index ir=0;ir<gi.r;ir++) {
+      for(Index ir=0;ir<r;ir++) {
         for(Index iv=0;iv<gi.N_zv[1];iv++) {
           for(Index iz=0;iz<gi.N_zv[0];iz++)
             tmp(gi.lin_idx_v({iz,iv}), ir) = (in((iz+1)%gi.N_zv[0], ir) - in((iz-1+gi.N_zv[0])%gi.N_zv[0], ir))/(2.0*gi.h_zv[0]);
@@ -184,7 +192,7 @@ void deriv_z(const mat& in, mat& out, const grid_info<2>& gi) {
       }
     } else {
       // both input and output depends on both z and v
-      for(Index ir=0;ir<gi.r;ir++) {
+      for(Index ir=0;ir<r;ir++) {
         for(Index iv=0;iv<gi.N_zv[1];iv++) {
           for(Index iz=0;iz<gi.N_zv[0];iz++)
             tmp(gi.lin_idx_v({iz,iv}), ir) = (in(gi.lin_idx_v({(iz+1)%gi.N_zv[0],iv}), ir) - in(gi.lin_idx_v({(iz-1+gi.N_zv[0])%gi.N_zv[0],iv}), ir))/(2.0*gi.h_zv[0]);
@@ -197,13 +205,13 @@ void deriv_z(const mat& in, mat& out, const grid_info<2>& gi) {
 
     // FFT
     if(in.shape()[0] == gi.N_zv[0]) {
-      cmat hat({gi.N_zv[0]/2+1, gi.r});
+      cmat hat({gi.N_zv[0]/2+1, r});
       fft1d<2> fft({gi.N_zv[0]}, (mat&)in, hat);
 
       fft.forward((mat&)in, hat);
 
       double ncz = 1.0/double(gi.N_zv[0]);
-      for(Index ir=0;ir<gi.r;ir++) {
+      for(Index ir=0;ir<r;ir++) {
         for(Index iz=0;iz<gi.N_zv[0]/2+1;iz++) {
           complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(gi.lim_zv[1]-gi.lim_zv[0])*iz);
           hat(iz, ir) *= lambdaz*ncz;
@@ -215,9 +223,9 @@ void deriv_z(const mat& in, mat& out, const grid_info<2>& gi) {
         fft.backward(hat, out);
       } else {
         // output depends on z and v, but input only depends on z
-        mat tmp({gi.N_zv[0], gi.r});
+        mat tmp({gi.N_zv[0], r});
         fft.backward(hat, tmp);
-        for(Index ir=0;ir<gi.r;ir++) {
+        for(Index ir=0;ir<r;ir++) {
           for(Index iv=0;iv<gi.N_zv[1];iv++) {
             for(Index iz=0;iz<gi.N_zv[0];iz++)
               out(gi.lin_idx_v({iz,iv}), ir) = tmp(iz, ir);
@@ -226,13 +234,13 @@ void deriv_z(const mat& in, mat& out, const grid_info<2>& gi) {
       }
     } else {
       // both input and output depend on z and v
-      cmat hat({gi.dzvh_mult, gi.r});
+      cmat hat({gi.dzvh_mult, r});
       fft2d<2> fft(gi.N_zv, (mat&)in, hat);
 
       fft.forward((mat&)in, hat);
 
       double nczv = 1.0/double(gi.N_zv[0]*gi.N_zv[1]);
-      componentwise_mat_fourier_omp(gi.r, gi.N_zv, [nczv,&gi,&hat](Index idx, mind<2> i, Index r) {
+      componentwise_mat_fourier_omp(r, gi.N_zv, [nczv,&gi,&hat](Index idx, mind<2> i, Index r) {
         complex<double> lambdaz = complex<double>(0.0,2.0*M_PI/(gi.lim_zv[1]-gi.lim_zv[0])*i[0]);
             
         hat(idx, r) *= lambdaz*nczv;
@@ -359,10 +367,10 @@ struct compute_coeff {
     gt::start("C2");
 
     deriv_v(Vf, Vtmp1, gi);
-    deriv_z(Vphi, Vtmp2, gi);
+    deriv_z(Vphi, Vtmp_fields, gi);
 
-    ten3 C2({gi.r,gi.r,gi.r});
-    coeff(Vf, Vtmp1, Vtmp2, gi.h_zv[0]*gi.h_zv[1], C2, blas);
+    ten3 C2({gi.r,gi.r,r_fields});
+    coeff(Vf, Vtmp1, Vtmp_fields, gi.h_zv[0]*gi.h_zv[1], C2, blas);
     
     gt::stop("C2");
     return C2;
@@ -375,12 +383,12 @@ struct compute_coeff {
 
     // Vtmp2 has to be enlarged to the full zv space such that the coeff function
     // can be used.
-    componentwise_mat_omp(gi.r, gi.N_zv, [this, &VdtA](Index idx, mind<2> i, Index r) {
-      Vtmp2(idx, r) = VdtA(i[0], r);
+    componentwise_mat_omp(r_fields, gi.N_zv, [this, &VdtA](Index idx, mind<2> i, Index r) {
+      Vtmp_fields(idx, r) = VdtA(i[0], r);
     });
 
-    ten3 C3({gi.r,gi.r,gi.r});
-    coeff(Vf, Vtmp1, Vtmp2, gi.h_zv[0]*gi.h_zv[1], C3, blas);
+    ten3 C3({gi.r,gi.r,r_fields});
+    coeff(Vf, Vtmp1, Vtmp_fields, gi.h_zv[0]*gi.h_zv[1], C3, blas);
 
     gt::stop("C3");
     return C3;
@@ -389,7 +397,7 @@ struct compute_coeff {
   ten3 compute_D2(const mat& Xf, const mat& Xphi, const blas_ops& blas) {
     gt::start("D2");
 
-    ten3 D2({gi.r,gi.r,gi.r});
+    ten3 D2({gi.r,gi.r,r_fields});
     coeff(Xf, Xf, Xphi, gi.h_xx[0]*gi.h_xx[1], D2, blas);
 
     gt::stop("D2");
@@ -399,7 +407,7 @@ struct compute_coeff {
   ten3 compute_D3(const mat& Xf, const mat& XdtA, const blas_ops& blas) {
     gt::start("D3");
 
-    ten3 D3({gi.r,gi.r,gi.r});
+    ten3 D3({gi.r,gi.r,r_fields});
     coeff(Xf, Xf, XdtA, gi.h_xx[0]*gi.h_xx[1], D3, blas);
 
     gt::stop("D3");
@@ -416,7 +424,7 @@ struct compute_coeff {
       for(Index k=0;k<gi.r;k++) {
         for(Index iz=0;iz<gi.N_zv[0];iz++) {
           double val = 0.0;
-          for(Index m=0;m<gi.r;m++)
+          for(Index m=0;m<r_fields;m++)
             val += D2(i, k, m)*dzLphi(iz, m);
           e(iz, i, k) = val;
         }
@@ -433,7 +441,7 @@ struct compute_coeff {
       for(Index k=0;k<gi.r;k++) {
         for(Index iz=0;iz<gi.N_zv[0];iz++) {
           double val = 0.0;
-          for(Index m=0;m<gi.r;m++)
+          for(Index m=0;m<r_fields;m++)
             val += D3(i, k, m)*LdtA(iz, m);
           eA(iz, i, k) = val;
         }
@@ -442,10 +450,16 @@ struct compute_coeff {
     return eA;
   }
 
-  compute_coeff(grid_info<2> _gi) : gi(_gi) {
+  compute_coeff(grid_info<2> _gi, Index _r_fields=-1) : gi(_gi) {
+    if(_r_fields == -1)
+      r_fields = gi.r;
+    else
+      r_fields = _r_fields;
+
     Vtmp1.resize({gi.dzv_mult,gi.r});
     Vtmp2.resize({gi.dzv_mult,gi.r});
-    dzLphi.resize({gi.N_zv[0], gi.r});
+    Vtmp_fields.resize({gi.dzv_mult,r_fields});
+    dzLphi.resize({gi.N_zv[0], r_fields});
 
     v.resize({gi.dzv_mult});
     componentwise_vec_omp(gi.N_zv, [this](Index idx, mind<2> i) {
@@ -455,7 +469,8 @@ struct compute_coeff {
 
 private:
   grid_info<2> gi;
-  mat Vtmp1, Vtmp2;
+  Index r_fields;
+  mat Vtmp1, Vtmp2, Vtmp_fields;
   mat dzLphi;
   vec v;
 };
@@ -564,8 +579,8 @@ struct PS_S_step {
         for(Index j=0;j<gi.r;j++) {
           double s = Sout(i, j);
           for(Index l=0;l<gi.r;l++) {
-            for(Index n=0;n<gi.r;n++) {
-              for(Index m=0;m<gi.r;m++) {
+            for(Index n=0;n<SdtA.shape()[1];n++) {
+              for(Index m=0;m<SdtA.shape()[0];m++) {
                 for(Index k=0;k<gi.r;k++) {
                   s += double(gi.debug_adv_v)/gi.M_e*D2(i,k,m)*Sphi(m,n)*S(k,l)*C2(j,l,n)
                                +double(gi.debug_adv_vA)/gi.M_e*D3(i,k,m)*SdtA(m,n)*S(k,l)*C3(j,l,n);
@@ -1271,8 +1286,166 @@ private:
 };
 
 
+struct timestepper_augmented_unconventional: timestepper {
+
+  void operator()(double tau, lr2<double>& f, lr2<double>& dtA, double* ee=nullptr, double* ee_max=nullptr) {
+    gt::start("step");
+
+    // phi 
+    blas.matmul(f.X,f.S,K);
+
+    if(__Kphi == nullptr) {
+      compute_phi(K, f.V, Kphi, Vphi);
+    } else {
+      Kphi = *__Kphi;
+      Vphi = *__Vphi;
+    }
+
+    double _ee = electric_energy(Kphi, gi, blas);
+    if(ee != nullptr)
+      *ee = _ee;
+
+    if(ee_max != nullptr) {
+      deriv_z(Vphi, dzVphi, gi);
+      *ee_max = max_norm_estimate(Kphi, dzVphi, gi, blas); 
+    }
+
+    // backup initial value
+    lr2<double> f0 = f;
+    X0 = f.X;
+    V0 = f.V;
+
+    // compute the coefficients
+    C1 = ccoeff.compute_C1(f.V, blas);
+    C2 = ccoeff.compute_C2(f.V, Vphi, blas);
+    C3 = ccoeff.compute_C3(f.V, dtA.V, blas);
+
+    Xphi = Kphi;
+    gt::start("gs");
+    gs(Xphi, Sphi, ip_xx);
+    gt::stop("gs");
+
+    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
+    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
+
+    blas.matmul_transb(Vphi,Sphi,Lphi);
+    e = ccoeff.compute_e(D2, Lphi);
+    
+    blas.matmul_transb(dtA.V,dtA.S,LdtA);
+    eA = ccoeff.compute_eA(D3, LdtA);
+
+    // K step
+    blas.matmul(dtA.X, dtA.S, KdtA);
+    gt::start("K_step");
+    K_step(tau, K, Kphi, KdtA, C1, C2, C3, blas);
+    gt::stop("K_step");
+
+    // L step
+    gt::start("L_step");
+    blas.matmul_transb(f.V,f.S,L);
+    L_step(tau, L, e, eA);
+    gt::stop("L_step");
+
+    // setup the augmented basis
+    componentwise_mat_omp(gi.r, gi.N_xx, [this](Index idx, mind<2> i, Index r) {
+      aug.X(idx, r) = X0(idx, r);
+      aug.X(idx, gi.r+r) = K(idx, r);
+    });
+    componentwise_mat_omp(gi.r, gi.N_zv, [this](Index idx, mind<2> i, Index r) {
+      aug.V(idx, r) = V0(idx, r);
+      aug.V(idx, gi.r+r) = L(idx, r);
+    });
+
+    gt::start("gs");
+    gs(aug.X, unused, ip_xx);
+    gs(aug.V, unused, ip_zv);
+    gt::stop("gs");
+
+    // We do not need to compute the new S matrix (with N and M) since we already
+    // know how S is expressed in the new basis.
+    for(Index i=0;i<2*gi.r;i++)
+      for(Index j=0;j<2*gi.r;j++)
+        aug.S(i,j) = (i<gi.r && j<gi.r) ? f.S(i,j) : 0.0;
+    
+
+    // recompute the required coefficients (with the new basis functions)
+    aug_C1 = aug_ccoeff.compute_C1(aug.V, blas);
+    aug_C2 = aug_ccoeff.compute_C2(aug.V, Vphi, blas);
+    aug_C3 = aug_ccoeff.compute_C3(aug.V, dtA.V, blas);
+
+    aug_D2 = aug_ccoeff.compute_D2(aug.X, Xphi, blas);
+    aug_D3 = aug_ccoeff.compute_D3(aug.X, dtA.X, blas);
+
+    // do the S step
+    gt::start("S_step");
+    // Note that the S_step is implemented for the projector splitting which uses
+    // the negative of the rhs compared to the projector splitting.
+    S_step_aug(-tau, aug.S, Sphi, dtA.S, aug_C1, aug_C2, aug_C3, aug_D2, aug_D3);
+    gt::stop("S_step");
+
+    gt::start("truncation");
+    lr_truncate(aug, f, blas);
+    gt::stop("truncation");
+    gt::stop("step");
+  }
 
 
+  timestepper_augmented_unconventional(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), aug_ccoeff(modify_r(_gi, 2*_gi.r), gi.r), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), S_step_aug(modify_r(gi, 2*_gi.r), _blas), gs(&_blas), compute_phi(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), aug(2*_gi.r, {_gi.dxx_mult, _gi.dzv_mult}) {
+    D2.resize({gi.r,gi.r,gi.r});
+    D3.resize({gi.r,gi.r,gi.r});
+    
+    aug_D2.resize({2*gi.r,2*gi.r,gi.r});
+    aug_D3.resize({2*gi.r,2*gi.r,gi.r});
+
+    e.resize({gi.N_zv[0], gi.r, gi.r});
+    eA.resize({gi.N_zv[0], gi.r, gi.r});
+
+    C1.resize({gi.r, gi.r});
+    C2.resize({gi.r,gi.r,gi.r});
+    C3.resize({gi.r,gi.r,gi.r});
+    
+    aug_C1.resize({2*gi.r, 2*gi.r});
+    aug_C2.resize({2*gi.r,2*gi.r,gi.r});
+    aug_C3.resize({2*gi.r,2*gi.r,gi.r});
+
+    Lphi.resize({gi.N_zv[0], gi.r});
+    LdtA.resize({gi.N_zv[0], gi.r});
+    Sphi.resize({gi.r, gi.r});
+    unused.resize({2*gi.r, 2*gi.r});
+
+    K.resize({gi.dxx_mult, gi.r});
+    L.resize({gi.dzv_mult, gi.r});
+
+    Kphi.resize({gi.dxx_mult, gi.r});
+    dzVphi.resize({gi.N_zv[0], gi.r});
+    KdtA.resize({gi.dxx_mult, gi.r});
+    Xphi.resize({gi.dxx_mult, gi.r});
+    Vphi.resize({gi.N_zv[0], gi.r});
+
+    X0.resize({gi.dxx_mult, gi.r});
+    V0.resize({gi.dzv_mult, gi.r});
+  }
+
+private:
+  grid_info<2> gi;
+  const blas_ops& blas;
+  compute_coeff ccoeff, aug_ccoeff;
+  PS_L_step L_step;
+  PS_K_step K_step;
+  PS_S_step S_step;
+  PS_S_step S_step_aug;
+  gram_schmidt gs;
+  scalar_potential compute_phi;
+  mat C1, aug_C1;
+  ten3 D2, e, eA, C2, C3, D3, aug_C2, aug_C3, aug_D2, aug_D3;
+  mat Lphi, Sphi, unused, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi, X0, V0;
+  std::function<double(double*,double*)> ip_xx, ip_zv;
+  lr2<double> aug;
+};
+
+
+
+/*
 struct timestepper_strang : timestepper {
 
   void operator()(double tau, lr2<double>& f, lr2<double>& dtA, double* ee=nullptr, double* ee_max=nullptr) {
@@ -1379,7 +1552,7 @@ private:
   std::function<double(double*,double*)> ip_xx, ip_zv;
 
 };
-
+*/
 
 
 
@@ -1572,6 +1745,7 @@ struct dtA_iterative_solver {
     p = r;
     double r_norm_sq = lr_norm_sq(r, blas);
 
+    bool iteration_finished = false;
     for(Index it=0;it<200;it++) {
       //cout << "dtA: " << lr_norm_sq(dtA, blas) << endl;
       //cout << "dtAsingular: ";
@@ -1602,8 +1776,9 @@ struct dtA_iterative_solver {
       lr_truncate(medium, r, blas);
 
       double r_norm_sq_new = lr_norm_sq(r, blas);
-      cout << "it: " << it << " r_norm: " << sqrt(r_norm_sq_new) << endl;
+      //cout << "it: " << it << " r_norm: " << sqrt(r_norm_sq_new) << endl;
       if(sqrt(r_norm_sq_new) < 1e-12) {
+        iteration_finished = true;
         break;
       }
 
@@ -1620,6 +1795,9 @@ struct dtA_iterative_solver {
       cout << "residual: " << lr_norm_sq(medium, blas) << endl;
       */
     }
+
+    if(!iteration_finished)
+      cout << "WARNING: dtA_iterative_solver did not converge within 200 iterations" << endl;
     //cout << dtA.S << endl;
     //cout << dtA.V << endl;
     //cout << dtA.X << endl;
@@ -1662,7 +1840,9 @@ struct integrator {
           E.S(i,j)   = double(i==j);
         }
       }
+      gt::start("dtA_iteration");
       dtA_it.operator()(dtA, f, E, rho);
+      gt::stop("dtA_iteration");
 
     } else { // use the specified dtA (used for testing)
       dtA = *__dtA;
@@ -1741,19 +1921,23 @@ struct integrator {
         blas.matmul(dtA.X, dtA.S, AK0);
         double max_dtA = max_norm_estimate(AK0, dtA.V, gi, blas);
         fs_evolution << t << "\t" << ee << "\t" << me << "\t" << ke << "\t" << ke0 << "\t" << m << "\t" << mom << "\t" << max_ee<< "\t" << max_dtA << " " << tau << endl;
-        cout << "\rt=" << t;
         cout.flush();
         gt::stop("timeloop_diagnostic");
+
+        gt::stop("timestep");
+        cout << "\r" << std::setw(30) << "";
+        cout << "\rt=" << t << " time: " << gt::average("timestep");
 
         t += tau;
         if(time_adaptive)
           tau = tau_new;
 
-        gt::stop("timestep");
-        cout << "time: " << gt::average("timestep") << endl;
     }
+        
+    cout << "\r" << std::setw(30) << "" << "\r";
 
-    cout << endl << gt::sorted_output() << endl;
+    ofstream fs_timing("timing.data");
+    fs_timing << endl << gt::sorted_output() << endl;
 
     return f;
   }
@@ -1789,6 +1973,8 @@ struct integrator {
       timestep = make_unique_ptr<timestepper_lie>(gi, blas, ip_xx, ip_zv);
     else if(method == "unconventional")
       timestep = make_unique_ptr<timestepper_unconventional>(gi, blas, ip_xx, ip_zv);
+    else if(method == "augmented")
+      timestep = make_unique_ptr<timestepper_augmented_unconventional>(gi, blas, ip_xx, ip_zv);
     else {
       cout << "ERROR: the method " << method << " is not valid for integration" << endl;
       exit(1);

@@ -3,6 +3,7 @@
 #include <generic/common.hpp>
 #include <generic/utility.hpp>
 #include <generic/kernels.hpp>
+#include <iomanip>
 
 template<class T, size_t d>
 struct multi_array {
@@ -290,7 +291,7 @@ struct multi_array {
     }else if(A.shape().size() == 2){
       for (Index i=0; i < A.shape()[0]; i++) {
         for (Index j=0; j < A.shape()[1]; j++) {
-          os << A.v[i + j*A.shape()[0]] << "  " ;
+          os << std::setw(20) << A.v[i + j*A.shape()[0]];
         }
         os << '\n';
       }

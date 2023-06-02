@@ -368,7 +368,7 @@ void test_advection_v(string method, discretization discr) {
             
     cout << "Error advection v (" << method << ", " << discr_to_str(discr) << "): " << err << endl;
 
-    if(method == "lie")
+    if(method == "lie" || method == "augmented")
       REQUIRE( err <= 5e-3 );
     else
       REQUIRE( err <= 7e-3 );
@@ -424,10 +424,7 @@ void test_advection_v_dtA(string method, discretization discr) {
             
     cout << "Error advection v/dtA (" << method << ", " << discr_to_str(discr) << "): " << err << endl;
 
-    if(method == "lie")
-      REQUIRE( err <= 6e-3 );
-    else
-      REQUIRE( err <= 6e-3 );
+    REQUIRE( err <= 4e-3 );
 }
 
 
@@ -490,12 +487,10 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
   /*
   *  Iterative solver for the vector potential
   */
-
   SECTION("dtA_iterative_solver") {
     test_dtA_iteration(discretization::fft);
     test_dtA_iteration(discretization::lw);
   }
-
 
 
   /*
@@ -506,6 +501,8 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     test_advection_z("lie", discretization::lw);
     test_advection_z("unconventional", discretization::fft);
     test_advection_z("unconventional", discretization::lw);
+    test_advection_z("augmented", discretization::fft);
+    test_advection_z("augmented", discretization::lw);
   }
 
   /*
@@ -516,6 +513,8 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     test_advection_v("lie", discretization::lw);
     test_advection_v("unconventional", discretization::fft);
     test_advection_v("unconventional", discretization::lw);
+    test_advection_v("augmented", discretization::fft);
+    test_advection_v("augmented", discretization::lw);
   }
 
   /*
@@ -526,6 +525,8 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     test_advection_v_dtA("lie", discretization::lw);
     test_advection_v_dtA("unconventional", discretization::fft);
     test_advection_v_dtA("unconventional", discretization::lw);
+    test_advection_v_dtA("augmented", discretization::fft);
+    test_advection_v_dtA("augmented", discretization::lw);
   }
 
 }
