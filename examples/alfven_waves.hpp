@@ -1897,20 +1897,24 @@ struct integrator {
           double ee1, max_ee1;
           step(tau, ftmp, &ee1, &max_ee1, true);
           double ee_tau = compute_ee(ftmp);
+          compute_A(ftmp, A0.X, A0.V);
+          double me_tau = magnetic_energy(A0.X, gi, blas);
           
           step(0.5*tau, f, &ee, &max_ee);
           step(0.5*tau, f, &ee1, &max_ee);
           double ee_tauhalf = compute_ee(f);
+          compute_A(f, A0.X, A0.V);
+          double me_tauhalf = magnetic_energy(A0.X, gi, blas);
 
-          double err = abs(ee_tau-ee_tauhalf)/3.0/time_tol;
-          if(err < 1.0) {
+          double err = sqrt(pow(ee_tau-ee_tauhalf,2)+pow(me_tau-me_tauhalf,2))/3.0;
+          double err_rel = err/abs(ee_tauhalf+me_tauhalf)/time_tol;
+          if(err_rel < 1.0) {
             // accept the step and adjust tau
-            tau_new = 0.8*tau*pow(1.0/err, 0.5);
-            cout << "tau: " << tau << " " << tau_new << " " << ee1-ee << endl;
+            tau_new = 0.7*tau*pow(1.0/err_rel, 0.5);
           } else {
             // reject the step
             f = ftmp2;
-            tau = std::min(0.8*tau*pow(1.0/err, 0.5), 0.25*tau);
+            tau = std::min(0.8*tau*pow(1.0/err_rel, 0.5), 0.25*tau);
             cout << "step rejected " << tau << endl;
             continue;
           }
