@@ -1006,677 +1006,6 @@ double max_norm_estimate(const mat& K, const mat& V, const grid_info<2>& gi, con
 }
 
 
-struct timestepper {
-
-  timestepper() : __Kphi(nullptr), __Vphi(nullptr) {}
-  virtual ~timestepper() {}
-
-  virtual void operator()(double tau, lr2<double>& f, lr2<double>& dtA, double* ee=nullptr, double* ee_max=nullptr) = 0;
-
-  void set_Kphi(mat* Kphi) {
-    __Kphi = Kphi;
-  }
-  
-  void set_Vphi(mat* Vphi) {
-    __Vphi = Vphi;
-  }
-
-  mat *__Kphi, *__Vphi;
-};
-
-struct timestepper_lie : timestepper {
-
-  void operator()(double tau, lr2<double>& f, lr2<double>& dtA, double* ee=nullptr, double* ee_max=nullptr) {
-    gt::start("step");
-
-    // phi 
-    blas.matmul(f.X,f.S,K);
-
-    if(__Kphi == nullptr) {
-      compute_phi(K, f.V, Kphi, Vphi);
-    } else {
-      Kphi = *__Kphi;
-      Vphi = *__Vphi;
-    }
-
-    double _ee = electric_energy(Kphi, gi, blas);
-    if(ee != nullptr)
-      *ee = _ee;
-
-    if(ee_max != nullptr) {
-      deriv_z(Vphi, dzVphi, gi);
-      *ee_max = max_norm_estimate(Kphi, dzVphi, gi, blas); 
-    }
-
-    // K step
-
-    C1 = ccoeff.compute_C1(f.V, blas);
-    C2 = ccoeff.compute_C2(f.V, Vphi, blas);
-    C3 = ccoeff.compute_C3(f.V, dtA.V, blas);
-    blas.matmul(dtA.X, dtA.S, KdtA);
-
-    gt::start("K_step");
-    K_step(tau, K, Kphi, KdtA, C1, C2, C3, blas);
-    gt::stop("K_step");
-
-    gt::start("gs");
-
-    f.X = K;
-    gs(f.X, f.S, ip_xx);
-
-    Xphi = Kphi;
-    gs(Xphi, Sphi, ip_xx);
-
-    gt::stop("gs");
-
-    // S step
-
-    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
-    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
-    
-    gt::start("S_step");
-    S_step(tau, f.S, Sphi, dtA.S, C1, C2, C3, D2, D3);
-    gt::stop("S_step");
-
-    // L step
-
-    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
-    blas.matmul_transb(Vphi,Sphi,Lphi);
-    e = ccoeff.compute_e(D2, Lphi);
-
-    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
-    blas.matmul_transb(dtA.V,dtA.S,LdtA);
-    eA = ccoeff.compute_eA(D3, LdtA);
-
-    gt::start("L_step");
-    blas.matmul_transb(f.V,f.S,L);
-    L_step(tau, L, e, eA);
-    gt::stop("L_step");
-
-    gt::start("gs");
-
-    f.V = L;
-    gs(f.V, f.S, ip_zv);
-    transpose_inplace(f.S);
-
-    gt::stop("gs");
-
-    gt::stop("step");
-  }
-
-  timestepper_lie(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv){
-    D2.resize({gi.r,gi.r,gi.r});
-    D3.resize({gi.r,gi.r,gi.r});
-    e.resize({gi.N_zv[0], gi.r, gi.r});
-    eA.resize({gi.N_zv[0], gi.r, gi.r});
-    C1.resize({gi.r, gi.r});
-    C2.resize({gi.r,gi.r,gi.r});
-    C3.resize({gi.r,gi.r,gi.r});
-
-    Lphi.resize({gi.N_zv[0], gi.r});
-    LdtA.resize({gi.N_zv[0], gi.r});
-    Sphi.resize({gi.r, gi.r});
-
-    K.resize({gi.dxx_mult, gi.r});
-    L.resize({gi.dzv_mult, gi.r});
-
-    Kphi.resize({gi.dxx_mult, gi.r});
-    dzVphi.resize({gi.N_zv[0], gi.r});
-    KdtA.resize({gi.dxx_mult, gi.r});
-    Xphi.resize({gi.dxx_mult, gi.r});
-    Vphi.resize({gi.N_zv[0], gi.r});
-  }
-
-private:
-  grid_info<2> gi;
-  const blas_ops& blas;
-  compute_coeff ccoeff;
-  PS_L_step L_step;
-  PS_K_step K_step;
-  PS_S_step S_step;
-  gram_schmidt gs;
-  scalar_potential compute_phi;
-  mat C1;
-  ten3 D2, e, eA, C2, C3, D3;
-  mat Lphi, Sphi, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi;
-  std::function<double(double*,double*)> ip_xx, ip_zv;
-
-};
-
-
-struct timestepper_unconventional: timestepper {
-
-  void operator()(double tau, lr2<double>& f, lr2<double>& dtA, double* ee=nullptr, double* ee_max=nullptr) {
-    gt::start("step");
-
-    // phi 
-    blas.matmul(f.X,f.S,K);
-
-    if(__Kphi == nullptr) {
-      compute_phi(K, f.V, Kphi, Vphi);
-    } else {
-      Kphi = *__Kphi;
-      Vphi = *__Vphi;
-    }
-
-    double _ee = electric_energy(Kphi, gi, blas);
-    if(ee != nullptr)
-      *ee = _ee;
-
-    if(ee_max != nullptr) {
-      deriv_z(Vphi, dzVphi, gi);
-      *ee_max = max_norm_estimate(Kphi, dzVphi, gi, blas); 
-    }
-
-    // backup initial value
-    X0 = f.X;
-    V0 = f.V;
-
-    // compute the coefficients
-    C1 = ccoeff.compute_C1(f.V, blas);
-    C2 = ccoeff.compute_C2(f.V, Vphi, blas);
-    C3 = ccoeff.compute_C3(f.V, dtA.V, blas);
-
-    Xphi = Kphi;
-    gt::start("gs");
-    gs(Xphi, Sphi, ip_xx);
-    gt::stop("gs");
-
-    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
-    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
-
-    blas.matmul_transb(Vphi,Sphi,Lphi);
-    e = ccoeff.compute_e(D2, Lphi);
-    
-    blas.matmul_transb(dtA.V,dtA.S,LdtA);
-    eA = ccoeff.compute_eA(D3, LdtA);
-
-    // K step
-    blas.matmul(dtA.X, dtA.S, KdtA);
-    gt::start("K_step");
-    K_step(tau, K, Kphi, KdtA, C1, C2, C3, blas);
-    gt::stop("K_step");
-
-    // L step
-    gt::start("L_step");
-    blas.matmul_transb(f.V,f.S,L);
-    L_step(tau, L, e, eA);
-    gt::stop("L_step");
-
-    gt::start("gs");
-    f.X = K;
-    gs(f.X, unused, ip_xx);
-    f.V = L;
-    gs(f.V, unused, ip_zv);
-    gt::stop("gs");
-
-    gt::start("projection");
-    
-    // computer the S matrix transformed to the new basis
-    mat M({gi.r,gi.r}), N({gi.r,gi.r});
-
-    coeff(f.X, X0, gi.h_xx[0]*gi.h_xx[1], M, blas);
-    coeff(f.V, V0, gi.h_zv[0]*gi.h_zv[1], N, blas);
-
-    mat Stmp({gi.r,gi.r});
-    blas.matmul(M, f.S, Stmp);
-    blas.matmul_transb(Stmp, N, f.S);
-    gt::stop("projection");
-
-    // recompute the required coefficients (with the new basis functions)
-    C1 = ccoeff.compute_C1(f.V, blas);
-    C2 = ccoeff.compute_C2(f.V, Vphi, blas);
-    C3 = ccoeff.compute_C3(f.V, dtA.V, blas);
-
-    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
-    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
-
-    // do the S step
-    gt::start("S_step");
-    // Note that the S_step is implemented for the projector splitting which uses
-    // the negative of the rhs that we require here.
-    S_step(-tau, f.S, Sphi, dtA.S, C1, C2, C3, D2, D3);
-    gt::stop("S_step");
-
-    gt::stop("step");
-  }
-
-
-  timestepper_unconventional(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv) {
-    D2.resize({gi.r,gi.r,gi.r});
-    D3.resize({gi.r,gi.r,gi.r});
-    e.resize({gi.N_zv[0], gi.r, gi.r});
-    eA.resize({gi.N_zv[0], gi.r, gi.r});
-    C1.resize({gi.r, gi.r});
-    C2.resize({gi.r,gi.r,gi.r});
-    C3.resize({gi.r,gi.r,gi.r});
-
-    Lphi.resize({gi.N_zv[0], gi.r});
-    LdtA.resize({gi.N_zv[0], gi.r});
-    Sphi.resize({gi.r, gi.r});
-    unused.resize({gi.r, gi.r});
-
-    K.resize({gi.dxx_mult, gi.r});
-    L.resize({gi.dzv_mult, gi.r});
-
-    Kphi.resize({gi.dxx_mult, gi.r});
-    dzVphi.resize({gi.N_zv[0], gi.r});
-    KdtA.resize({gi.dxx_mult, gi.r});
-    Xphi.resize({gi.dxx_mult, gi.r});
-    Vphi.resize({gi.N_zv[0], gi.r});
-
-    X0.resize({gi.dxx_mult, gi.r});
-    V0.resize({gi.dzv_mult, gi.r});
-  }
-
-private:
-  grid_info<2> gi;
-  const blas_ops& blas;
-  compute_coeff ccoeff;
-  PS_L_step L_step;
-  PS_K_step K_step;
-  PS_S_step S_step;
-  gram_schmidt gs;
-  scalar_potential compute_phi;
-  mat C1;
-  ten3 D2, e, eA, C2, C3, D3;
-  mat Lphi, Sphi, unused, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi, X0, V0;
-  std::function<double(double*,double*)> ip_xx, ip_zv;
-
-};
-
-
-struct timestepper_augmented_unconventional: timestepper {
-
-  void operator()(double tau, lr2<double>& f, lr2<double>& dtA, double* ee=nullptr, double* ee_max=nullptr) {
-    gt::start("step");
-
-    // phi 
-    blas.matmul(f.X,f.S,K);
-
-    if(__Kphi == nullptr) {
-      compute_phi(K, f.V, Kphi, Vphi);
-    } else {
-      Kphi = *__Kphi;
-      Vphi = *__Vphi;
-    }
-
-    double _ee = electric_energy(Kphi, gi, blas);
-    if(ee != nullptr)
-      *ee = _ee;
-
-    if(ee_max != nullptr) {
-      deriv_z(Vphi, dzVphi, gi);
-      *ee_max = max_norm_estimate(Kphi, dzVphi, gi, blas); 
-    }
-
-    // backup initial value
-    lr2<double> f0 = f;
-    X0 = f.X;
-    V0 = f.V;
-
-    // compute the coefficients
-    C1 = ccoeff.compute_C1(f.V, blas);
-    C2 = ccoeff.compute_C2(f.V, Vphi, blas);
-    C3 = ccoeff.compute_C3(f.V, dtA.V, blas);
-
-    Xphi = Kphi;
-    gt::start("gs");
-    gs(Xphi, Sphi, ip_xx);
-    gt::stop("gs");
-
-    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
-    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
-
-    blas.matmul_transb(Vphi,Sphi,Lphi);
-    e = ccoeff.compute_e(D2, Lphi);
-    
-    blas.matmul_transb(dtA.V,dtA.S,LdtA);
-    eA = ccoeff.compute_eA(D3, LdtA);
-
-    // K step
-    blas.matmul(dtA.X, dtA.S, KdtA);
-    gt::start("K_step");
-    K_step(tau, K, Kphi, KdtA, C1, C2, C3, blas);
-    gt::stop("K_step");
-
-    // L step
-    gt::start("L_step");
-    blas.matmul_transb(f.V,f.S,L);
-    L_step(tau, L, e, eA);
-    gt::stop("L_step");
-
-    // setup the augmented basis
-    componentwise_mat_omp(gi.r, gi.N_xx, [this](Index idx, mind<2> i, Index r) {
-      aug.X(idx, r) = X0(idx, r);
-      aug.X(idx, gi.r+r) = K(idx, r);
-    });
-    componentwise_mat_omp(gi.r, gi.N_zv, [this](Index idx, mind<2> i, Index r) {
-      aug.V(idx, r) = V0(idx, r);
-      aug.V(idx, gi.r+r) = L(idx, r);
-    });
-
-    gt::start("gs");
-    gs(aug.X, unused, ip_xx);
-    gs(aug.V, unused, ip_zv);
-    gt::stop("gs");
-
-    // We do not need to compute the new S matrix (with N and M) since we already
-    // know how S is expressed in the new basis.
-    for(Index i=0;i<2*gi.r;i++)
-      for(Index j=0;j<2*gi.r;j++)
-        aug.S(i,j) = (i<gi.r && j<gi.r) ? f.S(i,j) : 0.0;
-    
-
-    // recompute the required coefficients (with the new basis functions)
-    aug_C1 = aug_ccoeff.compute_C1(aug.V, blas);
-    aug_C2 = aug_ccoeff.compute_C2(aug.V, Vphi, blas);
-    aug_C3 = aug_ccoeff.compute_C3(aug.V, dtA.V, blas);
-
-    aug_D2 = aug_ccoeff.compute_D2(aug.X, Xphi, blas);
-    aug_D3 = aug_ccoeff.compute_D3(aug.X, dtA.X, blas);
-
-    // do the S step
-    gt::start("S_step");
-    // Note that the S_step is implemented for the projector splitting which uses
-    // the negative of the rhs compared to the projector splitting.
-    S_step_aug(-tau, aug.S, Sphi, dtA.S, aug_C1, aug_C2, aug_C3, aug_D2, aug_D3);
-    gt::stop("S_step");
-
-    gt::start("truncation");
-    lr_truncate(aug, f, blas);
-    gt::stop("truncation");
-    gt::stop("step");
-  }
-
-
-  timestepper_augmented_unconventional(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), aug_ccoeff(modify_r(_gi, 2*_gi.r), gi.r), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), S_step_aug(modify_r(gi, 2*_gi.r), _blas), gs(&_blas), compute_phi(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), aug(2*_gi.r, {_gi.dxx_mult, _gi.dzv_mult}) {
-    D2.resize({gi.r,gi.r,gi.r});
-    D3.resize({gi.r,gi.r,gi.r});
-    
-    aug_D2.resize({2*gi.r,2*gi.r,gi.r});
-    aug_D3.resize({2*gi.r,2*gi.r,gi.r});
-
-    e.resize({gi.N_zv[0], gi.r, gi.r});
-    eA.resize({gi.N_zv[0], gi.r, gi.r});
-
-    C1.resize({gi.r, gi.r});
-    C2.resize({gi.r,gi.r,gi.r});
-    C3.resize({gi.r,gi.r,gi.r});
-    
-    aug_C1.resize({2*gi.r, 2*gi.r});
-    aug_C2.resize({2*gi.r,2*gi.r,gi.r});
-    aug_C3.resize({2*gi.r,2*gi.r,gi.r});
-
-    Lphi.resize({gi.N_zv[0], gi.r});
-    LdtA.resize({gi.N_zv[0], gi.r});
-    Sphi.resize({gi.r, gi.r});
-    unused.resize({2*gi.r, 2*gi.r});
-
-    K.resize({gi.dxx_mult, gi.r});
-    L.resize({gi.dzv_mult, gi.r});
-
-    Kphi.resize({gi.dxx_mult, gi.r});
-    dzVphi.resize({gi.N_zv[0], gi.r});
-    KdtA.resize({gi.dxx_mult, gi.r});
-    Xphi.resize({gi.dxx_mult, gi.r});
-    Vphi.resize({gi.N_zv[0], gi.r});
-
-    X0.resize({gi.dxx_mult, gi.r});
-    V0.resize({gi.dzv_mult, gi.r});
-  }
-
-private:
-  grid_info<2> gi;
-  const blas_ops& blas;
-  compute_coeff ccoeff, aug_ccoeff;
-  PS_L_step L_step;
-  PS_K_step K_step;
-  PS_S_step S_step;
-  PS_S_step S_step_aug;
-  gram_schmidt gs;
-  scalar_potential compute_phi;
-  mat C1, aug_C1;
-  ten3 D2, e, eA, C2, C3, D3, aug_C2, aug_C3, aug_D2, aug_D3;
-  mat Lphi, Sphi, unused, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi, X0, V0;
-  std::function<double(double*,double*)> ip_xx, ip_zv;
-  lr2<double> aug;
-};
-
-
-
-/*
-struct timestepper_strang : timestepper {
-
-  void operator()(double tau, lr2<double>& f, lr2<double>& dtA, double* ee=nullptr, double* ee_max=nullptr) {
-    // phi 
-    blas.matmul(f.X,f.S,K);
-
-    if(__Kphi == nullptr) {
-      compute_phi(K, f.V, Kphi, Vphi);
-    } else {
-      Kphi = *__Kphi;
-      Vphi = *__Vphi;
-    }
-
-    double _ee = electric_energy(Kphi, gi, blas);
-    if(ee != nullptr)
-      *ee = _ee;
-
-    if(ee_max != nullptr) {
-      deriv_z(Kphi, dzKphi, gi);
-      *ee_max = max_norm_estimate(dzKphi, Vphi, gi, blas); 
-    }
-
-    // K step 1
-    C1 = ccoeff.compute_C1(f.V, blas);
-    C2 = ccoeff.compute_C2(f.V, Vphi, blas);
-    C3 = ccoeff.compute_C3(f.V, dtA.V, blas);
-    blas.matmul(dtA.X, dtA.S, KdtA);
-
-    K_step(0.5*tau, K, Kphi, KdtA, C1, C2, C3, blas);
-
-    f.X = K;
-    gs(f.X, f.S, ip_xx);
-
-    Xphi = Kphi;
-    gs(Xphi, Sphi, ip_xx);
-
-    // S step 1
-    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
-    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
-    S_step(0.5*tau, f.S, Sphi, dtA.S, C1, C2, C3, D2, D3);
-
-    // L step
-    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
-    blas.matmul_transb(Vphi,Sphi,Lphi);
-    e = ccoeff.compute_e(D2, Lphi);
-
-    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
-    blas.matmul_transb(dtA.V,dtA.S,LdtA);
-    eA = ccoeff.compute_eA(D3, LdtA);
-
-    blas.matmul_transb(f.V,f.S,L);
-    L_step(tau, L, e, eA);
-
-    f.V = L;
-    gs(f.V, f.S, ip_zv);
-    transpose_inplace(f.S);
-
-    // S step 2
-    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
-    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
-    S_step(0.5*tau, f.S, Sphi, dtA.S, C1, C2, C3, D2, D3);
-
-
-  }
-
-  timestepper_strang(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) 
-    : __Kphi(nullptr), __Vphi(nullptr), gi(_gi), blas(_blas), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv) {
-    D2.resize({gi.r,gi.r,gi.r});
-    D3.resize({gi.r,gi.r,gi.r});
-    e.resize({gi.N_zv[0], gi.r, gi.r});
-    eA.resize({gi.N_zv[0], gi.r, gi.r});
-    C1.resize({gi.r, gi.r});
-    C2.resize({gi.r,gi.r,gi.r});
-    C3.resize({gi.r,gi.r,gi.r});
-
-    Lphi.resize({gi.N_zv[0], gi.r});
-    LdtA.resize({gi.N_zv[0], gi.r});
-    Sphi.resize({gi.r, gi.r});
-
-    K.resize({gi.dxx_mult, gi.r});
-    L.resize({gi.dzv_mult, gi.r});
-
-    Kphi.resize({gi.dxx_mult, gi.r});
-    dzKphi.resize({gi.dxx_mult, gi.r});
-    KdtA.resize({gi.dxx_mult, gi.r});
-    Xphi.resize({gi.dxx_mult, gi.r});
-    Vphi.resize({gi.N_zv[0], gi.r});
-  }
-
-  mat *__Kphi, *__Vphi;
-
-private:
-  grid_info<2> gi;
-  const blas_ops& blas;
-  compute_coeff ccoeff;
-  PS_L_step L_step;
-  PS_K_step K_step;
-  PS_S_step S_step;
-  gram_schmidt gs;
-  scalar_potential compute_phi;
-  mat C1;
-  ten3 D2, e, eA, C2, C3, D3;
-  mat Lphi, Sphi, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzKphi;
-  std::function<double(double*,double*)> ip_xx, ip_zv;
-
-};
-*/
-
-
-
-
-
-struct rectangular_QR {
-    int n, r;
-    Eigen::HouseholderQR<Eigen::MatrixXd> qr;
-
-    rectangular_QR(int _n, int _r) : n(_n), r(_r), qr(_n,_r) {}
-
-    rectangular_QR(Eigen::MatrixXd& A) : qr(A) {
-        n = A.rows();
-        r = A.cols();
-    }
-
-    void compute(const Eigen::MatrixXd& A) {
-        qr.compute(A);
-    }
-
-    Eigen::MatrixXd Q() {
-        // Internally Eigen stores the QR decomposition as a sequence of
-        // Householder transformations. We multiply with the 'identity' to only
-        // get the 'thin QR factorization'.
-        // If qr.householderQ() is directly assigned to a MatrixXd object, the full matrix
-        // is formed and performance suffers because of it.
-        return qr.householderQ()*Eigen::MatrixXd::Identity(n, r);
-    }
-
-    Eigen::MatrixXd R() {
-        Eigen::MatrixXd mr = qr.matrixQR().triangularView<Eigen::Upper>();
-        return mr.block(0,0,r,r);
-    }
-
-};
-
-
-void add_lr(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, lr2<double>& C, const blas_ops& blas) {
-  gt::start("add_lr");
-
-  using namespace Eigen;
-
-  Index r = A.S.shape()[0];
-  Index nx = A.X.shape()[0];
-  Index nv = A.V.shape()[0];
-
-  MatrixXd S_large({2*r, 2*r});
-  S_large.setZero();
-  for(Index j=0;j<r;j++) {
-    for(Index i=0;i<r;i++) {
-      S_large(i, j) = alpha*A.S(i, j);
-      S_large(r+i,r+j) = beta*B.S(i, j);
-    }
-  }
-
-  // X_large
-  MatrixXd X_large(nx, 2*r);
-  for(Index k=0;k<r;k++) {
-    for(Index i=0;i<nx;i++) {
-      X_large(i, k) = A.X(i, k);
-      X_large(i, k+r) = B.X(i, k);
-    }
-  }
-
-  // V_large 
-  MatrixXd V_large(nv, 2*r);
-  for(Index k=0;k<r;k++) {
-    for(Index i=0;i<nv;i++) {
-      V_large(i, k) = A.V(i, k);
-      V_large(i, k+r) = B.V(i, k);
-    }
-  }
-
-  rectangular_QR qrX(nx, 2*r);
-  qrX.compute(X_large);
-  S_large = qrX.R()*S_large;
-  X_large = qrX.Q();
-
-  rectangular_QR qrV(nv, 2*r);
-  qrV.compute(V_large);
-  S_large = S_large*qrV.R().transpose();
-  V_large = qrV.Q();
-
-/*
-  C.X.resize({X_large.rows(), X_large.cols()});
-  for(Index k=0;k<C.X.shape()[1];k++)
-    for(Index i=0;i<C.X.shape()[0];i++)
-      C.X(i, k) = X_large(i, k);
-
-  C.V.resize({V_large.rows(), V_large.cols()});
-  for(Index k=0;k<C.V.shape()[1];k++)
-    for(Index i=0;i<C.V.shape()[0];i++)
-      C.V(i, k) = V_large(i, k);
-
-  C.S.resize({S_large.rows(), S_large.cols()});
-  for(Index k=0;k<C.S.shape()[1];k++)
-    for(Index i=0;i<C.S.shape()[0];i++)
-      C.S(i, k) = S_large(i, k);
-*/
-  JacobiSVD<MatrixXd> svd(S_large, ComputeThinU | ComputeThinV); 
-  MatrixXd S = svd.singularValues().asDiagonal();
-
-  // set S
-  for(Index j=0;j<r;j++)
-    for(Index i=0;i<r;i++)
-      C.S(i, j) = S(i,j);
-
-  X_large = X_large*svd.matrixU();
-  V_large = V_large*svd.matrixV();
-  //cout << X_large.rows() << " " << X_large.cols() << endl;
-
-  for(Index k=0;k<r;k++)
-    for(Index i=0;i<nx;i++)
-      C.X(i, k) = X_large(i, k);
-  
-  for(Index k=0;k<r;k++)
-    for(Index i=0;i<nv;i++)
-      C.V(i, k) = V_large(i, k);
-
-  gt::stop("add_lr");
-}
-
-
-
 void integrate_mulvsq(const mat& V, mat& intV, const grid_info<2>& gi) {
   for(Index r=0;r<gi.r;r++) {
     for(Index iz=0;iz<gi.N_zv[0];iz++) {
@@ -1823,36 +1152,766 @@ struct dtA_iterative_solver {
 };
 
 
-struct integrator {
 
-  void step(double tau, lr2<double>& f, double* ee, double* max_ee, bool keep_ak0=false) {
-    if(__dtA == nullptr) { // compute dtA from solution
-      compute_A(f, A0.X, A0.V);
-      if(keep_ak0)
-        AK0 = A0.X;
-      
-      blas.matmul(f.X,f.S,K);
-      compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
-      deriv_z(rho.V, E.V, gi);
-      for(Index j=0;j<gi.r;j++) {
-        for(Index i=0;i<gi.r;i++) {
-          rho.S(i,j) = double(i==j);
-          E.S(i,j)   = double(i==j);
-        }
+
+
+struct timestepper {
+
+  timestepper() : __Kphi(nullptr), __Vphi(nullptr) {}
+  virtual ~timestepper() {}
+
+  virtual void operator()(double tau, lr2<double>& f, double* ee=nullptr, double* ee_max=nullptr) = 0;
+
+  void set_Kphi(mat* Kphi) {
+    __Kphi = Kphi;
+  }
+  
+  void set_Vphi(mat* Vphi) {
+    __Vphi = Vphi;
+  }
+
+  mat *__Kphi, *__Vphi;
+};
+
+struct timestepper_lie : timestepper {
+
+  void compute_E_dtA(lr2<double>& f) {
+    blas.matmul(f.X,f.S,K);
+    compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
+    Kphi = E.X;
+    Vphi = rho.V;
+    deriv_z(rho.V, E.V, gi);
+    for(Index j=0;j<gi.r;j++) {
+      for(Index i=0;i<gi.r;i++) {
+        rho.S(i,j) = double(i==j);
+        E.S(i,j)   = double(i==j);
       }
-      gt::start("dtA_iteration");
-      dtA_it.operator()(dtA, f, E, rho);
-      gt::stop("dtA_iteration");
+    }
+    
+    gt::start("dtA_iteration");
+    dtA_it.operator()(dtA, f, E, rho);
+    gt::stop("dtA_iteration");
+  }
 
-    } else { // use the specified dtA (used for testing)
-      dtA = *__dtA;
+
+  void operator()(double tau, lr2<double>& f, double* ee=nullptr, double* ee_max=nullptr) {
+    gt::start("step");
+
+    compute_E_dtA(f);
+
+    double _ee = electric_energy(Kphi, gi, blas);
+    if(ee != nullptr)
+      *ee = _ee;
+
+    if(ee_max != nullptr) {
+      deriv_z(Vphi, dzVphi, gi);
+      *ee_max = max_norm_estimate(Kphi, dzVphi, gi, blas); 
     }
 
+    // K step
+
+    C1 = ccoeff.compute_C1(f.V, blas);
+    C2 = ccoeff.compute_C2(f.V, Vphi, blas);
+    C3 = ccoeff.compute_C3(f.V, dtA.V, blas);
+    blas.matmul(dtA.X, dtA.S, KdtA);
+
+    gt::start("K_step");
+    K_step(tau, K, Kphi, KdtA, C1, C2, C3, blas);
+    gt::stop("K_step");
+
+    gt::start("gs");
+
+    f.X = K;
+    gs(f.X, f.S, ip_xx);
+
+    Xphi = Kphi;
+    gs(Xphi, Sphi, ip_xx);
+
+    gt::stop("gs");
+
+    // S step
+
+    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
+    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
+    
+    gt::start("S_step");
+    S_step(tau, f.S, Sphi, dtA.S, C1, C2, C3, D2, D3);
+    gt::stop("S_step");
+
+    // L step
+
+    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
+    blas.matmul_transb(Vphi,Sphi,Lphi);
+    e = ccoeff.compute_e(D2, Lphi);
+
+    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
+    blas.matmul_transb(dtA.V,dtA.S,LdtA);
+    eA = ccoeff.compute_eA(D3, LdtA);
+
+    gt::start("L_step");
+    blas.matmul_transb(f.V,f.S,L);
+    L_step(tau, L, e, eA);
+    gt::stop("L_step");
+
+    gt::start("gs");
+
+    f.V = L;
+    gs(f.V, f.S, ip_zv);
+    transpose_inplace(f.S);
+
+    gt::stop("gs");
+
+    gt::stop("step");
+  }
+
+  timestepper_lie(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}) {
+    D2.resize({gi.r,gi.r,gi.r});
+    D3.resize({gi.r,gi.r,gi.r});
+    e.resize({gi.N_zv[0], gi.r, gi.r});
+    eA.resize({gi.N_zv[0], gi.r, gi.r});
+    C1.resize({gi.r, gi.r});
+    C2.resize({gi.r,gi.r,gi.r});
+    C3.resize({gi.r,gi.r,gi.r});
+
+    Lphi.resize({gi.N_zv[0], gi.r});
+    LdtA.resize({gi.N_zv[0], gi.r});
+    Sphi.resize({gi.r, gi.r});
+
+    K.resize({gi.dxx_mult, gi.r});
+    L.resize({gi.dzv_mult, gi.r});
+
+    Kphi.resize({gi.dxx_mult, gi.r});
+    dzVphi.resize({gi.N_zv[0], gi.r});
+    KdtA.resize({gi.dxx_mult, gi.r});
+    Xphi.resize({gi.dxx_mult, gi.r});
+    Vphi.resize({gi.N_zv[0], gi.r});
+  }
+
+private:
+  grid_info<2> gi;
+  const blas_ops& blas;
+  compute_coeff ccoeff;
+  PS_L_step L_step;
+  PS_K_step K_step;
+  PS_S_step S_step;
+  gram_schmidt gs;
+  scalar_potential compute_phi;
+  dtA_iterative_solver dtA_it;
+  mat C1;
+  ten3 D2, e, eA, C2, C3, D3;
+  mat Lphi, Sphi, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi;
+  std::function<double(double*,double*)> ip_xx, ip_zv;
+  lr2<double> rho, E, dtA;
+};
+
+
+struct timestepper_unconventional: timestepper {
+
+  void compute_E_dtA(lr2<double>& f) {
+    blas.matmul(f.X,f.S,K);
+    compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
+    Kphi = E.X;
+    Vphi = rho.V;
+    deriv_z(rho.V, E.V, gi);
+    for(Index j=0;j<gi.r;j++) {
+      for(Index i=0;i<gi.r;i++) {
+        rho.S(i,j) = double(i==j);
+        E.S(i,j)   = double(i==j);
+      }
+    }
+    
+    gt::start("dtA_iteration");
+    dtA_it.operator()(dtA, f, E, rho);
+    gt::stop("dtA_iteration");
+  }
+
+
+  void operator()(double tau, lr2<double>& f, double* ee=nullptr, double* ee_max=nullptr) {
+    gt::start("step");
+
+    compute_E_dtA(f);
+
+    double _ee = electric_energy(Kphi, gi, blas);
+    if(ee != nullptr)
+      *ee = _ee;
+
+    if(ee_max != nullptr) {
+      deriv_z(Vphi, dzVphi, gi);
+      *ee_max = max_norm_estimate(Kphi, dzVphi, gi, blas); 
+    }
+
+    // backup initial value
+    X0 = f.X;
+    V0 = f.V;
+
+    // compute the coefficients
+    C1 = ccoeff.compute_C1(f.V, blas);
+    C2 = ccoeff.compute_C2(f.V, Vphi, blas);
+    C3 = ccoeff.compute_C3(f.V, dtA.V, blas);
+
+    Xphi = Kphi;
+    gt::start("gs");
+    gs(Xphi, Sphi, ip_xx);
+    gt::stop("gs");
+
+    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
+    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
+
+    blas.matmul_transb(Vphi,Sphi,Lphi);
+    e = ccoeff.compute_e(D2, Lphi);
+    
+    blas.matmul_transb(dtA.V,dtA.S,LdtA);
+    eA = ccoeff.compute_eA(D3, LdtA);
+
+    // K step
+    blas.matmul(dtA.X, dtA.S, KdtA);
+    gt::start("K_step");
+    K_step(tau, K, Kphi, KdtA, C1, C2, C3, blas);
+    gt::stop("K_step");
+
+    // L step
+    gt::start("L_step");
+    blas.matmul_transb(f.V,f.S,L);
+    L_step(tau, L, e, eA);
+    gt::stop("L_step");
+
+    gt::start("gs");
+    f.X = K;
+    gs(f.X, unused, ip_xx);
+    f.V = L;
+    gs(f.V, unused, ip_zv);
+    gt::stop("gs");
+
+    gt::start("projection");
+    
+    // computer the S matrix transformed to the new basis
+    mat M({gi.r,gi.r}), N({gi.r,gi.r});
+
+    coeff(f.X, X0, gi.h_xx[0]*gi.h_xx[1], M, blas);
+    coeff(f.V, V0, gi.h_zv[0]*gi.h_zv[1], N, blas);
+
+    mat Stmp({gi.r,gi.r});
+    blas.matmul(M, f.S, Stmp);
+    blas.matmul_transb(Stmp, N, f.S);
+    gt::stop("projection");
+
+    // recompute the required coefficients (with the new basis functions)
+    C1 = ccoeff.compute_C1(f.V, blas);
+    C2 = ccoeff.compute_C2(f.V, Vphi, blas);
+    C3 = ccoeff.compute_C3(f.V, dtA.V, blas);
+
+    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
+    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
+
+    // do the S step
+    gt::start("S_step");
+    // Note that the S_step is implemented for the projector splitting which uses
+    // the negative of the rhs that we require here.
+    S_step(-tau, f.S, Sphi, dtA.S, C1, C2, C3, D2, D3);
+    gt::stop("S_step");
+
+    gt::stop("step");
+  }
+
+
+  timestepper_unconventional(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}) {
+    D2.resize({gi.r,gi.r,gi.r});
+    D3.resize({gi.r,gi.r,gi.r});
+    e.resize({gi.N_zv[0], gi.r, gi.r});
+    eA.resize({gi.N_zv[0], gi.r, gi.r});
+    C1.resize({gi.r, gi.r});
+    C2.resize({gi.r,gi.r,gi.r});
+    C3.resize({gi.r,gi.r,gi.r});
+
+    Lphi.resize({gi.N_zv[0], gi.r});
+    LdtA.resize({gi.N_zv[0], gi.r});
+    Sphi.resize({gi.r, gi.r});
+    unused.resize({gi.r, gi.r});
+
+    K.resize({gi.dxx_mult, gi.r});
+    L.resize({gi.dzv_mult, gi.r});
+
+    Kphi.resize({gi.dxx_mult, gi.r});
+    dzVphi.resize({gi.N_zv[0], gi.r});
+    KdtA.resize({gi.dxx_mult, gi.r});
+    Xphi.resize({gi.dxx_mult, gi.r});
+    Vphi.resize({gi.N_zv[0], gi.r});
+
+    X0.resize({gi.dxx_mult, gi.r});
+    V0.resize({gi.dzv_mult, gi.r});
+  }
+
+private:
+  grid_info<2> gi;
+  const blas_ops& blas;
+  compute_coeff ccoeff;
+  PS_L_step L_step;
+  PS_K_step K_step;
+  PS_S_step S_step;
+  gram_schmidt gs;
+  scalar_potential compute_phi;
+  dtA_iterative_solver dtA_it;
+  mat C1;
+  ten3 D2, e, eA, C2, C3, D3;
+  mat Lphi, Sphi, unused, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi, X0, V0;
+  std::function<double(double*,double*)> ip_xx, ip_zv;
+  lr2<double> rho, E, dtA;
+
+};
+
+
+struct timestepper_augmented_unconventional: timestepper {
+
+  void compute_E_dtA(lr2<double>& f) {
+    blas.matmul(f.X,f.S,K);
+    compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
+    Kphi = E.X;
+    Vphi = rho.V;
+    deriv_z(rho.V, E.V, gi);
+    for(Index j=0;j<gi.r;j++) {
+      for(Index i=0;i<gi.r;i++) {
+        rho.S(i,j) = double(i==j);
+        E.S(i,j)   = double(i==j);
+      }
+    }
+    
+    gt::start("dtA_iteration");
+    dtA_it.operator()(dtA, f, E, rho);
+    gt::stop("dtA_iteration");
+  }
+
+  void operator()(double tau, lr2<double>& f, double* ee=nullptr, double* ee_max=nullptr) {
+    gt::start("step");
+
+    compute_E_dtA(f);
+
+    double _ee = electric_energy(Kphi, gi, blas);
+    if(ee != nullptr)
+      *ee = _ee;
+
+    if(ee_max != nullptr) {
+      deriv_z(Vphi, dzVphi, gi);
+      *ee_max = max_norm_estimate(Kphi, dzVphi, gi, blas); 
+    }
+
+    // backup initial value
+    lr2<double> f0 = f;
+    X0 = f.X;
+    V0 = f.V;
+
+    // compute the coefficients
+    C1 = ccoeff.compute_C1(f.V, blas);
+    C2 = ccoeff.compute_C2(f.V, Vphi, blas);
+    C3 = ccoeff.compute_C3(f.V, dtA.V, blas);
+
+    Xphi = Kphi;
+    gt::start("gs");
+    gs(Xphi, Sphi, ip_xx);
+    gt::stop("gs");
+
+    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
+    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
+
+    blas.matmul_transb(Vphi,Sphi,Lphi);
+    e = ccoeff.compute_e(D2, Lphi);
+    
+    blas.matmul_transb(dtA.V,dtA.S,LdtA);
+    eA = ccoeff.compute_eA(D3, LdtA);
+
+    // K step
+    blas.matmul(dtA.X, dtA.S, KdtA);
+    gt::start("K_step");
+    K_step(tau, K, Kphi, KdtA, C1, C2, C3, blas);
+    gt::stop("K_step");
+
+    // L step
+    gt::start("L_step");
+    blas.matmul_transb(f.V,f.S,L);
+    L_step(tau, L, e, eA);
+    gt::stop("L_step");
+
+    // setup the augmented basis
+    componentwise_mat_omp(gi.r, gi.N_xx, [this](Index idx, mind<2> i, Index r) {
+      aug.X(idx, r) = X0(idx, r);
+      aug.X(idx, gi.r+r) = K(idx, r);
+    });
+    componentwise_mat_omp(gi.r, gi.N_zv, [this](Index idx, mind<2> i, Index r) {
+      aug.V(idx, r) = V0(idx, r);
+      aug.V(idx, gi.r+r) = L(idx, r);
+    });
+
+    gt::start("gs");
+    gs(aug.X, unused, ip_xx);
+    gs(aug.V, unused, ip_zv);
+    gt::stop("gs");
+
+    // We do not need to compute the new S matrix (with N and M) since we already
+    // know how S is expressed in the new basis.
+    for(Index i=0;i<2*gi.r;i++)
+      for(Index j=0;j<2*gi.r;j++)
+        aug.S(i,j) = (i<gi.r && j<gi.r) ? f.S(i,j) : 0.0;
+    
+
+    // recompute the required coefficients (with the new basis functions)
+    aug_C1 = aug_ccoeff.compute_C1(aug.V, blas);
+    aug_C2 = aug_ccoeff.compute_C2(aug.V, Vphi, blas);
+    aug_C3 = aug_ccoeff.compute_C3(aug.V, dtA.V, blas);
+
+    aug_D2 = aug_ccoeff.compute_D2(aug.X, Xphi, blas);
+    aug_D3 = aug_ccoeff.compute_D3(aug.X, dtA.X, blas);
+
+    // do the S step
+    gt::start("S_step");
+    // Note that the S_step is implemented for the projector splitting which uses
+    // the negative of the rhs compared to the projector splitting.
+    S_step_aug(-tau, aug.S, Sphi, dtA.S, aug_C1, aug_C2, aug_C3, aug_D2, aug_D3);
+    gt::stop("S_step");
+
+    gt::start("truncation");
+    lr_truncate(aug, f, blas);
+    gt::stop("truncation");
+    gt::stop("step");
+  }
+
+
+  timestepper_augmented_unconventional(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), aug_ccoeff(modify_r(_gi, 2*_gi.r), gi.r), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), S_step_aug(modify_r(gi, 2*_gi.r), _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), aug(2*_gi.r, {_gi.dxx_mult, _gi.dzv_mult}), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}) {
+    D2.resize({gi.r,gi.r,gi.r});
+    D3.resize({gi.r,gi.r,gi.r});
+    
+    aug_D2.resize({2*gi.r,2*gi.r,gi.r});
+    aug_D3.resize({2*gi.r,2*gi.r,gi.r});
+
+    e.resize({gi.N_zv[0], gi.r, gi.r});
+    eA.resize({gi.N_zv[0], gi.r, gi.r});
+
+    C1.resize({gi.r, gi.r});
+    C2.resize({gi.r,gi.r,gi.r});
+    C3.resize({gi.r,gi.r,gi.r});
+    
+    aug_C1.resize({2*gi.r, 2*gi.r});
+    aug_C2.resize({2*gi.r,2*gi.r,gi.r});
+    aug_C3.resize({2*gi.r,2*gi.r,gi.r});
+
+    Lphi.resize({gi.N_zv[0], gi.r});
+    LdtA.resize({gi.N_zv[0], gi.r});
+    Sphi.resize({gi.r, gi.r});
+    unused.resize({2*gi.r, 2*gi.r});
+
+    K.resize({gi.dxx_mult, gi.r});
+    L.resize({gi.dzv_mult, gi.r});
+
+    Kphi.resize({gi.dxx_mult, gi.r});
+    dzVphi.resize({gi.N_zv[0], gi.r});
+    KdtA.resize({gi.dxx_mult, gi.r});
+    Xphi.resize({gi.dxx_mult, gi.r});
+    Vphi.resize({gi.N_zv[0], gi.r});
+
+    X0.resize({gi.dxx_mult, gi.r});
+    V0.resize({gi.dzv_mult, gi.r});
+  }
+
+private:
+  grid_info<2> gi;
+  const blas_ops& blas;
+  compute_coeff ccoeff, aug_ccoeff;
+  PS_L_step L_step;
+  PS_K_step K_step;
+  PS_S_step S_step;
+  PS_S_step S_step_aug;
+  gram_schmidt gs;
+  scalar_potential compute_phi;
+  dtA_iterative_solver dtA_it;
+  mat C1, aug_C1;
+  ten3 D2, e, eA, C2, C3, D3, aug_C2, aug_C3, aug_D2, aug_D3;
+  mat Lphi, Sphi, unused, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi, X0, V0;
+  std::function<double(double*,double*)> ip_xx, ip_zv;
+  lr2<double> aug;
+  lr2<double> rho, E, dtA;
+};
+
+
+struct timestepper_strang : timestepper {
+
+  void compute_E_dtA(lr2<double>& f) {
+    blas.matmul(f.X,f.S,K);
+    compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
+    Kphi = E.X;
+    Vphi = rho.V;
+    deriv_z(rho.V, E.V, gi);
+    for(Index j=0;j<gi.r;j++) {
+      for(Index i=0;i<gi.r;i++) {
+        rho.S(i,j) = double(i==j);
+        E.S(i,j)   = double(i==j);
+      }
+    }
+    
+    gt::start("dtA_iteration");
+    dtA_it.operator()(dtA, f, E, rho);
+    gt::stop("dtA_iteration");
+    
+    gt::start("gs");
+    Xphi = Kphi;
+    gs(Xphi, Sphi, ip_xx);
+    gt::stop("gs");
+    
+    blas.matmul_transb(Vphi,Sphi,Lphi);
+    blas.matmul_transb(dtA.V,dtA.S,LdtA);
+    
+    blas.matmul(dtA.X, dtA.S, KdtA);
+  }
+
+  void step_K(double tau, lr2<double>& f) {
+    // K step (0.5*tau)
+    C1 = ccoeff.compute_C1(f.V, blas);
+    C2 = ccoeff.compute_C2(f.V, Vphi, blas);
+    C3 = ccoeff.compute_C3(f.V, dtA.V, blas);
+
+    gt::start("K_step");
+    blas.matmul(f.X,f.S,K);
+    K_step(tau, K, Kphi, KdtA, C1, C2, C3, blas);
+    gt::stop("K_step");
+
+    gt::start("gs");
+    f.X = K;
+    gs(f.X, f.S, ip_xx);
+    gt::stop("gs");
+  }
+
+  void step_S(double tau, lr2<double>& f) {
+    // S step (0.5*tau)
+    C1 = ccoeff.compute_C1(f.V, blas);
+    C2 = ccoeff.compute_C2(f.V, Vphi, blas);
+    C3 = ccoeff.compute_C3(f.V, dtA.V, blas);
+    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
+    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
+
+    gt::start("S_step");
+    S_step(tau, f.S, Sphi, dtA.S, C1, C2, C3, D2, D3);
+    gt::stop("S_step");
+  }
+
+  void step_L(double tau, lr2<double>& f) {
+    // L step (0.5*tau)
+    D2 = ccoeff.compute_D2(f.X, Xphi, blas);
+    D3 = ccoeff.compute_D3(f.X, dtA.X, blas);
+    e = ccoeff.compute_e(D2, Lphi);
+    eA = ccoeff.compute_eA(D3, LdtA);
+
+    gt::start("L_step");
+    blas.matmul_transb(f.V,f.S,L);
+    L_step(tau, L, e, eA);
+    gt::stop("L_step");
+
+    gt::start("gs");
+    f.V = L;
+    gs(f.V, f.S, ip_zv);
+    transpose_inplace(f.S);
+    gt::stop("gs");
+
+  }
+
+  void operator()(double tau, lr2<double>& f, double* ee=nullptr, double* ee_max=nullptr) {
+    gt::start("step");
+
+    // compute electric and magnetic field
+    compute_E_dtA(f);
+
+    double _ee = electric_energy(Kphi, gi, blas);
+    if(ee != nullptr)
+      *ee = _ee;
+
+    if(ee_max != nullptr) {
+      deriv_z(Vphi, dzVphi, gi);
+      *ee_max = max_norm_estimate(Kphi, dzVphi, gi, blas); 
+    }
+
+    ftmp = f;
+    step_L(0.5*tau, ftmp);
+    step_S(0.5*tau, ftmp);
+    step_K(0.5*tau, ftmp);
+
+    compute_E_dtA(ftmp);
+
+    step_L(0.5*tau, f);
+    step_S(0.5*tau, f);
+    step_K(tau, f);
+    step_S(0.5*tau, f);
+    step_L(0.5*tau, f);
+  }
+
+  timestepper_strang(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), ftmp(_gi.r, {_gi.dxx_mult, _gi.dzv_mult}) {
+    D2.resize({gi.r,gi.r,gi.r});
+    D3.resize({gi.r,gi.r,gi.r});
+    e.resize({gi.N_zv[0], gi.r, gi.r});
+    eA.resize({gi.N_zv[0], gi.r, gi.r});
+    C1.resize({gi.r, gi.r});
+    C2.resize({gi.r,gi.r,gi.r});
+    C3.resize({gi.r,gi.r,gi.r});
+
+    Lphi.resize({gi.N_zv[0], gi.r});
+    LdtA.resize({gi.N_zv[0], gi.r});
+    Sphi.resize({gi.r, gi.r});
+
+    K.resize({gi.dxx_mult, gi.r});
+    L.resize({gi.dzv_mult, gi.r});
+
+    Kphi.resize({gi.dxx_mult, gi.r});
+    dzVphi.resize({gi.N_zv[0], gi.r});
+    KdtA.resize({gi.dxx_mult, gi.r});
+    Xphi.resize({gi.dxx_mult, gi.r});
+    Vphi.resize({gi.N_zv[0], gi.r});
+  }
+
+private:
+  grid_info<2> gi;
+  const blas_ops& blas;
+  compute_coeff ccoeff;
+  PS_L_step L_step;
+  PS_K_step K_step;
+  PS_S_step S_step;
+  gram_schmidt gs;
+  scalar_potential compute_phi;
+  dtA_iterative_solver dtA_it;
+  mat C1;
+  ten3 D2, e, eA, C2, C3, D3;
+  mat Lphi, Sphi, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi;
+  std::function<double(double*,double*)> ip_xx, ip_zv;
+  lr2<double> rho, E, dtA, ftmp;
+};
+
+
+
+
+
+
+struct rectangular_QR {
+    int n, r;
+    Eigen::HouseholderQR<Eigen::MatrixXd> qr;
+
+    rectangular_QR(int _n, int _r) : n(_n), r(_r), qr(_n,_r) {}
+
+    rectangular_QR(Eigen::MatrixXd& A) : qr(A) {
+        n = A.rows();
+        r = A.cols();
+    }
+
+    void compute(const Eigen::MatrixXd& A) {
+        qr.compute(A);
+    }
+
+    Eigen::MatrixXd Q() {
+        // Internally Eigen stores the QR decomposition as a sequence of
+        // Householder transformations. We multiply with the 'identity' to only
+        // get the 'thin QR factorization'.
+        // If qr.householderQ() is directly assigned to a MatrixXd object, the full matrix
+        // is formed and performance suffers because of it.
+        return qr.householderQ()*Eigen::MatrixXd::Identity(n, r);
+    }
+
+    Eigen::MatrixXd R() {
+        Eigen::MatrixXd mr = qr.matrixQR().triangularView<Eigen::Upper>();
+        return mr.block(0,0,r,r);
+    }
+
+};
+
+
+void add_lr(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, lr2<double>& C, const blas_ops& blas) {
+  gt::start("add_lr");
+
+  using namespace Eigen;
+
+  Index r = A.S.shape()[0];
+  Index nx = A.X.shape()[0];
+  Index nv = A.V.shape()[0];
+
+  MatrixXd S_large({2*r, 2*r});
+  S_large.setZero();
+  for(Index j=0;j<r;j++) {
+    for(Index i=0;i<r;i++) {
+      S_large(i, j) = alpha*A.S(i, j);
+      S_large(r+i,r+j) = beta*B.S(i, j);
+    }
+  }
+
+  // X_large
+  MatrixXd X_large(nx, 2*r);
+  for(Index k=0;k<r;k++) {
+    for(Index i=0;i<nx;i++) {
+      X_large(i, k) = A.X(i, k);
+      X_large(i, k+r) = B.X(i, k);
+    }
+  }
+
+  // V_large 
+  MatrixXd V_large(nv, 2*r);
+  for(Index k=0;k<r;k++) {
+    for(Index i=0;i<nv;i++) {
+      V_large(i, k) = A.V(i, k);
+      V_large(i, k+r) = B.V(i, k);
+    }
+  }
+
+  rectangular_QR qrX(nx, 2*r);
+  qrX.compute(X_large);
+  S_large = qrX.R()*S_large;
+  X_large = qrX.Q();
+
+  rectangular_QR qrV(nv, 2*r);
+  qrV.compute(V_large);
+  S_large = S_large*qrV.R().transpose();
+  V_large = qrV.Q();
+
+/*
+  C.X.resize({X_large.rows(), X_large.cols()});
+  for(Index k=0;k<C.X.shape()[1];k++)
+    for(Index i=0;i<C.X.shape()[0];i++)
+      C.X(i, k) = X_large(i, k);
+
+  C.V.resize({V_large.rows(), V_large.cols()});
+  for(Index k=0;k<C.V.shape()[1];k++)
+    for(Index i=0;i<C.V.shape()[0];i++)
+      C.V(i, k) = V_large(i, k);
+
+  C.S.resize({S_large.rows(), S_large.cols()});
+  for(Index k=0;k<C.S.shape()[1];k++)
+    for(Index i=0;i<C.S.shape()[0];i++)
+      C.S(i, k) = S_large(i, k);
+*/
+  JacobiSVD<MatrixXd> svd(S_large, ComputeThinU | ComputeThinV); 
+  MatrixXd S = svd.singularValues().asDiagonal();
+
+  // set S
+  for(Index j=0;j<r;j++)
+    for(Index i=0;i<r;i++)
+      C.S(i, j) = S(i,j);
+
+  X_large = X_large*svd.matrixU();
+  V_large = V_large*svd.matrixV();
+  //cout << X_large.rows() << " " << X_large.cols() << endl;
+
+  for(Index k=0;k<r;k++)
+    for(Index i=0;i<nx;i++)
+      C.X(i, k) = X_large(i, k);
+  
+  for(Index k=0;k<r;k++)
+    for(Index i=0;i<nv;i++)
+      C.V(i, k) = V_large(i, k);
+
+  gt::stop("add_lr");
+}
+
+
+
+struct integrator {
+
+  void step(double tau, lr2<double>& f, double* ee, double* max_ee) {
     // do the timestep
     gt::start("timeloop_step");
-    timestep->operator()(tau, f, dtA, ee, max_ee);
+    timestep->operator()(tau, f, ee, max_ee);
     gt::stop("timeloop_step");
   }
+  
 
   double compute_ee(lr2<double>& f) {
     blas.matmul(f.X,f.S,K);
@@ -1884,18 +1943,19 @@ struct integrator {
         double ke = kinetic_energy(K, f.V, gi, blas);
         double m = mass(K, f.V, gi, blas);
         double mom = momentum(K, f.V, gi, blas);
+        compute_A(f, AK0, A0.V);
         gt::stop("timeloop_diagnostic");
 
         double ee, max_ee;
         double tau_new=tau;
         if(!time_adaptive) {
-          step(tau, f, &ee, &max_ee, true);
+          step(tau, f, &ee, &max_ee);
         } else {
           ftmp2 = f;
 
           ftmp = f;
           double ee1, max_ee1;
-          step(tau, ftmp, &ee1, &max_ee1, true);
+          step(tau, ftmp, &ee1, &max_ee1);
           double ee_tau = compute_ee(ftmp);
           compute_A(ftmp, A0.X, A0.V);
           double me_tau = magnetic_energy(A0.X, gi, blas);
@@ -1906,11 +1966,11 @@ struct integrator {
           compute_A(f, A0.X, A0.V);
           double me_tauhalf = magnetic_energy(A0.X, gi, blas);
 
-          double err = sqrt(pow(ee_tau-ee_tauhalf,2)+pow(me_tau-me_tauhalf,2))/3.0;
-          double err_rel = err/abs(ee_tauhalf+me_tauhalf)/time_tol;
+          double err = sqrt(pow(ee_tau-ee_tauhalf,2)+pow(me_tau-me_tauhalf,2))/double(pow(2,order+1)-1);
+          double err_rel = err/sqrt(pow(ee_tauhalf,2)+pow(me_tauhalf,2))/time_tol;
           if(err_rel < 1.0) {
             // accept the step and adjust tau
-            tau_new = 0.7*tau*pow(1.0/err_rel, 0.5);
+            tau_new = tau*pow(0.7/err_rel, 1.0/(double(order)+1.0));
           } else {
             // reject the step
             f = ftmp2;
@@ -1973,13 +2033,18 @@ struct integrator {
     
     initialize(f, X0, V0, ip_xx, ip_zv, blas);
 
-    if(method == "lie")
+    if(method == "lie") {
       timestep = make_unique_ptr<timestepper_lie>(gi, blas, ip_xx, ip_zv);
-    else if(method == "unconventional")
+      order = 1;
+    } else if(method == "unconventional") {
       timestep = make_unique_ptr<timestepper_unconventional>(gi, blas, ip_xx, ip_zv);
-    else if(method == "augmented")
+      order = 1;
+    } else if(method == "augmented") {
       timestep = make_unique_ptr<timestepper_augmented_unconventional>(gi, blas, ip_xx, ip_zv);
-    else {
+    } else if(method == "strang") {
+      timestep = make_unique_ptr<timestepper_strang>(gi, blas, ip_xx, ip_zv);
+      order = 2;
+    } else {
       cout << "ERROR: the method " << method << " is not valid for integration" << endl;
       exit(1);
     }
@@ -2002,9 +2067,9 @@ struct integrator {
   mat AK0, K, Kphi, Vphi;
   std::function<double(double*,double*)> ip_xx, ip_zv, ip_z;
   std::unique_ptr<timestepper> timestep;
+  Index order;
   vector_potential compute_A;
   dtA_iterative_solver dtA_it;
   scalar_potential compute_phi;
   lr2<double>* __dtA;
-
 };
