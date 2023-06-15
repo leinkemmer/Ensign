@@ -7,7 +7,7 @@ int main(int argc, char** argv) {
   cxxopts::Options options("alfven_waves", "2+2 dimensional dynamical low-rank solver for Alfven wave problems");
   options.add_options()
   ("problem", "Initial value that is used in the simulation", cxxopts::value<string>()->default_value("alfven"))
-  ("method", "Dynamical low-rank method (either lie or unconventional)", cxxopts::value<string>()->default_value("lie"))
+  ("method", "Dynamical low-rank method (either lie, unconventional, augmented, or strang)", cxxopts::value<string>()->default_value("lie"))
   ("final_time", "Time to which the simulation is run", cxxopts::value<double>()->default_value("1.0"))
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("1e-5"))
   ("r,rank", "Rank of the simulation", cxxopts::value<int>()->default_value("5"))
@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
   ("alpha", "strength of perturbation", cxxopts::value<double>()->default_value("1e-2"))
   ("discretization", "space and time discretization used", cxxopts::value<string>()->default_value("fft"))
   ("time_adaptive", "adaptive step size control", cxxopts::value<bool>()->default_value("false"))
-  ("time_tol", "tolerance for time adaptivity", cxxopts::value<double>()->default_value("1e-5"))
+  ("time_tol", "tolerance for time adaptivity", cxxopts::value<double>()->default_value("1e-2"))
   ("h,help", "Help message")
   ;
   auto result = options.parse(argc, argv);

@@ -1966,8 +1966,8 @@ struct integrator {
           compute_A(f, A0.X, A0.V);
           double me_tauhalf = magnetic_energy(A0.X, gi, blas);
 
-          double err = sqrt(pow(ee_tau-ee_tauhalf,2)+pow(me_tau-me_tauhalf,2))/double(pow(2,order+1)-1);
-          double err_rel = err/sqrt(pow(ee_tauhalf,2)+pow(me_tauhalf,2))/time_tol;
+          double err = sqrt(pow(ee_tau-ee_tauhalf,2)+pow(me_tau-me_tauhalf,2))/double(pow(2,order+1)-1); 
+          double err_rel = err/sqrt(pow(ee_tauhalf,2)+pow(me_tauhalf,2))/time_tol/(0.5*tau); // relative error per unit time
           if(err_rel < 1.0) {
             // accept the step and adjust tau
             tau_new = tau*pow(0.7/err_rel, 1.0/(double(order)+1.0));
@@ -2033,12 +2033,11 @@ struct integrator {
     
     initialize(f, X0, V0, ip_xx, ip_zv, blas);
 
+    order = 1;
     if(method == "lie") {
       timestep = make_unique_ptr<timestepper_lie>(gi, blas, ip_xx, ip_zv);
-      order = 1;
     } else if(method == "unconventional") {
       timestep = make_unique_ptr<timestepper_unconventional>(gi, blas, ip_xx, ip_zv);
-      order = 1;
     } else if(method == "augmented") {
       timestep = make_unique_ptr<timestepper_augmented_unconventional>(gi, blas, ip_xx, ip_zv);
     } else if(method == "strang") {
