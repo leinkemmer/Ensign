@@ -1985,14 +1985,14 @@ struct integrator {
           double me_tauhalf = magnetic_energy(A0.X, gi, blas);
 
           double err = sqrt(pow(ee_tau-ee_tauhalf,2)+pow(me_tau-me_tauhalf,2))/double(pow(2,order+1)-1); 
-          double err_rel = err/sqrt(pow(ee_tauhalf,2)+pow(me_tauhalf,2))/time_tol/(0.5*tau); // relative error per unit time
+          double err_rel = err/sqrt(pow(ee_tauhalf,2)+pow(me_tauhalf,2))/time_tol/tau; // relative error per unit time
           if(err_rel < 1.0) {
             // accept the step and adjust tau
             tau_new = tau*pow(0.7/err_rel, 1.0/(double(order)+1.0));
           } else {
             // reject the step
             f = ftmp2;
-            tau = std::min(0.8*tau*pow(1.0/err_rel, 0.5), 0.25*tau);
+            tau = std::min(tau*pow(0.7/err_rel, 0.5), 0.5*tau);
             cout << "step rejected " << tau << endl;
             continue;
           }
