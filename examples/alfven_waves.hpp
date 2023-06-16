@@ -1021,6 +1021,8 @@ void integrate_mulvsq(const mat& V, mat& intV, const grid_info<2>& gi) {
 struct dtA_iterative_solver {
 
   void compute_rhs(const lr2<double>& f, const lr2<double>& E, const lr2<double>& mrho) {
+    gt::start("dtA_iterative_rhs");
+
     // \partial_z \int v^2 f dv
     int_vsq_z.X = f.X;
     int_vsq_z.S = f.S;
@@ -1028,16 +1030,26 @@ struct dtA_iterative_solver {
     deriv_z(int_vsq_z.V, int_vsq_z.V, gi);
 
     // E (1-\rho)
+    gt::start("dtA_iterative_mul");
     lr_mul(E, mrho, prod, ip_xx, ip_z, blas);
+    gt::stop("dtA_iterative_mul");
 
     // add them together and truncate
+    gt::start("dtA_iterative_add");
     lr_add(gi.C_A, int_vsq_z, -gi.C_A/gi.M_e, prod, large, ip_xx, ip_z, blas);
+    gt::stop("dtA_iterative_add");
     lr_truncate(large, rhs, blas);
+    
+    gt::stop("dtA_iterative_rhs");
   }
 
   void apply_lhs(lr2<double>& dtA, const lr2<double>& mrho) {
+    gt::start("dtA_iterative_lhs");
+
     // (1-rho) \partial_t A
+    gt::start("dtA_iterative_mul");
     lr_mul(mrho, dtA, prod, ip_xx, ip_z, blas);
+    gt::stop("dtA_iterative_mul");
 
     // (-\partial_xx - \partial_yy) A
     if(fft == nullptr)
@@ -1056,8 +1068,12 @@ struct dtA_iterative_solver {
 
     fft->backward(Xhat, dtA.X);
 
+    gt::start("dtA_iterative_add");
     lr_add(1.0, dtA, gi.C_A/gi.M_e, prod, large, ip_xx, ip_z, blas);
+    gt::stop("dtA_iterative_add");
     lr_truncate(large, dtA, blas);
+    
+    gt::stop("dtA_iterative_lhs");
   }
 
   void operator()(lr2<double>& dtA, const lr2<double>& f, const lr2<double>& E, const lr2<double>& mrho, lr2<double>* _rhs=nullptr) {
@@ -1176,6 +1192,7 @@ struct timestepper {
 struct timestepper_lie : timestepper {
 
   void compute_E_dtA(lr2<double>& f) {
+    gt::start("compute_E");
     blas.matmul(f.X,f.S,K);
     compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
     Kphi = E.X;
@@ -1187,6 +1204,7 @@ struct timestepper_lie : timestepper {
         E.S(i,j)   = double(i==j);
       }
     }
+    gt::stop("compute_E");
     
     gt::start("dtA_iteration");
     dtA_it.operator()(dtA, f, E, rho);
