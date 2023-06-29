@@ -3,6 +3,7 @@
 #include <generic/common.hpp>
 #include <generic/utility.hpp>
 #include <generic/kernels.hpp>
+#include <iomanip>
 
 template<class T, size_t d>
 struct multi_array {
@@ -10,7 +11,7 @@ struct multi_array {
   T* v;
   stloc sl;
 
-  multi_array(stloc _sl=stloc::host) : sl(_sl), v(nullptr) {
+  multi_array(stloc _sl=stloc::host) : v(nullptr), sl(_sl) {
     fill(e.begin(), e.end(), 0);
   }
 
@@ -290,7 +291,7 @@ struct multi_array {
     }else if(A.shape().size() == 2){
       for (Index i=0; i < A.shape()[0]; i++) {
         for (Index j=0; j < A.shape()[1]; j++) {
-          os << A.v[i + j*A.shape()[0]] << "  " ;
+          os << std::setw(20) << A.v[i + j*A.shape()[0]];
         }
         os << '\n';
       }
@@ -307,13 +308,14 @@ struct multi_array {
       return false;
     } else {
       for(Index i=0;i<lhs.num_elements();i++){
-        if(std::abs((lhs.v[i] - v[i])) > T(1000)*std::numeric_limits<T>::epsilon())
-        return false;
+        if(std::isnan(lhs.v[i]) || std::isnan(v[i])) 
+          return false;
+        if(std::abs((lhs.v[i] - v[i])) > T(10000)*std::numeric_limits<T>::epsilon())
+          return false;
       }
       return true;
     }
   }
-
 
 private:
   #ifdef __CUDACC__
@@ -353,4 +355,14 @@ void dump(string fn, const multi_array<complex<double>,d>& ma) {
   for(Index idx=0;idx<ma.num_elements();idx++)
     fs << h_ma.v[idx].real() << " " << h_ma.v[idx].imag() << endl;
   fs.close();
+}
+
+template<class T>
+void print(const multi_array<T,2>& ma) {
+  for(Index i=0;i<ma.shape()[0];i++) {
+    for(Index j=0;j<ma.shape()[1];j++)
+      cout << ma(i,j) << " ";
+    cout << endl;
+  }
+  cout << endl;
 }

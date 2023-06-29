@@ -4,7 +4,8 @@
 
 #ifndef __MKL__
 extern "C" {
-  extern int dgees_(char*,char*,void*,int*,double*,int*, int*, double*, double*, double*, int*, double*, int*, bool*,int*);
+  extern void dgees_(char*,char*,void*,int*,double*,int*, int*, double*, double*, double*, int*, double*, int*, bool*,int*);
+  extern void dgesvd_(char*,char*,int*,int*,double*,int*,double*,double*,int*,double*,int*,double*,int*,int*);
 }
 #endif
 
@@ -185,7 +186,7 @@ template<>
 void blas_ops::matmul(const multi_array<double,2>& a, const multi_array<double,2>& b, multi_array<double,2>& c) const {
   if((a.sl == stloc::host) && (b.sl == stloc::host) && (c.sl == stloc::host)){ // everything on CPU
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-      a.shape()[0], b.shape()[1], a.shape()[1],
+      c.shape()[0], c.shape()[1], a.shape()[1],
       1.0, a.begin(), a.shape()[0],
       b.begin(), a.shape()[1], 0.0,
       c.begin(), a.shape()[0]);
@@ -693,3 +694,39 @@ void diagonalization::operator()(const multi_array<double,2>& CC, multi_array<do
     dgees_(&jobvs,&sort,nullptr,&nn,D.begin(),&lda,&value,diag_r.begin(),diag_i.begin(),TT.begin(),&ldvs,work.begin(),&lwork,nullptr,&info);
   }
 }
+
+template<> 
+void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_array<double,2>& V, multi_array<double,1>& sigma_diag, const blas_ops& blas) {
+  #ifdef __MKL__
+  MKL_INT work_query = -1;
+  MKL_INT info;
+  MKL_INT size;
+  char mode = 'S';
+  MKL_INT m = input.shape()[0];
+  MKL_INT n = input.shape()[1];
+  MKL_INT m_U = U.shape()[0];
+  MKL_INT m_V = V.shape()[0];
+  #else
+  int work_query = -1;
+  int info;
+  int size;
+  char mode = 'S';
+  int m = input.shape()[0];
+  int n = input.shape()[1];
+  int m_U = U.shape()[0];
+  int m_V = V.shape()[0];
+  #endif
+
+  multi_array<double,2> input_copy = input; // Lapack overwrites the input data
+
+  vector<double> work({1});
+  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &work_query, &info);
+
+  size = work[0];
+  work.resize({(size_t)size});
+  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &size, &info);
+
+  // lapack actually computes V^T and not V
+  transpose_inplace(V);
+}
+

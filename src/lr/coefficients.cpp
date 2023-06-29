@@ -57,3 +57,29 @@ void integrate(const multi_array<T,2>& a, T w, multi_array<T,1>& out, const blas
 }
 template void integrate(const multi_array<double,2>& a, double w, multi_array<double,1>& out, const blas_ops& blas);
 template void integrate(const multi_array<float,2>& a, float w, multi_array<float,1>& out, const blas_ops& blas);
+
+
+
+template<class T>
+void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, const multi_array<T,2>& c, T w, multi_array<T,3>& out, const blas_ops& blas) {
+  if(a.sl == stloc::host){
+    #ifdef __OPENMP__
+    #pragma omp parallel for collapse(3)
+    #endif
+    for(Index k=0;k<c.shape()[1];k++) {
+      for(Index j=0;j<b.shape()[1];j++) {
+        for(Index i=0;i<a.shape()[1];i++) {
+          double val=0.0;
+          for(Index idx=0;idx<a.shape()[0];idx++)
+            val += w*a(idx, i)*b(idx, j)*c(idx, k);
+          out(i,j,k) = val;
+        }
+      }
+    }
+  }else{
+    cout << "ERROR: coeff with three arguments is not yet implemented on GPUs" << endl;
+    exit(1);
+  }
+}
+template void coeff(const multi_array<double,2>& a, const multi_array<double,2>& b, const multi_array<double,2>& c, double w, multi_array<double,3>& out, const blas_ops& blas);
+template void coeff(const multi_array<float,2>& a, const multi_array<float,2>& b, const multi_array<float,2>& c, float w, multi_array<float,3>& out, const blas_ops& blas);

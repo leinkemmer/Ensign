@@ -107,8 +107,9 @@ void destroy_plans(array<cufftHandle,2>& plans){
 }
 #endif
 
+// 3d
 template<>
-fft3d<2>::fft3d(array<Index,3> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq) {
+fft<2, 3>::fft(array<Index,3> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq) {
   if(real.sl == stloc::host) {
     plans = create_plans_3d(dims_, real, freq);
   } else {
@@ -119,7 +120,7 @@ fft3d<2>::fft3d(array<Index,3> dims_, multi_array<double,2>& real, multi_array<c
 }
 
 template<>
-fft3d<1>::fft3d(array<Index,3> dims_, multi_array<double,1>& real, multi_array<complex<double>,1>& freq) {
+fft<1, 3>::fft(array<Index,3> dims_, multi_array<double,1>& real, multi_array<complex<double>,1>& freq) {
   if(real.sl == stloc::host) {
     plans = create_plans_3d(dims_, real, freq);
   } else {
@@ -129,8 +130,74 @@ fft3d<1>::fft3d(array<Index,3> dims_, multi_array<double,1>& real, multi_array<c
   }
 }
 
-template<size_t d>
-void fft3d<d>::forward(multi_array<double,d>& real, multi_array<complex<double>,d>& freq) {
+// 2d
+template<>
+fft<2, 2>::fft(array<Index,2> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq) {
+  if(real.sl == stloc::host) {
+    plans = create_plans_2d(dims_, real, freq);
+  } else {
+    #ifdef __CUDACC__
+    cuda_plans = create_plans_2d(dims_, real.shape()[1]);
+    #endif
+  }
+}
+
+template<>
+fft<1, 2>::fft(array<Index,2> dims_, multi_array<double,1>& real, multi_array<complex<double>,1>& freq) {
+  if(real.sl == stloc::host) {
+    plans = create_plans_2d(dims_, real, freq);
+  } else {
+    #ifdef __CUDACC__
+    cuda_plans = create_plans_2d(dims_, 1);
+    #endif
+  }
+}
+
+// 1d
+template<>
+fft<2, 1>::fft(array<Index,1> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq) {
+  if(real.sl == stloc::host) {
+    plans = create_plans_1d(dims_[0], real, freq);
+  } else {
+    #ifdef __CUDACC__
+    cuda_plans = create_plans_1d(dims_[0], real.shape()[1]);
+    #endif
+  }
+}
+
+template<>
+fft<1, 1>::fft(array<Index,1> dims_, multi_array<double,1>& real, multi_array<complex<double>,1>& freq) {
+  if(real.sl == stloc::host) {
+    plans = create_plans_1d(dims_[0], real, freq);
+  } else {
+    #ifdef __CUDACC__
+    cuda_plans = create_plans_1d(dims_[0], 1);
+    #endif
+  }
+}
+
+template<size_t d, size_t dim>
+fft<d,dim>::~fft() {
+  if(plans[0] != nullptr) {
+    destroy_plans(plans);
+  }
+
+  #ifdef __CUDACC__
+  if(cuda_plans[0] != nullptr)
+    destroy_plans(cuda_plans);
+  }
+  #endif
+}
+template fft<1, 1>::~fft();
+template fft<2, 1>::~fft();
+template fft<1, 2>::~fft();
+template fft<2, 2>::~fft();
+template fft<1, 3>::~fft();
+template fft<2, 3>::~fft();
+
+
+template<size_t d, size_t dim>
+void fft<d, dim>::forward(multi_array<double,d>& real, multi_array<complex<double>,d>& freq) {
   if(real.sl == stloc::host) {
     fftw_execute_dft_r2c(plans[0],real.data(),(fftw_complex*)freq.data());
   } else {
@@ -139,12 +206,16 @@ void fft3d<d>::forward(multi_array<double,d>& real, multi_array<complex<double>,
     #endif
   }
 }
-template void fft3d<1>::forward(multi_array<double,1>& real, multi_array<complex<double>,1>& freq);
-template void fft3d<2>::forward(multi_array<double,2>& real, multi_array<complex<double>,2>& freq);
+template void fft<1, 1>::forward(multi_array<double,1>& real, multi_array<complex<double>,1>& freq);
+template void fft<2, 1>::forward(multi_array<double,2>& real, multi_array<complex<double>,2>& freq);
+template void fft<1, 2>::forward(multi_array<double,1>& real, multi_array<complex<double>,1>& freq);
+template void fft<2, 2>::forward(multi_array<double,2>& real, multi_array<complex<double>,2>& freq);
+template void fft<1, 3>::forward(multi_array<double,1>& real, multi_array<complex<double>,1>& freq);
+template void fft<2, 3>::forward(multi_array<double,2>& real, multi_array<complex<double>,2>& freq);
 
 
-template<size_t d>
-void fft3d<d>::backward(multi_array<complex<double>,d>& freq, multi_array<double,d>& real) {
+template<size_t d, size_t dim>
+void fft<d, dim>::backward(multi_array<complex<double>,d>& freq, multi_array<double,d>& real) {
   if(real.sl == stloc::host) {
     fftw_execute_dft_c2r(plans[1],(fftw_complex*)freq.data(),real.data());
   } else {
@@ -153,6 +224,10 @@ void fft3d<d>::backward(multi_array<complex<double>,d>& freq, multi_array<double
     #endif
   }
 }
-template void fft3d<1>::backward(multi_array<complex<double>,1>& freq, multi_array<double,1>& real);
-template void fft3d<2>::backward(multi_array<complex<double>,2>& freq, multi_array<double,2>& real);
+template void fft<1, 1>::backward(multi_array<complex<double>,1>& freq, multi_array<double,1>& real);
+template void fft<2, 1>::backward(multi_array<complex<double>,2>& freq, multi_array<double,2>& real);
+template void fft<1, 2>::backward(multi_array<complex<double>,1>& freq, multi_array<double,1>& real);
+template void fft<2, 2>::backward(multi_array<complex<double>,2>& freq, multi_array<double,2>& real);
+template void fft<1, 3>::backward(multi_array<complex<double>,1>& freq, multi_array<double,1>& real);
+template void fft<2, 3>::backward(multi_array<complex<double>,2>& freq, multi_array<double,2>& real);
 
