@@ -1755,6 +1755,8 @@ struct timestepper_strang : timestepper {
     step_K(tau, f);
     step_S(0.5*tau, f);
     step_L(0.5*tau, f);
+    
+    gt::stop("step");
   }
 
   timestepper_strang(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), ftmp(_gi.r, {_gi.dxx_mult, _gi.dzv_mult}) {

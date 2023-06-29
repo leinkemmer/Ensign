@@ -22,20 +22,24 @@ template std::function<double(double*,double*)> inner_product_from_weight(double
 template std::function<float(float*,float*)> inner_product_from_weight(float* w, Index N);
 
 
-template<class T>
-std::function<T(T*,T*)> inner_product_from_const_weight(T w, Index N) {
-  return [w,N](T* a, T*b) {
-    T result=T(0.0);
-    #ifdef __OPENMP__
-    #pragma omp parallel for reduction(+:result)
-    #endif
-    for(Index i=0;i<N;i++){
-      result += a[i]*b[i];
-    }
+template<>
+std::function<double(double*,double*)> inner_product_from_const_weight(double w, Index N) {
+  return [w,N](double* a, double*b) {
+    double result = cblas_ddot(N, a, 1, b, 1);
     result *= w;
     return result;
   };
 };
+
+template<>
+std::function<float(float*,float*)> inner_product_from_const_weight(float w, Index N) {
+  return [w,N](float* a, float*b) {
+    float result = cblas_sdot(N, a, 1, b, 1);
+    result *= w;
+    return result;
+  };
+};
+
 template std::function<double(double*,double*)> inner_product_from_const_weight(double w, Index N);
 template std::function<float(float*,float*)> inner_product_from_const_weight(float w, Index N);
 
@@ -58,7 +62,7 @@ void gram_schmidt_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, std::f
 
     if(R(j,j) > 1e-14){
       cblas_dscal(dims[0],1.0/R(j,j),Q.extract({j}),1);
-    } else{
+    } else {
 
       #ifdef __OPENMP__
       #pragma omp parallel for
@@ -186,7 +190,7 @@ void gram_schmidt::operator()(multi_array<double,2>& Q, multi_array<double,2>& R
     #ifdef __CUDACC__
     gram_schmidt_gpu(Q, R, w, gen, blas->handle_devres);
     #else
-    cout << "ERROR: gram_schmidt_gpu called but not GPU support available." << endl;
+    cout << "ERROR: gram_schmidt_gpu called but no GPU support available." << endl;
     exit(1);
     #endif
   }
@@ -421,7 +425,7 @@ void lr_mul(const lr2<T>& A, const lr2<T>& B, lr2<T>& out,
       for(Index j=0;j<r_A;j++)
         for(Index n=0;n<A.size_V();n++)
           out.V(n, j+r_A*l) = A.V(n,j)*B.V(n,l);
-
+    
     multi_array<T, 2> R_V({out.rank(), out.rank()});
     gs(out.V, R_V, inner_product_V);
 
