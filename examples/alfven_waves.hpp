@@ -1,6 +1,3 @@
-// TODO: GPU support
-// TODO: should only use a single scalar potential (see TODO)
-
 #include <lr/lr.hpp>
 #include <generic/matrix.hpp>
 #include <generic/storage.hpp>
@@ -9,7 +6,6 @@
 #include <generic/fft.hpp>
 #include <iomanip>
 
-// TODO: using lapack
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/SVD>
 
@@ -30,23 +26,7 @@ Index freq(Index k, Index n) {
     return k-n;
 }
 
-/*
-double norm2(mat& m, const blas_ops& blas) {
-
-  multi_array<double,2> U(m);
-  multi_array<double,2> V(m);
-  multi_array<double,1> sigma({m.shape()[0]});
-  svd(m, U, V, sigma, blas);
-
-  double norm = 0.0;
-  for(Index i=0;i<m.shape()[0];i++)
-      norm += pow(sigma(i),2);
-  return sqrt(norm/double(m.shape()[0]));
-}
-*/
-
 enum class discretization { fft, lw };
-
 
 template<size_t d>
 struct grid_info {
@@ -713,23 +693,6 @@ struct PS_L_step {
           fft2.backward(Mhat, Mout);
 
         }
-        /*
-        ofstream test("test.data");
-        for(Index iv=0;iv<gi.N_zv[1];iv++) {
-          test << gi.v(1, iv) << " " << M(iv, 1) << " " << Mtmp(iv, 1)-M(iv,1) << " " << Mout(iv, 1)-M(iv,1) << endl;
-        }
-        */
-        /*
-        double res=0.0, res2=0.0, res3=0.0;
-        for(Index ir=0;ir<gi.r;ir++) {
-          for(Index iv=0;iv<gi.N_zv[1];iv++) {
-            res = max(res, abs(Mout(iv, ir) - M(iv, ir)));
-            res2 = max(res2, abs(Mout(iv, ir) - Mtmp(iv, ir)));
-            res3 = max(res3, abs(M(iv, ir) - Mtmp(iv, ir)));
-          }
-        }
-        cout << res << " " << res2 << " " << res3 << endl;*/
-
 
         // compute L from M
         for(Index ir=0;ir<gi.r;ir++) {
@@ -774,9 +737,6 @@ void integrate_v(const mat& V, mat& intV, const grid_info<2>& gi) {
       intV(iz, r) = s;
     }
   }
-  //componentwise_mat_omp(gi.r, gi.N_zv, [&gi, &V, &intV](Index idx, mind<2> i, Index r) {
-  //  intV(i[0], r) += V(idx, r)*gi.h_zv[1];
-  //});
 }
 
 void integrate_mulv_v(const mat& V, mat& intV, const grid_info<2>& gi) {
@@ -792,9 +752,6 @@ void integrate_mulv_v(const mat& V, mat& intV, const grid_info<2>& gi) {
 
     }
   }
-  //componentwise_mat_omp(gi.r, gi.N_zv, [&gi, &V, &intV](Index idx, mind<2> i, Index r) {
-  //  intV(i[0], r) += -gi.v(1, i[1])*V(idx, r)*gi.h_zv[1];
-  //});
 }
 
 struct scalar_potential {
@@ -906,8 +863,6 @@ double kinetic_energy(const mat& K, const mat& V, const grid_info<2>& gi, const 
 }
 
 double electric_energy(const mat& Kphi, const grid_info<2>& gi, const blas_ops& blas) {
-  // TODO: this might be inefficient
-
   mat dx({gi.r,gi.r}), dy({gi.r,gi.r});
 
   mat dxKphi({gi.dxx_mult, gi.r});
@@ -954,7 +909,6 @@ struct vector_potential {
       complex<double> lambdax = complex<double>(0.0,2.0*M_PI/(gi.lim_xx[1]-gi.lim_xx[0])*i[0]);
       complex<double> lambday = complex<double>(0.0,2.0*M_PI/(gi.lim_xx[3]-gi.lim_xx[2])*mult_j);
           
-      // TODO: why is there a minus here? otherwise it does not work
       KdtAhat(idx, r) *= (i[0]==0 && mult_j==0) ? 0.0 : gi.C_A/(pow(lambdax,2) + pow(lambday,2))*ncxx;
     });
 
@@ -1092,24 +1046,10 @@ struct dtA_iterative_solver {
 
     bool iteration_finished = false;
     for(Index it=0;it<200;it++) {
-      //cout << "dtA: " << lr_norm_sq(dtA, blas) << endl;
-      //cout << "dtAsingular: ";
-      //for(Index i=0;i<gi.r;i++)
-      //  cout << dtA.S(i,i) << " ";
-      //cout << endl;
-
       Ap = p;
       apply_lhs(Ap, mrho);
 
-/*
-      cout << "Apsingular: ";
-      for(Index i=0;i<large.rank();i++)
-        cout << large.S(i,i) << " ";
-      cout << endl;
-*/
       double alpha = r_norm_sq / lr_inner_product(p, Ap, gi.h_xx[0]*gi.h_xx[1]*gi.h_zv[0], blas);
-      //cout << alpha << " " << r_norm_sq << " " << lr_inner_product(p, Ap, gi.h_xx[0]*gi.h_xx[1]*gi.h_zv[0], blas) << endl;
-      //cout << alpha << " " << lr_norm_sq(p, blas) << " " << lr_inner_product(p, Ap, gi.h_xx[0]*gi.h_xx[1]*gi.h_zv[0], blas) << endl;
 
       //cout << "dtA2: " << lr_norm_sq(dtA, blas) << endl;
       lr_add(1.0, dtA, alpha, p, medium, ip_xx, ip_z, blas);
@@ -1121,7 +1061,6 @@ struct dtA_iterative_solver {
       lr_truncate(medium, r, blas);
 
       double r_norm_sq_new = lr_norm_sq(r, blas);
-      //cout << "it: " << it << " r_norm: " << sqrt(r_norm_sq_new) << endl;
       if(sqrt(r_norm_sq_new) < 1e-12) {
         iteration_finished = true;
         break;
@@ -1132,20 +1071,10 @@ struct dtA_iterative_solver {
       lr_truncate(medium, p, blas);
 
       r_norm_sq = r_norm_sq_new;
-     /* 
-      // only to double check
-      Ap = dtA;
-      apply_lhs(Ap, mrho);
-      lr_add(1.0, rhs, -1.0, Ap, medium, ip_xx, ip_z, blas);
-      cout << "residual: " << lr_norm_sq(medium, blas) << endl;
-      */
     }
 
     if(!iteration_finished)
       cout << "WARNING: dtA_iterative_solver did not converge within 200 iterations" << endl;
-    //cout << dtA.S << endl;
-    //cout << dtA.V << endl;
-    //cout << dtA.X << endl;
   }
 
 
@@ -1834,93 +1763,6 @@ struct rectangular_QR {
     }
 
 };
-
-
-void add_lr(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, lr2<double>& C, const blas_ops& blas) {
-  gt::start("add_lr");
-
-  using namespace Eigen;
-
-  Index r = A.S.shape()[0];
-  Index nx = A.X.shape()[0];
-  Index nv = A.V.shape()[0];
-
-  MatrixXd S_large({2*r, 2*r});
-  S_large.setZero();
-  for(Index j=0;j<r;j++) {
-    for(Index i=0;i<r;i++) {
-      S_large(i, j) = alpha*A.S(i, j);
-      S_large(r+i,r+j) = beta*B.S(i, j);
-    }
-  }
-
-  // X_large
-  MatrixXd X_large(nx, 2*r);
-  for(Index k=0;k<r;k++) {
-    for(Index i=0;i<nx;i++) {
-      X_large(i, k) = A.X(i, k);
-      X_large(i, k+r) = B.X(i, k);
-    }
-  }
-
-  // V_large 
-  MatrixXd V_large(nv, 2*r);
-  for(Index k=0;k<r;k++) {
-    for(Index i=0;i<nv;i++) {
-      V_large(i, k) = A.V(i, k);
-      V_large(i, k+r) = B.V(i, k);
-    }
-  }
-
-  rectangular_QR qrX(nx, 2*r);
-  qrX.compute(X_large);
-  S_large = qrX.R()*S_large;
-  X_large = qrX.Q();
-
-  rectangular_QR qrV(nv, 2*r);
-  qrV.compute(V_large);
-  S_large = S_large*qrV.R().transpose();
-  V_large = qrV.Q();
-
-/*
-  C.X.resize({X_large.rows(), X_large.cols()});
-  for(Index k=0;k<C.X.shape()[1];k++)
-    for(Index i=0;i<C.X.shape()[0];i++)
-      C.X(i, k) = X_large(i, k);
-
-  C.V.resize({V_large.rows(), V_large.cols()});
-  for(Index k=0;k<C.V.shape()[1];k++)
-    for(Index i=0;i<C.V.shape()[0];i++)
-      C.V(i, k) = V_large(i, k);
-
-  C.S.resize({S_large.rows(), S_large.cols()});
-  for(Index k=0;k<C.S.shape()[1];k++)
-    for(Index i=0;i<C.S.shape()[0];i++)
-      C.S(i, k) = S_large(i, k);
-*/
-  JacobiSVD<MatrixXd> svd(S_large, ComputeThinU | ComputeThinV); 
-  MatrixXd S = svd.singularValues().asDiagonal();
-
-  // set S
-  for(Index j=0;j<r;j++)
-    for(Index i=0;i<r;i++)
-      C.S(i, j) = S(i,j);
-
-  X_large = X_large*svd.matrixU();
-  V_large = V_large*svd.matrixV();
-  //cout << X_large.rows() << " " << X_large.cols() << endl;
-
-  for(Index k=0;k<r;k++)
-    for(Index i=0;i<nx;i++)
-      C.X(i, k) = X_large(i, k);
-  
-  for(Index k=0;k<r;k++)
-    for(Index i=0;i<nv;i++)
-      C.V(i, k) = V_large(i, k);
-
-  gt::stop("add_lr");
-}
-
 
 
 struct integrator {

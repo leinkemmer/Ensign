@@ -74,10 +74,8 @@ int main(int argc, char** argv) {
   mind<2> N_xx = {N[0], N[1]}; 
   mind<2> N_zv = {N[2], N[3]};
   mfp<4> lim_xx = {0.0,2*M_PI/kx,0.0,2*M_PI/ky};
-  //mfp<4> lim_zv = {0.0,2*M_PI,-Vmax,Vmax};
   mfp<4> lim_zv = {0.0,2.0*M_PI/kpar,-Vmax,Vmax};
   grid_info<2> gi(r, N_xx, N_zv, lim_xx, lim_zv, M_e, C_P, C_A,discr); 
-//gi.debug_adv_vA = false; // TODO: remove
   bool   time_adaptive = result["time_adaptive"].as<bool>();
   double time_tol = result["time_tol"].as<double>();
 
