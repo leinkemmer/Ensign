@@ -1115,7 +1115,12 @@ struct timestepper {
     __Vphi = Vphi;
   }
 
+  void set_dtA(lr2<double>* dtA) {
+    __dtA = dtA;
+  }
+
   mat *__Kphi, *__Vphi;
+  lr2<double>* __dtA;
 };
 
 struct timestepper_lie : timestepper {
@@ -1123,9 +1128,16 @@ struct timestepper_lie : timestepper {
   void compute_E_dtA(lr2<double>& f) {
     gt::start("compute_E");
     blas.matmul(f.X,f.S,K);
-    compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
-    Kphi = E.X;
-    Vphi = rho.V;
+
+    if(__Kphi == nullptr) {
+      compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
+      Kphi = E.X;
+      Vphi = rho.V;
+    } else  {
+      Kphi = *__Kphi;
+      Vphi = *__Vphi;
+    }
+
     deriv_z(rho.V, E.V, gi);
     for(Index j=0;j<gi.r;j++) {
       for(Index i=0;i<gi.r;i++) {
@@ -1135,9 +1147,13 @@ struct timestepper_lie : timestepper {
     }
     gt::stop("compute_E");
     
-    gt::start("dtA_iteration");
-    dtA_it.operator()(dtA, f, E, rho);
-    gt::stop("dtA_iteration");
+    if(__dtA == nullptr) {
+      gt::start("dtA_iteration");
+      dtA_it.operator()(dtA, f, E, rho);
+      gt::stop("dtA_iteration");
+    } else {
+      dtA = *__dtA;
+    }
   }
 
 
@@ -1255,10 +1271,18 @@ private:
 struct timestepper_unconventional: timestepper {
 
   void compute_E_dtA(lr2<double>& f) {
+    gt::start("compute_E");
     blas.matmul(f.X,f.S,K);
-    compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
-    Kphi = E.X;
-    Vphi = rho.V;
+
+    if(__Kphi == nullptr) {
+      compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
+      Kphi = E.X;
+      Vphi = rho.V;
+    } else  {
+      Kphi = *__Kphi;
+      Vphi = *__Vphi;
+    }
+
     deriv_z(rho.V, E.V, gi);
     for(Index j=0;j<gi.r;j++) {
       for(Index i=0;i<gi.r;i++) {
@@ -1266,10 +1290,15 @@ struct timestepper_unconventional: timestepper {
         E.S(i,j)   = double(i==j);
       }
     }
+    gt::stop("compute_E");
     
-    gt::start("dtA_iteration");
-    dtA_it.operator()(dtA, f, E, rho);
-    gt::stop("dtA_iteration");
+    if(__dtA == nullptr) {
+      gt::start("dtA_iteration");
+      dtA_it.operator()(dtA, f, E, rho);
+      gt::stop("dtA_iteration");
+    } else {
+      dtA = *__dtA;
+    }
   }
 
 
@@ -1410,10 +1439,18 @@ private:
 struct timestepper_augmented_unconventional: timestepper {
 
   void compute_E_dtA(lr2<double>& f) {
+    gt::start("compute_E");
     blas.matmul(f.X,f.S,K);
-    compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
-    Kphi = E.X;
-    Vphi = rho.V;
+
+    if(__Kphi == nullptr) {
+      compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
+      Kphi = E.X;
+      Vphi = rho.V;
+    } else  {
+      Kphi = *__Kphi;
+      Vphi = *__Vphi;
+    }
+
     deriv_z(rho.V, E.V, gi);
     for(Index j=0;j<gi.r;j++) {
       for(Index i=0;i<gi.r;i++) {
@@ -1421,10 +1458,15 @@ struct timestepper_augmented_unconventional: timestepper {
         E.S(i,j)   = double(i==j);
       }
     }
+    gt::stop("compute_E");
     
-    gt::start("dtA_iteration");
-    dtA_it.operator()(dtA, f, E, rho);
-    gt::stop("dtA_iteration");
+    if(__dtA == nullptr) {
+      gt::start("dtA_iteration");
+      dtA_it.operator()(dtA, f, E, rho);
+      gt::stop("dtA_iteration");
+    } else {
+      dtA = *__dtA;
+    }
   }
 
   void operator()(double tau, lr2<double>& f, double* ee=nullptr, double* ee_max=nullptr) {
@@ -1912,6 +1954,7 @@ struct integrator {
 
     timestep->set_Kphi(__Kphi);
     timestep->set_Vphi(__Vphi);
+    timestep->set_dtA(__dtA);
 
     // initialize dtA by 0
     ip_z = inner_product_from_const_weight(gi.h_zv[0], gi.N_zv[0]);
