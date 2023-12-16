@@ -1623,9 +1623,16 @@ struct timestepper_strang : timestepper {
 
   void compute_E_dtA(lr2<double>& f) {
     blas.matmul(f.X,f.S,K);
-    compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
-    Kphi = E.X;
-    Vphi = rho.V;
+
+    if(__Kphi == nullptr) {
+      compute_phi.operator()(K, f.V, E.X, rho.V, &rho.X);
+      Kphi = E.X;
+      Vphi = rho.V;
+    } else  {
+      Kphi = *__Kphi;
+      Vphi = *__Vphi;
+    }
+
     deriv_z(rho.V, E.V, gi);
     for(Index j=0;j<gi.r;j++) {
       for(Index i=0;i<gi.r;i++) {
@@ -1634,9 +1641,14 @@ struct timestepper_strang : timestepper {
       }
     }
     
-    gt::start("dtA_iteration");
-    dtA_it.operator()(dtA, f, E, rho);
-    gt::stop("dtA_iteration");
+    if(__dtA == nullptr) {
+      gt::start("dtA_iteration");
+      dtA_it.operator()(dtA, f, E, rho);
+      gt::stop("dtA_iteration");
+    } else {
+      dtA = *__dtA;
+    }
+
     
     gt::start("gs");
     Xphi = Kphi;

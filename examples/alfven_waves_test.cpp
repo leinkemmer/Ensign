@@ -316,7 +316,7 @@ void test_advection_z(string method, discretization discr) {
       }
     }
             
-    cout << "Error advection z (" << method << ", " << discr_to_str(discr) << "): " << err << endl;
+    cout << "Error advection z (" << method << ", " << discr_to_str(discr) <<  "): " << err << endl;
     REQUIRE( err <= 3e-5 );
 }
 
@@ -401,7 +401,6 @@ void test_advection_v_dtA(string method, discretization discr) {
     initialize(dtA, dtA_X, dtA_V, config.ip_xx, config.ip_z, config.blas);
     
     double t_final = 1e-2;
-
 
     integrator integration(method, t_final, 1e-4, false, 0, gi, config.X, config.V, nullptr, nullptr, &dtA); 
     lr2<double> f_final = integration.run();
@@ -503,6 +502,8 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     test_advection_z("unconventional", discretization::lw);
     test_advection_z("augmented", discretization::fft);
     test_advection_z("augmented", discretization::lw);
+    test_advection_z("strang", discretization::fft);
+    test_advection_z("strang", discretization::lw);
   }
 
   /*
@@ -515,6 +516,8 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     test_advection_v("unconventional", discretization::lw);
     test_advection_v("augmented", discretization::fft);
     test_advection_v("augmented", discretization::lw);
+    test_advection_v("strang", discretization::fft);
+    test_advection_v("strang", discretization::lw);
   }
 
   /*
@@ -527,6 +530,8 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
     test_advection_v_dtA("unconventional", discretization::lw);
     test_advection_v_dtA("augmented", discretization::fft);
     test_advection_v_dtA("augmented", discretization::lw);
+    test_advection_v_dtA("strang", discretization::fft);
+    test_advection_v_dtA("strang", discretization::lw);
   }
 
 }
