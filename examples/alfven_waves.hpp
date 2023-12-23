@@ -1943,8 +1943,8 @@ struct timestepper_bug_midpoint : timestepper {
     X0.resize({gi.dxx_mult, gi.r});
     V0.resize({gi.dzv_mult, gi.r});
 
-    FXhalf.resize({gi.dxx_mult, gi.r});
-    FVhalf.resize({gi.dzv_mult, gi.r});
+    FVhalf.resize({gi.dxx_mult, gi.r});
+    FXhalf.resize({gi.dzv_mult, gi.r});
   }
 
 private:
