@@ -3,6 +3,7 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
+const vector<string> methods = {"lie", "unconventional", "augmented", "strang", "bug_midpoint"};
 
 string discr_to_str(discretization discr) {
   return (discr==discretization::fft) ? "fft" : "lw";
@@ -496,42 +497,30 @@ TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
   *  advection in the z-direction
   */
   SECTION("advection_z") {
-    test_advection_z("lie", discretization::fft);
-    test_advection_z("lie", discretization::lw);
-    test_advection_z("unconventional", discretization::fft);
-    test_advection_z("unconventional", discretization::lw);
-    test_advection_z("augmented", discretization::fft);
-    test_advection_z("augmented", discretization::lw);
-    test_advection_z("strang", discretization::fft);
-    test_advection_z("strang", discretization::lw);
+    for(string method : methods) {
+      test_advection_z(method, discretization::fft);
+      test_advection_z(method, discretization::lw);
+    }
   }
 
   /*
   *  advection using the scalar potential in the v direction
   */
   SECTION("advection_v") {
-    test_advection_v("lie", discretization::fft);
-    test_advection_v("lie", discretization::lw);
-    test_advection_v("unconventional", discretization::fft);
-    test_advection_v("unconventional", discretization::lw);
-    test_advection_v("augmented", discretization::fft);
-    test_advection_v("augmented", discretization::lw);
-    test_advection_v("strang", discretization::fft);
-    test_advection_v("strang", discretization::lw);
+    for(string method : methods) {
+      test_advection_v(method, discretization::fft);
+      test_advection_v(method, discretization::lw);
+    }
   }
 
   /*
   *  advection using the scalar and magnetic potential in the v direction
   */
   SECTION("advection_v_dtA") {
-    test_advection_v_dtA("lie", discretization::fft);
-    test_advection_v_dtA("lie", discretization::lw);
-    test_advection_v_dtA("unconventional", discretization::fft);
-    test_advection_v_dtA("unconventional", discretization::lw);
-    test_advection_v_dtA("augmented", discretization::fft);
-    test_advection_v_dtA("augmented", discretization::lw);
-    test_advection_v_dtA("strang", discretization::fft);
-    test_advection_v_dtA("strang", discretization::lw);
+    for(string method : methods) {
+      test_advection_v_dtA(method, discretization::fft);
+      test_advection_v_dtA(method, discretization::lw);
+    }
   }
 
 }

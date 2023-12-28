@@ -1824,6 +1824,11 @@ struct timestepper_bug_midpoint : timestepper {
   void operator()(double tau, lr2<double>& f, double* ee=nullptr, double* ee_max=nullptr) {
     gt::start("step");
 
+    // Makre sure that the unconventional substep has the same test/debug information
+    tsunc.__dtA = __dtA;
+    tsunc.__Kphi = __Kphi;
+    tsunc.__Vphi = __Vphi;
+
     // Unconventional step
     lr2<double> fhalf = f;
     tsunc.operator()(0.5*tau, fhalf, ee, ee_max);
@@ -1856,13 +1861,12 @@ struct timestepper_bug_midpoint : timestepper {
     eA = ccoeff.compute_eA(D3, LdtA);
 
     // augmented basis X
-    blas.matmul(f.X,f.S,FVhalf);
-    K_step.rhs(K, FVhalf, Kphi, KdtA, C1, C2, C3, blas);
+    K_step.rhs(K, FVhalf, Kphi, KdtA, C1, C2, C3, blas); // K is already computed in compute_E_dtA
 
     componentwise_mat_omp(gi.r, gi.N_xx, [this, &fhalf](Index idx, mind<2> i, Index r) {
       aug.X(idx, r) = X0(idx, r);
       aug.X(idx, gi.r+r)   = fhalf.X(idx, r);
-      aug.X(idx, gi.r+2*r) = FVhalf(idx,r);
+      aug.X(idx, 2*gi.r+r) = FVhalf(idx, r);
     });
 
     // augmented basis V
@@ -1871,7 +1875,7 @@ struct timestepper_bug_midpoint : timestepper {
     componentwise_mat_omp(gi.r, gi.N_zv, [this, &fhalf](Index idx, mind<2> i, Index r) {
       aug.V(idx, r) = V0(idx, r);
       aug.V(idx, gi.r+r) = fhalf.V(idx, r);
-      aug.V(idx, gi.r+2*r) = FXhalf(idx,r);
+      aug.V(idx, 2*gi.r+r) = FXhalf(idx,r);
     });
 
     gt::start("gs");
