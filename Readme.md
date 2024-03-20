@@ -30,3 +30,16 @@ If you prefer to use Intel MKL as the BLAS and LAPACK backend set
     cmake -DMKL_ENABLED=ON -DCUDA_ENABLED=ON ..
     make
 
+## Build instructions on MacOS
+
+If you are on a Mac, you may have to use a different compiler than the system C++ compiler,
+since the `clang` that comes installed on OS X does not support OpenMP.
+To resolve this, you can install `gcc` via brew:
+
+    brew install gcc
+
+Then, when building Ensign, use the Homebrew `gcc`:
+
+    export CC=/opt/homebrew/opt/gcc/bin/gcc-13
+
+You may have to change the version from 13 to whichever version of gcc Homebrew installed.
