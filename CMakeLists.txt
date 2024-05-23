@@ -59,6 +59,7 @@ ExternalProject_Add(fftw
   BUILD_IN_SOURCE 1
   INSTALL_COMMAND make install
   UPDATE_COMMAND "" # do not rebuild external projects as part of the normal workflow
+  DOWNLOAD_EXTRACT_TIMESTAMP true
 )
 include_directories("${PROJECT_BINARY_DIR}/extern/fftw/include")
 set(FFTW_LIBRARIES "${PROJECT_BINARY_DIR}/extern/fftw/lib/libfftw3.a" "${PROJECT_BINARY_DIR}/extern/fftw/lib/libfftw3_omp.a")
@@ -70,16 +71,19 @@ ExternalProject_Add(cxxopts
   CONFIGURE_COMMAND ""
   BUILD_COMMAND ""
   INSTALL_COMMAND ""
+  DOWNLOAD_EXTRACT_TIMESTAMP true
 )
 include_directories("${PROJECT_BINARY_DIR}/extern/cxxopts/src/cxxopts/include")
 
 
 # BLAS and LAPACK
 option("MKL_ENABLED" OFF)
+message("$ENV{MKLROOT}")
+set(MKL_INCLUDEDIR "$ENV{MKLROOT}/include" CACHE PATH "Intel MKL include directory")
+set(MKL_LIBDIR "$ENV{MKLROOT}/lib/intel64" CACHE PATH "Intel MKL lib directory")
 if(${MKL_ENABLED})
   set(MKL_DEFINES    "-D__MKL__" "-DMKL_ILP64" "-m64")
-  set(MKL_INCLUDEDIR "$ENV{MKLROOT}/include")
-  set(MKL_LIBRARIES  "-L$ENV{MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_gnu_thread -lmkl_core -lgomp -lpthread -lm -ldl")
+  set(MKL_LIBRARIES  "-L{MKL_LIBDIR} -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_gnu_thread -lmkl_core -lgomp -lpthread -lm -ldl")
   add_definitions(${MKL_DEFINES})
   include_directories(${MKL_INCLUDEDIR})
 else()
@@ -93,6 +97,7 @@ else()
     BUILD_IN_SOURCE 1
     INSTALL_COMMAND DESTDIR=${PROJECT_BINARY_DIR}/extern/OpenBLAS make install
     UPDATE_COMMAND ""
+    DOWNLOAD_EXTRACT_TIMESTAMP true
   )
   set(OPENBLAS_LIBRARIES "${PROJECT_BINARY_DIR}/extern/OpenBLAS/opt/OpenBLAS/lib/libopenblas.a")
   include_directories("${PROJECT_BINARY_DIR}/extern/OpenBLAS/opt/OpenBLAS/include")
@@ -107,6 +112,7 @@ ExternalProject_Add(Catch2
   CONFIGURE_COMMAND ""
   BUILD_COMMAND ""
   INSTALL_COMMAND ""
+  DOWNLOAD_EXTRACT_TIMESTAMP true
 )
 include_directories("${PROJECT_BINARY_DIR}/extern/Catch2/src/Catch2/single_include")
 
