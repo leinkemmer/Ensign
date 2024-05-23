@@ -110,6 +110,7 @@ void destroy_plans(array<cufftHandle,2>& plans){
 // 3d
 template<>
 fft<2, 3>::fft(array<Index,3> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq) {
+  set_null();
   if(real.sl == stloc::host) {
     plans = create_plans_3d(dims_, real, freq);
   } else {
@@ -121,6 +122,7 @@ fft<2, 3>::fft(array<Index,3> dims_, multi_array<double,2>& real, multi_array<co
 
 template<>
 fft<1, 3>::fft(array<Index,3> dims_, multi_array<double,1>& real, multi_array<complex<double>,1>& freq) {
+  set_null();
   if(real.sl == stloc::host) {
     plans = create_plans_3d(dims_, real, freq);
   } else {
@@ -133,6 +135,7 @@ fft<1, 3>::fft(array<Index,3> dims_, multi_array<double,1>& real, multi_array<co
 // 2d
 template<>
 fft<2, 2>::fft(array<Index,2> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq) {
+  set_null();
   if(real.sl == stloc::host) {
     plans = create_plans_2d(dims_, real, freq);
   } else {
@@ -144,6 +147,7 @@ fft<2, 2>::fft(array<Index,2> dims_, multi_array<double,2>& real, multi_array<co
 
 template<>
 fft<1, 2>::fft(array<Index,2> dims_, multi_array<double,1>& real, multi_array<complex<double>,1>& freq) {
+  set_null();
   if(real.sl == stloc::host) {
     plans = create_plans_2d(dims_, real, freq);
   } else {
@@ -156,6 +160,7 @@ fft<1, 2>::fft(array<Index,2> dims_, multi_array<double,1>& real, multi_array<co
 // 1d
 template<>
 fft<2, 1>::fft(array<Index,1> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq) {
+  set_null();
   if(real.sl == stloc::host) {
     plans = create_plans_1d(dims_[0], real, freq);
   } else {
@@ -167,6 +172,7 @@ fft<2, 1>::fft(array<Index,1> dims_, multi_array<double,2>& real, multi_array<co
 
 template<>
 fft<1, 1>::fft(array<Index,1> dims_, multi_array<double,1>& real, multi_array<complex<double>,1>& freq) {
+  set_null();
   if(real.sl == stloc::host) {
     plans = create_plans_1d(dims_[0], real, freq);
   } else {
@@ -178,15 +184,17 @@ fft<1, 1>::fft(array<Index,1> dims_, multi_array<double,1>& real, multi_array<co
 
 template<size_t d, size_t dim>
 fft<d,dim>::~fft() {
-  if(plans[0] != nullptr) {
+  if(plans[0] != 0) {
     destroy_plans(plans);
   }
 
   #ifdef __CUDACC__
-  if(cuda_plans[0] != nullptr)
+  if(cuda_plans[0] != 0) {
     destroy_plans(cuda_plans);
   }
   #endif
+  
+  set_null();
 }
 template fft<1, 1>::~fft();
 template fft<2, 1>::~fft();

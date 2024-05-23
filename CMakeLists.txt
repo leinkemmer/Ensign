@@ -12,7 +12,7 @@ endif(NOT CMAKE_BUILD_TYPE)
 add_compile_options(-Wall -Wno-maybe-uninitialized)
 
 option("Sanitizer" "Address sanitizer" OFF)
-if(NOT ${Sanitizer})
+if(${Sanitizer})
   add_compile_options(-fno-omit-frame-pointer -fsanitize=address)
   add_link_options(-fsanitize=address)
 endif()

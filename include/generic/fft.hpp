@@ -17,6 +17,15 @@ private:
     #ifdef __CUDACC__
     array<cufftHandle,2> cuda_plans;
     #endif
+
+    void set_null() {
+      plans[0] = 0;
+      plans[1] = 0;
+      #ifdef __CUDACC__
+      cuda_plans[0] = 0;
+      cuda_plans[1] = 0;
+      #endif
+    }
 };
 
 template<size_t d>
