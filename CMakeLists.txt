@@ -59,7 +59,6 @@ ExternalProject_Add(fftw
   BUILD_IN_SOURCE 1
   INSTALL_COMMAND make install
   UPDATE_COMMAND "" # do not rebuild external projects as part of the normal workflow
-  DOWNLOAD_EXTRACT_TIMESTAMP true
 )
 include_directories("${PROJECT_BINARY_DIR}/extern/fftw/include")
 set(FFTW_LIBRARIES "${PROJECT_BINARY_DIR}/extern/fftw/lib/libfftw3.a" "${PROJECT_BINARY_DIR}/extern/fftw/lib/libfftw3_omp.a")
@@ -71,7 +70,6 @@ ExternalProject_Add(cxxopts
   CONFIGURE_COMMAND ""
   BUILD_COMMAND ""
   INSTALL_COMMAND ""
-  DOWNLOAD_EXTRACT_TIMESTAMP true
 )
 include_directories("${PROJECT_BINARY_DIR}/extern/cxxopts/src/cxxopts/include")
 
@@ -97,7 +95,6 @@ else()
     BUILD_IN_SOURCE 1
     INSTALL_COMMAND DESTDIR=${PROJECT_BINARY_DIR}/extern/OpenBLAS make install
     UPDATE_COMMAND ""
-    DOWNLOAD_EXTRACT_TIMESTAMP true
   )
   set(OPENBLAS_LIBRARIES "${PROJECT_BINARY_DIR}/extern/OpenBLAS/opt/OpenBLAS/lib/libopenblas.a")
   include_directories("${PROJECT_BINARY_DIR}/extern/OpenBLAS/opt/OpenBLAS/include")
@@ -112,7 +109,6 @@ ExternalProject_Add(Catch2
   CONFIGURE_COMMAND ""
   BUILD_COMMAND ""
   INSTALL_COMMAND ""
-  DOWNLOAD_EXTRACT_TIMESTAMP true
 )
 include_directories("${PROJECT_BINARY_DIR}/extern/Catch2/src/Catch2/single_include")
 
