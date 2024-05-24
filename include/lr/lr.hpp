@@ -36,6 +36,10 @@ struct lr2 {
     return S.shape()[0];
   }
 
+  void set_zero() {
+    S.set_zero();
+  }
+
   /* Computes the full matrix (can be very expensive and should not be used in production code)
   */
   multi_array<T,2> full(const blas_ops& blas) const {

@@ -102,6 +102,12 @@ struct multi_array {
     }
   }
 
+  void set_zero() {
+    Index n = num_elements();
+    for(Index i=0;i<n;i++)
+      v[i] = T(0.0);
+  }
+
   Index linear_idx(array<Index,d> idx) const {
     Index k=0;
     Index stride = 1;
