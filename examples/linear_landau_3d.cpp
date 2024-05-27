@@ -51,7 +51,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
     }
   }
 
-  gram_schmidt gs(&blas);
+  orthogonalize gs(&blas);
 
   // For Electric field
 
@@ -2090,7 +2090,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     }
   }
 
-  gram_schmidt gs(&blas);
+  orthogonalize gs(&blas);
 
   // For Electric field
 

@@ -315,7 +315,7 @@ lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index
 
   #endif
 
-  gram_schmidt gs(&blas);
+  orthogonalize gs(&blas);
 
 //  nsteps = 1;
   for(Index i = 0; i < nsteps; i++){
@@ -1271,7 +1271,7 @@ lr2<double> integration_second_order(Index Nx,Index Nv, int r,double tstar, Inde
   // For random values generation
   #endif
 
-  gram_schmidt gs(&blas);
+  orthogonalize gs(&blas);
 
   for(Index i = 0; i < nsteps; i++){
 

@@ -441,7 +441,7 @@ void test_advection_v_dtA(string method, discretization discr) {
 
 TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
 
-  #ifdef __OPENMP
+  #ifdef __OPENMP__
   omp_set_num_threads(1);
   #endif
 

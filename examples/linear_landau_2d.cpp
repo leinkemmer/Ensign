@@ -468,7 +468,7 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
   multi_array<cuDoubleComplex,2> d_tmpXhat({dxxh_mult,r},stloc::device);
   multi_array<cuDoubleComplex,2> d_tmpVhat({dvvh_mult,r},stloc::device);
 
-  gram_schmidt gs(&blas);
+  orthogonalize gs(&blas);
 
   // Quantities of interest
 
@@ -729,7 +729,7 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
       }
     }
 
-    gram_schmidt gs(&blas);
+    orthogonalize gs(&blas);
     gs(lr_sol.X, lr_sol.S, ip_xx);
 
     /* S Step */
@@ -1884,7 +1884,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
   multi_array<cuDoubleComplex,2> d_tmpVhat({dvvh_mult,r},stloc::device);
 
   // For random values generation
-  gram_schmidt gs(&blas);
+  orthogonalize gs(&blas);
 
   // Quantities of interest
 

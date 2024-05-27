@@ -741,7 +741,7 @@ int main(){
     }
 
     gt::start("Gram Schmidt K CPU");
-    gram_schmidt(lr_sol.X, lr_sol.S, ip_xx);
+    orthogonalize(lr_sol.X, lr_sol.S, ip_xx);
     gt::stop("Gram Schmidt K CPU");
 
     gt::stop("K step CPU");
@@ -952,7 +952,7 @@ int main(){
     }
 
     gt::start("Gram Schmidt L CPU");
-    gram_schmidt(lr_sol.V, lr_sol.S, ip_vv);
+    orthogonalize(lr_sol.V, lr_sol.S, ip_vv);
 
     gt::stop("Gram Schmidt L CPU");
 

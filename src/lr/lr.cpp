@@ -30,6 +30,10 @@ template<>
 std::function<double(double*,double*)> inner_product_from_const_weight(double w, Index N) {
   return [w,N](double* a, double*b) {
     double result = cblas_ddot(N, a, 1, b, 1);
+    //double result=0.0;
+    //for(Index i=0;i<N;i++){
+    //  result += a[i]*b[i];
+    //}
     result *= w;
     return result;
   };
@@ -86,6 +90,141 @@ void gram_schmidt_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, std::f
     }
   }
 };
+
+#include<eigen3/Eigen/Dense>
+
+void orthogonalize_householder_constw(multi_array<double,2>& Q, multi_array<double,2>& R, double w) { //Removed blas argument because not needed
+  array<Index,2> dims = Q.shape();
+
+
+  //multi_array<double, 2> R2({dims[1],dims[1]});
+  //gram_schmidt_cpu(Q, R2, inner_product);
+
+  using namespace Eigen;
+  MatrixXd A(dims[0], dims[1]);
+  for(Index j=0;j<dims[1];j++) {
+    for(Index i=0;i<dims[0];i++) {
+      A(i,j) = Q(i,j);
+    }
+  }
+
+  HouseholderQR<MatrixXd> qr(A.rows(), A.cols());
+  qr.compute(A);
+  MatrixXd q = qr.householderQ()*MatrixXd::Identity(A.rows(), A.cols());
+  MatrixXd temp = qr.matrixQR().triangularView<Upper>();
+  // cout << A.rows() << " " << A.cols() << " " << temp.rows() << " " << temp.cols() << " " << q.rows() << " " << q.cols() << endl;
+  // cout << "Q: " << Q << endl;
+  // cout << "R: " << temp << endl;
+  // cout << "A: " << A << endl;
+  // //cout << "GS_Q: " << Q << endl;
+  // //cout << "GS_R: " << R2 << endl;
+
+  MatrixXd RR(A.cols(), A.cols());
+  RR.setZero();
+  for(Index j=0;j<std::min(A.cols(),temp.cols());j++)
+    for(Index i=0;i<std::min(A.cols(),temp.rows());i++)
+      RR(i,j) = temp(i,j);
+
+  // cout << "RR: " << RR << endl;
+
+  // cout << "QR: " << (q * RR - A).norm() << endl;
+
+  // //MatrixXd r = temp.topRows(A.cols());
+  // //cout << "r: " << r << endl;
+
+  for(Index j=0;j<dims[1];j++) {
+    for(Index i=0;i<dims[0];i++) {
+      Q(i,j) = q(i,j);
+    }
+  }
+/*
+  multi_array<double, 2> R1({dims[1],dims[1]});
+  for(Index j=0;j<dims[1];j++) {
+    for(Index i=0;i<dims[1];i++) {
+      R1(i,j) = RR(i,j);
+    }
+  }
+
+
+  multi_array<double, 2> R2({dims[1],dims[1]});
+  gram_schmidt_cpu(Q, R2, inner_product);
+  blas->matmul(R2, R1, R);
+  */
+
+  // h is like the weight w
+/*
+  multi_array<double,1> a({dims[0]}), b({dims[0]});
+  for(Index i=0;i<dims[0];i++) {
+    a(i) = (i==0);
+    b(i) = (i==0);
+  }
+  double h = inner_product(a.data(), b.data());
+  */
+
+  for(Index j=0;j<dims[1];j++)
+    for(Index i=0;i<dims[0];i++)
+      Q(i,j) /= sqrt(w);
+
+  for(Index j=0;j<dims[1];j++)
+    for(Index i=0;i<dims[1];i++)
+      R(i,j) = sqrt(w)*RR(i,j);
+
+}
+
+
+void orthogonalize_householder_vecw(multi_array<double,2>& Q, multi_array<double,2>& R, double* w) { //Removed blas argument because not needed
+  array<Index,2> dims = Q.shape();
+
+  // We first multiply our matrix with the diagonal matrix diag(w^1/2) from the left
+
+  for(Index j=0;j<dims[1];j++)
+    for(Index i=0;i<dims[0];i++)
+      Q(i,j) *= sqrt(w[i]);
+
+
+  // Now we rewrite our matrix and do QR decomposition
+
+  using namespace Eigen;
+  MatrixXd A(dims[0], dims[1]);
+  for(Index j=0;j<dims[1];j++) {
+    for(Index i=0;i<dims[0];i++) {
+      A(i,j) = Q(i,j);
+    }
+  }
+
+  HouseholderQR<MatrixXd> qr(A.rows(), A.cols());
+  qr.compute(A);
+  MatrixXd q = qr.householderQ()*MatrixXd::Identity(A.rows(), A.cols());
+  MatrixXd temp = qr.matrixQR().triangularView<Upper>();
+
+
+  MatrixXd RR(A.cols(), A.cols());
+  RR.setZero();
+  for(Index j=0;j<std::min(A.cols(),temp.cols());j++)
+    for(Index i=0;i<std::min(A.cols(),temp.rows());i++)
+      RR(i,j) = temp(i,j);
+
+
+  for(Index j=0;j<dims[1];j++) {
+    for(Index i=0;i<dims[0];i++) {
+      Q(i,j) = q(i,j);
+    }
+  }
+
+
+  // Now we need to multiply our Q matrix with diag(w^-1/2) from the left
+  // The RR matrix we need to convert to our format
+
+  for(Index j=0;j<dims[1];j++)
+    for(Index i=0;i<dims[0];i++)
+      Q(i,j) /= sqrt(w[i]);
+
+  for(Index j=0;j<dims[1];j++)
+    for(Index i=0;i<dims[1];i++)
+      R(i,j) = RR(i,j);
+
+}
+
 
 #ifdef __CUDACC__
 void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, curandGenerator_t gen, cublasHandle_t handle_devres) { //with constant weight for inner product
@@ -159,10 +298,54 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
 };
 */
 
+
+void orthogonalize_householder_constw_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, curandGenerator_t gen, cublasHandle_t handle_devres) {
+  array<Index,2> dims = Q.shape();
+
+
+  using namespace Eigen;
+  MatrixXd A(dims[0], dims[1]);
+  for(Index j=0;j<dims[1];j++) {
+    for(Index i=0;i<dims[0];i++) {
+      A(i,j) = Q(i,j);
+    }
+  }
+
+  HouseholderQR<MatrixXd> qr(A.rows(), A.cols());
+  qr.compute(A);
+  MatrixXd q = qr.householderQ()*MatrixXd::Identity(A.rows(), A.cols());
+  MatrixXd temp = qr.matrixQR().triangularView<Upper>();
+
+  MatrixXd RR(A.cols(), A.cols());
+  RR.setZero();
+  for(Index j=0;j<std::min(A.cols(),temp.cols());j++)
+    for(Index i=0;i<std::min(A.cols(),temp.rows());i++)
+      RR(i,j) = temp(i,j);
+
+  for(Index j=0;j<dims[1];j++) {
+    for(Index i=0;i<dims[0];i++) {
+      Q(i,j) = q(i,j);
+    }
+  }
+
+//change code above, s.t. QR is done with cuBLAS or cuSOLVER
+
+
+  for(Index j=0;j<dims[1];j++)
+    for(Index i=0;i<dims[0];i++)
+      Q(i,j) /= sqrt(w);
+
+  for(Index j=0;j<dims[1];j++)
+    for(Index i=0;i<dims[1];i++)
+      R(i,j) = sqrt(w)*RR(i,j);
+
+}
+
+
 #endif
 
 
-gram_schmidt::gram_schmidt(const blas_ops* _blas) {
+orthogonalize::orthogonalize(const blas_ops* _blas) {
   blas = _blas;
 
   #ifdef __CUDACC__
@@ -178,26 +361,25 @@ gram_schmidt::gram_schmidt(const blas_ops* _blas) {
   #endif
 }
 
-gram_schmidt::~gram_schmidt() {
+orthogonalize::~orthogonalize() {
   #ifdef __CUDACC__
   if(gen)
       curandDestroyGenerator(gen);
   #endif
 }
 
-void gram_schmidt::operator()(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product) {
+void orthogonalize::operator()(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product) {
   if(Q.sl == stloc::host) {
     gram_schmidt_cpu(Q, R, inner_product);
   } else {
-    cout << "ERROR: gram_schmidt::operator() with non-constant inner product currently not implemented for GPU." << endl;
+    cout << "ERROR: orthogonalize::operator() with non-constant inner product currently not implemented for GPU." << endl;
     exit(1);
   }
 }
 
-void gram_schmidt::operator()(multi_array<double,2>& Q, multi_array<double,2>& R, double w) {
+void orthogonalize::operator()(multi_array<double,2>& Q, multi_array<double,2>& R, double w) {
   if(Q.sl == stloc::host) {
-    cout << "ERROR: gram_schmidt::operator() with constant inner product currently not implemented on CPU." << endl;
-    exit(1);
+    orthogonalize_householder_constw(Q, R, w);
   } else {
     #ifdef __CUDACC__
     gram_schmidt_gpu(Q, R, w, gen, blas->handle_devres);
@@ -205,6 +387,16 @@ void gram_schmidt::operator()(multi_array<double,2>& Q, multi_array<double,2>& R
     cout << "ERROR: gram_schmidt_gpu called but no GPU support available." << endl;
     exit(1);
     #endif
+  }
+}
+
+
+void orthogonalize::operator()(multi_array<double,2>& Q, multi_array<double,2>& R, double* w) {
+  if(Q.sl == stloc::host) {
+    orthogonalize_householder_vecw(Q, R, w);
+  } else {
+    cout << "ERROR: orthogonalize::operator() with constant vector inner product currently not implemented for GPU." << endl;
+    exit(1);
   }
 }
 
@@ -231,8 +423,8 @@ void gram_schmidt(multi_array<float,2>& Q, multi_array<float,2>& R, std::functio
 };*/
 
 
-template<class T>
-void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, std::function<T(T*,T*)> inner_product_X, std::function<T(T*,T*)> inner_product_V, const blas_ops& blas) {
+template<class T, class IP>
+void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, IP inner_product_X, IP inner_product_V, const blas_ops& blas) {
 
   int n_b = X.size();
   Index r = lr.rank();
@@ -273,7 +465,7 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, std::functio
 
   multi_array<T, 2> X_R(lr.S.shape()), V_R(lr.S.shape());
 
-  gram_schmidt gs(&blas);
+  orthogonalize gs(&blas);
   gs(lr.X, X_R, inner_product_X);
   gs(lr.V, V_R, inner_product_V);
 
@@ -293,15 +485,17 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, std::functio
 
 };
 template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const blas_ops& blas);
+template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, double inner_product_X, double inner_product_V, const blas_ops& blas);
+template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, double* inner_product_X, double* inner_product_V, const blas_ops& blas);
 //template void initialize(lr2<float>& lr, vector<const float*> X, vector<const float*> V, std::function<float(float*,float*)> inner_product_X, std::function<float(float*,float*)> inner_product_V, const blas_ops& blas);
 
 
 
 
-template<class T>
+template<class T, class IP>
 void lr_add(vector<const lr2<T>*> A, const vector<T>& alpha, lr2<T>& out,
-            std::function<T(T*,T*)> inner_product_X,
-            std::function<T(T*,T*)> inner_product_V,
+            IP inner_product_X,
+            IP inner_product_V,
             const blas_ops& blas) {
 
   // check dimensions
@@ -322,7 +516,7 @@ void lr_add(vector<const lr2<T>*> A, const vector<T>& alpha, lr2<T>& out,
     exit(1);
   }
 
-  gram_schmidt gs(&blas);
+  orthogonalize gs(&blas);
 
   // copy elements of X in out.V and orthogonalize
   {
@@ -373,23 +567,25 @@ void lr_add(vector<const lr2<T>*> A, const vector<T>& alpha, lr2<T>& out,
 }
 
 
-template<class T>
+template<class T, class IP>
 void lr_add(T alpha, const lr2<T>& A, T beta, const lr2<T>& B, lr2<T>& out,
-            std::function<T(T*,T*)> inner_product_X,
-            std::function<T(T*,T*)> inner_product_V,
+            IP inner_product_X,
+            IP inner_product_V,
             const blas_ops& blas) {
 
   lr_add({&A, &B}, {alpha, beta}, out, inner_product_X, inner_product_V, blas);
 }
 
 template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, lr2<double>& out, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const blas_ops& blas);
+template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, lr2<double>& out, double inner_product_X, double inner_product_V, const blas_ops& blas);
+template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, lr2<double>& out, double* inner_product_X, double* inner_product_V, const blas_ops& blas);
 
 
-template<class T>
+template<class T, class IP>
 void lr_add(T alpha, const lr2<T>& A, T beta, const lr2<T>& B,
             T gamma, const lr2<T>& C, lr2<T>& out,
-            std::function<T(T*,T*)> inner_product_X,
-            std::function<T(T*,T*)> inner_product_V,
+            IP inner_product_X,
+            IP inner_product_V,
             const blas_ops& blas) {
 
   lr_add({&A, &B, &C}, {alpha, beta, gamma}, out, inner_product_X, inner_product_V, blas);
@@ -397,12 +593,14 @@ void lr_add(T alpha, const lr2<T>& A, T beta, const lr2<T>& B,
 
   
 template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, double gamma, const lr2<double>& C, lr2<double>& out, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const blas_ops& blas);
+template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, double gamma, const lr2<double>& C, lr2<double>& out, double inner_product_X, double inner_product_V, const blas_ops& blas);
+template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, double gamma, const lr2<double>& C, lr2<double>& out, double* inner_product_X, double* inner_product_V, const blas_ops& blas);
 
 
-template<class T>
+template<class T, class IP>
 void lr_mul(const lr2<T>& A, const lr2<T>& B, lr2<T>& out,
-            std::function<T(T*,T*)> inner_product_X,
-            std::function<T(T*,T*)> inner_product_V,
+            IP inner_product_X,
+            IP inner_product_V,
             const blas_ops& blas) {
 
   // check dimensions
@@ -421,7 +619,7 @@ void lr_mul(const lr2<T>& A, const lr2<T>& B, lr2<T>& out,
     exit(1);
   }
 
-  gram_schmidt gs(&blas);
+  orthogonalize gs(&blas);
 
   // construct the new X basis and orthogonalize
   for(Index k=0;k<r_B;k++)
@@ -456,6 +654,8 @@ void lr_mul(const lr2<T>& A, const lr2<T>& B, lr2<T>& out,
 }
 
 template void lr_mul(const lr2<double>& A, const lr2<double>& B, lr2<double>& out, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const blas_ops& blas);
+template void lr_mul(const lr2<double>& A, const lr2<double>& B, lr2<double>& out, double inner_product_X, double inner_product_V, const blas_ops& blas);
+template void lr_mul(const lr2<double>& A, const lr2<double>& B, lr2<double>& out, double* inner_product_X, double* inner_product_V, const blas_ops& blas);
 
 
 template<class T>

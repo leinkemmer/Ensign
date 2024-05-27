@@ -763,7 +763,7 @@ struct scalar_potential {
   void operator()(const mat& Kf, const mat& Vf, mat& Kphi, mat& Vphi, mat* Kmrho=nullptr) {
     // compute the basis of <V_j^f>_v
     integrate_v(Vf, intVf, gi);
-    gs(intVf, intVf_R, ip_z);
+    gs(intVf, intVf_R, ip_z.data());
 
     // expand 1 in th/dtA_at basis
     integrate(intVf, gi.h_zv[0], expansion_1, blas);
@@ -804,7 +804,10 @@ struct scalar_potential {
     expansion_1.resize({gi.r});
     Krhs.resize({gi.dxx_mult, gi.r});
     Kphihat.resize({gi.dxxh_mult, gi.r});
-    ip_z = inner_product_from_const_weight(gi.h_zv[0], gi.N_zv[0]);
+    ip_z.resize({gi.N_zv[0]});
+    for (int i = 0; i < gi.N_zv[0]; ++i) {
+        ip_z(i) = gi.h_zv[0];
+    }
   }
 
 private:
@@ -813,9 +816,9 @@ private:
   vec expansion_1;
   grid_info<2> gi;
   const blas_ops& blas;
-  gram_schmidt gs;
+  orthogonalize gs;
   std::unique_ptr<fft2d<2>> fft;
-  std::function<double(double*,double*)> ip_z;
+  multi_array<double,1> ip_z;
 };
 
 
@@ -895,7 +898,7 @@ struct vector_potential {
   void operator()(const lr2<double>& f, mat& KA, mat& VA) {
     // compute the basis of -<v V_j^f>_v
     integrate_mulv_v(f.V, VA, gi);
-    gs(VA, intVf_R, ip_z);
+    gs(VA, intVf_R, ip_z.data());
 
     blas.matmul_transb(f.S, intVf_R, Stmp);
 
@@ -925,18 +928,21 @@ struct vector_potential {
     Krhs.resize({gi.dxx_mult, gi.r});
     KdtAhat.resize({gi.dxxh_mult, gi.r});
     Stmp.resize({gi.r,gi.r});
-    ip_z = inner_product_from_const_weight(gi.h_zv[0], gi.N_zv[0]);
+    ip_z.resize({gi.N_zv[0]});
+    for (int i = 0; i < gi.N_zv[0]; ++i) {
+        ip_z(i) = gi.h_zv[0];
+    }
   }
 
 private:
   grid_info<2> gi;
   const blas_ops& blas;
-  gram_schmidt gs;
+  orthogonalize gs;
   mat intvVf, intVf_R;
   mat Krhs, Kphi, Stmp;
   cmat KdtAhat;
   std::unique_ptr<fft2d<2>> fft;
-  std::function<double(double*,double*)> ip_z;
+  multi_array<double,1> ip_z;
 };
 
 double max_norm_estimate(const mat& K, const mat& V, const grid_info<2>& gi, const blas_ops& blas) {
@@ -989,12 +995,12 @@ struct dtA_iterative_solver {
 
     // E (1-\rho)
     gt::start("dtA_iterative_mul");
-    lr_mul(E, mrho, prod, ip_xx, ip_z, blas);
+    lr_mul(E, mrho, prod, ip_xx.data(), ip_z.data(), blas);
     gt::stop("dtA_iterative_mul");
 
     // add them together and truncate
     gt::start("dtA_iterative_add");
-    lr_add(gi.C_A, int_vsq_z, -gi.C_A/gi.M_e, prod, large, ip_xx, ip_z, blas);
+    lr_add(gi.C_A, int_vsq_z, -gi.C_A/gi.M_e, prod, large, ip_xx.data(), ip_z.data(), blas);
     gt::stop("dtA_iterative_add");
     lr_truncate(large, rhs, blas);
     
@@ -1006,7 +1012,7 @@ struct dtA_iterative_solver {
 
     // (1-rho) \partial_t A
     gt::start("dtA_iterative_mul");
-    lr_mul(mrho, dtA, prod, ip_xx, ip_z, blas);
+    lr_mul(mrho, dtA, prod, ip_xx.data(), ip_z.data(), blas);
     gt::stop("dtA_iterative_mul");
 
     // (-\partial_xx - \partial_yy) A
@@ -1027,7 +1033,7 @@ struct dtA_iterative_solver {
     fft->backward(Xhat, dtA.X);
 
     gt::start("dtA_iterative_add");
-    lr_add(1.0, dtA, gi.C_A/gi.M_e, prod, large, ip_xx, ip_z, blas);
+    lr_add(1.0, dtA, gi.C_A/gi.M_e, prod, large, ip_xx.data(), ip_z.data(), blas);
     gt::stop("dtA_iterative_add");
     lr_truncate(large, dtA, blas);
     
@@ -1043,7 +1049,7 @@ struct dtA_iterative_solver {
     Ap = dtA;
     apply_lhs(Ap, mrho);
 
-    lr_add(1.0, rhs, -1.0, Ap, medium, ip_xx, ip_z, blas);
+    lr_add(1.0, rhs, -1.0, Ap, medium, ip_xx.data(), ip_z.data(), blas);
     lr_truncate(medium, r, blas);
     p = r;
     double r_norm_sq = lr_norm_sq(r, blas);
@@ -1056,12 +1062,12 @@ struct dtA_iterative_solver {
       double alpha = r_norm_sq / lr_inner_product(p, Ap, gi.h_xx[0]*gi.h_xx[1]*gi.h_zv[0], blas);
 
       //cout << "dtA2: " << lr_norm_sq(dtA, blas) << endl;
-      lr_add(1.0, dtA, alpha, p, medium, ip_xx, ip_z, blas);
+      lr_add(1.0, dtA, alpha, p, medium, ip_xx.data(), ip_z.data(), blas);
       lr_truncate(medium, dtA, blas);
       //cout << "dtA3: " << lr_norm_sq(dtA, blas) << endl;
 
 
-      lr_add(1.0, r, -alpha, Ap, medium, ip_xx, ip_z, blas);
+      lr_add(1.0, r, -alpha, Ap, medium, ip_xx.data(), ip_z.data(), blas);
       lr_truncate(medium, r, blas);
 
       double r_norm_sq_new = lr_norm_sq(r, blas);
@@ -1071,7 +1077,7 @@ struct dtA_iterative_solver {
       }
 
       double beta = r_norm_sq_new/r_norm_sq;
-      lr_add(1.0, r, beta, p, medium, ip_xx, ip_z, blas);
+      lr_add(1.0, r, beta, p, medium, ip_xx.data(), ip_z.data(), blas);
       lr_truncate(medium, p, blas);
 
       r_norm_sq = r_norm_sq_new;
@@ -1088,13 +1094,20 @@ struct dtA_iterative_solver {
       rhs(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),
       r(_gi.r, {gi.dxx_mult, gi.N_zv[0]}), p(_gi.r, {gi.dxx_mult, gi.N_zv[0]}), Ap(_gi.r, {gi.dxx_mult, gi.N_zv[0]}) {
     Xhat.resize({gi.dxxh_mult, gi.r});
-    ip_xx = inner_product_from_const_weight(gi.h_xx[0]*gi.h_xx[1], gi.dxx_mult);
-    ip_z = inner_product_from_const_weight(gi.h_zv[0], gi.N_zv[0]);
+    ip_z.resize({gi.N_zv[0]});
+    for (int i = 0; i < gi.N_zv[0]; ++i) {
+        ip_z(i) = gi.h_zv[0];
+    }
+    ip_xx.resize({gi.dxx_mult});
+    for (int i = 0; i < gi.dxx_mult; ++i) {
+        ip_xx(i) = gi.h_xx[0]*gi.h_xx[1];
+    }
   }
 
   grid_info<2> gi;
   const blas_ops& blas;
-  std::function<double(double*,double*)> ip_xx, ip_z;
+  multi_array<double,1> ip_z;
+  multi_array<double,1> ip_xx;
   lr2<double> int_vsq_z, prod, medium, large, rhs, r, p, Ap;
   cmat Xhat;
   std::unique_ptr<fft2d<2>> fft;
@@ -1189,10 +1202,10 @@ struct timestepper_lie : timestepper {
     gt::start("gs");
 
     f.X = K;
-    gs(f.X, f.S, ip_xx);
+    gs(f.X, f.S, ip_xx.data());
 
     Xphi = Kphi;
-    gs(Xphi, Sphi, ip_xx);
+    gs(Xphi, Sphi, ip_xx.data());
 
     gt::stop("gs");
 
@@ -1223,7 +1236,7 @@ struct timestepper_lie : timestepper {
     gt::start("gs");
 
     f.V = L;
-    gs(f.V, f.S, ip_zv);
+    gs(f.V, f.S, ip_zv.data());
     transpose_inplace(f.S);
 
     gt::stop("gs");
@@ -1231,7 +1244,7 @@ struct timestepper_lie : timestepper {
     gt::stop("step");
   }
 
-  timestepper_lie(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}) {
+  timestepper_lie(const grid_info<2>& _gi, const blas_ops& _blas, multi_array<double,1> _ip_xx, multi_array<double,1> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}) {
     D2.resize({gi.r,gi.r,gi.r});
     D3.resize({gi.r,gi.r,gi.r});
     e.resize({gi.N_zv[0], gi.r, gi.r});
@@ -1261,13 +1274,14 @@ private:
   PS_L_step L_step;
   PS_K_step K_step;
   PS_S_step S_step;
-  gram_schmidt gs;
+  orthogonalize gs;
   scalar_potential compute_phi;
   dtA_iterative_solver dtA_it;
   mat C1;
   ten3 D2, e, eA, C2, C3, D3;
   mat Lphi, Sphi, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi;
-  std::function<double(double*,double*)> ip_xx, ip_zv;
+  multi_array<double,1> ip_zv;
+  multi_array<double,1> ip_xx;
   lr2<double> rho, E, dtA;
 };
 
@@ -1331,7 +1345,7 @@ struct timestepper_unconventional: timestepper {
 
     Xphi = Kphi;
     gt::start("gs");
-    gs(Xphi, Sphi, ip_xx);
+    gs(Xphi, Sphi, ip_xx.data());
     gt::stop("gs");
 
     D2 = ccoeff.compute_D2(f.X, Xphi, blas);
@@ -1357,9 +1371,9 @@ struct timestepper_unconventional: timestepper {
 
     gt::start("gs");
     f.X = K;
-    gs(f.X, unused, ip_xx);
+    gs(f.X, unused, ip_xx.data());
     f.V = L;
-    gs(f.V, unused, ip_zv);
+    gs(f.V, unused, ip_zv.data());
     gt::stop("gs");
 
     gt::start("projection");
@@ -1394,7 +1408,7 @@ struct timestepper_unconventional: timestepper {
   }
 
 
-  timestepper_unconventional(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}) {
+  timestepper_unconventional(const grid_info<2>& _gi, const blas_ops& _blas, multi_array<double,1> _ip_xx, multi_array<double,1> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}) {
     D2.resize({gi.r,gi.r,gi.r});
     D3.resize({gi.r,gi.r,gi.r});
     e.resize({gi.N_zv[0], gi.r, gi.r});
@@ -1428,13 +1442,14 @@ private:
   PS_L_step L_step;
   PS_K_step K_step;
   PS_S_step S_step;
-  gram_schmidt gs;
+  orthogonalize gs;
   scalar_potential compute_phi;
   dtA_iterative_solver dtA_it;
   mat C1;
   ten3 D2, e, eA, C2, C3, D3;
   mat Lphi, Sphi, unused, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi, X0, V0;
-  std::function<double(double*,double*)> ip_xx, ip_zv;
+  multi_array<double,1> ip_zv;
+  multi_array<double,1> ip_xx;
   lr2<double> rho, E, dtA;
 
 };
@@ -1499,7 +1514,7 @@ struct timestepper_augmented_unconventional: timestepper {
 
     Xphi = Kphi;
     gt::start("gs");
-    gs(Xphi, Sphi, ip_xx);
+    gs(Xphi, Sphi, ip_xx.data());
     gt::stop("gs");
 
     D2 = ccoeff.compute_D2(f.X, Xphi, blas);
@@ -1534,8 +1549,8 @@ struct timestepper_augmented_unconventional: timestepper {
     });
 
     gt::start("gs");
-    gs(aug.X, unused, ip_xx);
-    gs(aug.V, unused, ip_zv);
+    gs(aug.X, unused, ip_xx.data());
+    gs(aug.V, unused, ip_zv.data());
     gt::stop("gs");
 
     // We do not need to compute the new S matrix (with N and M) since we already
@@ -1567,7 +1582,7 @@ struct timestepper_augmented_unconventional: timestepper {
   }
 
 
-  timestepper_augmented_unconventional(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), aug_ccoeff(modify_r(_gi, 2*_gi.r), gi.r), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), S_step_aug(modify_r(gi, 2*_gi.r), _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), aug(2*_gi.r, {_gi.dxx_mult, _gi.dzv_mult}), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}) {
+  timestepper_augmented_unconventional(const grid_info<2>& _gi, const blas_ops& _blas, multi_array<double,1> _ip_xx, multi_array<double,1> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), aug_ccoeff(modify_r(_gi, 2*_gi.r), gi.r), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), S_step_aug(modify_r(gi, 2*_gi.r), _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), aug(2*_gi.r, {_gi.dxx_mult, _gi.dzv_mult}), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}) {
     D2.resize({gi.r,gi.r,gi.r});
     D3.resize({gi.r,gi.r,gi.r});
     
@@ -1611,13 +1626,14 @@ private:
   PS_K_step K_step;
   PS_S_step S_step;
   PS_S_step S_step_aug;
-  gram_schmidt gs;
+  orthogonalize gs;
   scalar_potential compute_phi;
   dtA_iterative_solver dtA_it;
   mat C1, aug_C1;
   ten3 D2, e, eA, C2, C3, D3, aug_C2, aug_C3, aug_D2, aug_D3;
   mat Lphi, Sphi, unused, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi, X0, V0;
-  std::function<double(double*,double*)> ip_xx, ip_zv;
+  multi_array<double,1> ip_zv;
+  multi_array<double,1> ip_xx;
   lr2<double> aug;
   lr2<double> rho, E, dtA;
 };
@@ -1656,7 +1672,7 @@ struct timestepper_strang : timestepper {
     
     gt::start("gs");
     Xphi = Kphi;
-    gs(Xphi, Sphi, ip_xx);
+    gs(Xphi, Sphi, ip_xx.data());
     gt::stop("gs");
     
     blas.matmul_transb(Vphi,Sphi,Lphi);
@@ -1678,7 +1694,7 @@ struct timestepper_strang : timestepper {
 
     gt::start("gs");
     f.X = K;
-    gs(f.X, f.S, ip_xx);
+    gs(f.X, f.S, ip_xx.data());
     gt::stop("gs");
   }
 
@@ -1709,7 +1725,7 @@ struct timestepper_strang : timestepper {
 
     gt::start("gs");
     f.V = L;
-    gs(f.V, f.S, ip_zv);
+    gs(f.V, f.S, ip_zv.data());
     transpose_inplace(f.S);
     gt::stop("gs");
 
@@ -1746,7 +1762,7 @@ struct timestepper_strang : timestepper {
     gt::stop("step");
   }
 
-  timestepper_strang(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), ftmp(_gi.r, {_gi.dxx_mult, _gi.dzv_mult}) {
+  timestepper_strang(const grid_info<2>& _gi, const blas_ops& _blas, multi_array<double,1> _ip_xx, multi_array<double,1> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), ftmp(_gi.r, {_gi.dxx_mult, _gi.dzv_mult}) {
     D2.resize({gi.r,gi.r,gi.r});
     D3.resize({gi.r,gi.r,gi.r});
     e.resize({gi.N_zv[0], gi.r, gi.r});
@@ -1776,13 +1792,14 @@ private:
   PS_L_step L_step;
   PS_K_step K_step;
   PS_S_step S_step;
-  gram_schmidt gs;
+  orthogonalize gs;
   scalar_potential compute_phi;
   dtA_iterative_solver dtA_it;
   mat C1;
   ten3 D2, e, eA, C2, C3, D3;
   mat Lphi, Sphi, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi;
-  std::function<double(double*,double*)> ip_xx, ip_zv;
+  multi_array<double,1> ip_zv;
+  multi_array<double,1> ip_xx;
   lr2<double> rho, E, dtA, ftmp;
 };
 
@@ -1848,7 +1865,7 @@ struct timestepper_bug_midpoint : timestepper {
 
     Xphi = Kphi;
     gt::start("gs");
-    gs(Xphi, Sphi, ip_xx);
+    gs(Xphi, Sphi, ip_xx.data());
     gt::stop("gs");
 
     D2 = ccoeff.compute_D2(fhalf.X, Xphi, blas);
@@ -1879,8 +1896,8 @@ struct timestepper_bug_midpoint : timestepper {
     });
 
     gt::start("gs");
-    gs(aug.X, unused, ip_xx);
-    gs(aug.V, unused, ip_zv);
+    gs(aug.X, unused, ip_xx.data());
+    gs(aug.V, unused, ip_zv.data());
     gt::stop("gs");
 
     // We do not need to compute the new S matrix (with N and M) since we already
@@ -1912,7 +1929,7 @@ struct timestepper_bug_midpoint : timestepper {
   }
 
 
-  timestepper_bug_midpoint(const grid_info<2>& _gi, const blas_ops& _blas, std::function<double(double*,double*)> _ip_xx, std::function<double(double*,double*)> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), aug_ccoeff(modify_r(_gi, 3*_gi.r), gi.r), L_step(_gi, _blas), K_step(_gi, _blas), S_step_aug(modify_r(gi, 3*_gi.r), _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), aug(3*_gi.r, {_gi.dxx_mult, _gi.dzv_mult}), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), tsunc(_gi, _blas, _ip_xx, _ip_zv) {
+  timestepper_bug_midpoint(const grid_info<2>& _gi, const blas_ops& _blas, multi_array<double,1> _ip_xx, multi_array<double,1> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), aug_ccoeff(modify_r(_gi, 3*_gi.r), gi.r), L_step(_gi, _blas), K_step(_gi, _blas), S_step_aug(modify_r(gi, 3*_gi.r), _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), aug(3*_gi.r, {_gi.dxx_mult, _gi.dzv_mult}), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), tsunc(_gi, _blas, _ip_xx, _ip_zv) {
     D2.resize({gi.r,gi.r,gi.r});
     D3.resize({gi.r,gi.r,gi.r});
     
@@ -1959,13 +1976,14 @@ private:
   PS_K_step K_step;
   /*PS_S_step S_step;*/
   PS_S_step S_step_aug;
-  gram_schmidt gs;
+  orthogonalize gs;
   scalar_potential compute_phi;
   dtA_iterative_solver dtA_it;
   mat C1, aug_C1;
   ten3 D2, e, eA, C2, C3, D3, aug_C2, aug_C3, aug_D2, aug_D3;
   mat Lphi, Sphi, unused, K, /*L,*/ Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi, X0, V0;
-  std::function<double(double*,double*)> ip_xx, ip_zv;
+  multi_array<double,1> ip_zv;
+  multi_array<double,1> ip_xx;
   lr2<double> aug;
   lr2<double> rho, E, dtA;
   mat FVhalf, FXhalf;
@@ -2137,10 +2155,16 @@ struct integrator {
       compute_phi(_gi, blas),
       __dtA(___dtA) {
     
-    ip_xx = inner_product_from_const_weight(gi.h_xx[0]*gi.h_xx[1], gi.dxx_mult);
-    ip_zv = inner_product_from_const_weight(gi.h_zv[0]*gi.h_zv[1], gi.dzv_mult);
+    ip_xx.resize({gi.dxx_mult});
+    for (int i = 0; i < gi.dxx_mult; ++i) {
+        ip_xx(i) = gi.h_xx[0]*gi.h_xx[1];
+    }
+    ip_zv.resize({gi.dzv_mult});
+    for (int i = 0; i < gi.dzv_mult; ++i) {
+        ip_zv(i) = gi.h_zv[0]*gi.h_zv[1];
+    }
     
-    initialize(f, X0, V0, ip_xx, ip_zv, blas);
+    initialize(f, X0, V0, ip_xx.data(), ip_zv.data(), blas);
 
     order = 1;
     if(method == "lie") {
@@ -2165,8 +2189,11 @@ struct integrator {
     timestep->set_dtA(__dtA);
 
     // initialize dtA by 0
-    ip_z = inner_product_from_const_weight(gi.h_zv[0], gi.N_zv[0]);
-    initialize(dtA, vector<const double*>(), vector<const double*>(), ip_xx, ip_z, blas);
+    ip_z.resize({gi.N_zv[0]});
+    for (int i = 0; i < gi.N_zv[0]; ++i) {
+        ip_z(i) = gi.h_zv[0];
+    }
+    initialize(dtA, vector<const double*>(), vector<const double*>(), ip_xx.data(), ip_z.data(), blas);
   }
 
   double final_time, tau;
@@ -2174,10 +2201,12 @@ struct integrator {
   double time_tol;
   blas_ops blas;
   grid_info<2> gi;
-  gram_schmidt gs;
+  orthogonalize gs;
   lr2<double> f, ftmp, ftmp2, dtA2, dtA_large, dtA_medium, A0, A1, dtA, E, rho;
   mat AK0, K, Kphi, Vphi;
-  std::function<double(double*,double*)> ip_xx, ip_zv, ip_z;
+  multi_array<double,1> ip_z;
+  multi_array<double,1> ip_zv;
+  multi_array<double,1> ip_xx;
   std::unique_ptr<timestepper> timestep;
   Index order;
   vector_potential compute_A;

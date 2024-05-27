@@ -56,21 +56,21 @@ struct lr2 {
 *
 *   Note that no truncation is performed by this function. To do that call lr_truncate.
 */
-template<class T>
+template<class T, class IP>
 void lr_add(T alpha, const lr2<T>& A, T beta, const lr2<T>& B, lr2<T>& out,
-            std::function<T(T*,T*)> inner_product_X,
-            std::function<T(T*,T*)> inner_product_V,
+            IP inner_product_X,
+            IP inner_product_V,
             const blas_ops& blas);
 
 /*  Add three low-rank representations together.
 *
 *   Note that no truncation is performed by this function. To do that call lr_truncate.
 */
-template<class T>
+template<class T, class IP>
 void lr_add(T alpha, const lr2<T>& A, T beta, const lr2<T>& B,
             T gamma, const lr2<T>& C, lr2<T>& out,
-            std::function<T(T*,T*)> inner_product_X,
-            std::function<T(T*,T*)> inner_product_V,
+            IP inner_product_X,
+            IP inner_product_V,
             const blas_ops& blas);
 
 
@@ -78,10 +78,10 @@ void lr_add(T alpha, const lr2<T>& A, T beta, const lr2<T>& B,
 *
 *  Note that no truncation is performed by this function. To do that call lr_truncate.
 */
-template<class T>
+template<class T, class IP>
 void lr_mul(const lr2<T>& A, const lr2<T>& B, lr2<T>& out,
-            std::function<T(T*,T*)> inner_product_X,
-            std::function<T(T*,T*)> inner_product_V,
+            IP inner_product_X,
+            IP inner_product_V,
             const blas_ops& blas);
 
 /*  Truncate a low-rank representation inplace to a fixed rank r.
@@ -119,10 +119,10 @@ double lr_norm_sq(const lr2<T>& A, const blas_ops& blas);
 * (to the orthogonality condition).
 * X.size() == V.size() is required.
 */
-template<class T>
+template<class T, class IP>
 void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V,
-                std::function<T(T*,T*)> inner_product_X,
-                std::function<T(T*,T*)> inner_product_V,
+                IP inner_product_X,
+                IP inner_product_V,
                 const blas_ops& blas);
 
 
@@ -142,6 +142,8 @@ std::function<T(T*,T*)> inner_product_from_weight(const T* w, Index N);
 *
 * Note that the inputs are overwritten.
 */
+
+/*
 struct gram_schmidt {
 
   gram_schmidt(const blas_ops* _blas);
@@ -149,6 +151,24 @@ struct gram_schmidt {
 
   void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product);
   void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, double w);
+  
+private:
+  const blas_ops* blas;
+  #ifdef __CUDACC__
+  curandGenerator_t gen;
+  #endif
+};
+*/
+
+struct orthogonalize {
+
+  orthogonalize(const blas_ops* _blas);
+  ~orthogonalize();
+
+  void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product);
+  void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, double w);
+  void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, double* w);
+
   
 private:
   const blas_ops* blas;
