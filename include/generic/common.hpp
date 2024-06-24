@@ -26,6 +26,7 @@
 #include "cublas_v2.h"
 #include <cufft.h>
 #include <curand.h>
+#include <cusolverDn.h>
 #endif
 
 #ifdef __OPENMP__

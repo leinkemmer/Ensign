@@ -73,6 +73,7 @@ struct blas_ops {
   #ifdef __CUDACC__
   cublasHandle_t  handle;
   cublasHandle_t  handle_devres; // cuBLAS routines return scalar results on device
+  cusolverDnHandle_t handle_cusolver;
   #endif
 };
 

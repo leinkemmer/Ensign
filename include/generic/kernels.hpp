@@ -92,4 +92,10 @@ __global__ void exp_euler_fourier_3d(int N, int nx, int ny, int nz, cuDoubleComp
 
 __global__ void second_ord_stage_fourier_3d(int N, int nx, int ny, int nz, cuDoubleComplex* A, double* dc_r, double ts, double* lims, cuDoubleComplex* T, cuDoubleComplex* U);
 
+template<class T>
+__global__ void copy_R(int m, int n, T* Q, T* R, T w);
+
+template<class T>
+__global__ void div_Q(int m, int n, T* Q, T w);
+
 #endif

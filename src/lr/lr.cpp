@@ -299,45 +299,43 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
 */
 
 
-void orthogonalize_householder_constw_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, curandGenerator_t gen, cublasHandle_t handle_devres) {
-  array<Index,2> dims = Q.shape();
+void orthogonalize_householder_constw_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, cusolverDnHandle_t handle_cusolver) {
 
+  int m = Q.shape()[0];   // also lda
+  int n = Q.shape()[1];
+  
 
-  using namespace Eigen;
-  MatrixXd A(dims[0], dims[1]);
-  for(Index j=0;j<dims[1];j++) {
-    for(Index i=0;i<dims[0];i++) {
-      A(i,j) = Q(i,j);
-    }
-  }
+  // allocate memory for tau, work and device info
+  double *devTau, *work;
+	int szWork;
 
-  HouseholderQR<MatrixXd> qr(A.rows(), A.cols());
-  qr.compute(A);
-  MatrixXd q = qr.householderQ()*MatrixXd::Identity(A.rows(), A.cols());
-  MatrixXd temp = qr.matrixQR().triangularView<Upper>();
+  cudaMalloc((void**)&devTau, n * sizeof(double));
 
-  MatrixXd RR(A.cols(), A.cols());
-  RR.setZero();
-  for(Index j=0;j<std::min(A.cols(),temp.cols());j++)
-    for(Index i=0;i<std::min(A.cols(),temp.rows());i++)
-      RR(i,j) = temp(i,j);
+  cusolverDnDgeqrf_bufferSize(handle_cusolver, m, n, &Q(0,0), m, &szWork);
+  cudaDeviceSynchronize();
 
-  for(Index j=0;j<dims[1];j++) {
-    for(Index i=0;i<dims[0];i++) {
-      Q(i,j) = q(i,j);
-    }
-  }
+  cudaMalloc((void**)&work, szWork * sizeof(double));
 
-//change code above, s.t. QR is done with cuBLAS or cuSOLVER
+  int *devInfo;
+  cudaMalloc((void **)&devInfo, sizeof(int));
 
+  // do QR factorization
+  cusolverDnDgeqrf(handle_cusolver, m, n, &Q(0,0), m, devTau, work, szWork, devInfo); 
+  cudaDeviceSynchronize();
 
-  for(Index j=0;j<dims[1];j++)
-    for(Index i=0;i<dims[0];i++)
-      Q(i,j) /= sqrt(w);
+  // copy data from Q to our multi_array R (only upper tridiagonal part of A is R, rest is 0) (R should already be nxn)
+  // in our function we already multiply by sqrt(w)
 
-  for(Index j=0;j<dims[1];j++)
-    for(Index i=0;i<dims[1];i++)
-      R(i,j) = sqrt(w)*RR(i,j);
+  copy_R<<<n,n>>>(m, n, &Q(0,0), &R(0,0), w);
+
+  // we don't allocate extra memory for our second usage of cuSolver, because szwork2 < szwork
+  // calculate the orthogonal matrix Q
+  cusolverDnDorgqr(handle_cusolver, m, n, n, &Q(0,0), m, devTau, work, szWork, devInfo);
+  cudaDeviceSynchronize();
+
+  // divide Q by sqrt(w)
+
+  div_Q<<<m,n>>>(m, n, &Q(0,0), w);
 
 }
 
@@ -382,9 +380,10 @@ void orthogonalize::operator()(multi_array<double,2>& Q, multi_array<double,2>& 
     orthogonalize_householder_constw(Q, R, w);
   } else {
     #ifdef __CUDACC__
-    gram_schmidt_gpu(Q, R, w, gen, blas->handle_devres);
+    //gram_schmidt_gpu(Q, R, w, gen, blas->handle_devres);
+    orthogonalize_householder_constw_gpu(Q, R, w, blas->handle_cusolver);
     #else
-    cout << "ERROR: gram_schmidt_gpu called but no GPU support available." << endl;
+    cout << "ERROR: orthogonalize_gpu called but no GPU support available." << endl;
     exit(1);
     #endif
   }

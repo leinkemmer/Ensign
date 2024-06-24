@@ -3,6 +3,29 @@
 #ifdef __CUDACC__
 
 template<class T>
+__global__ void copy_R(int m, int n, T* Q, T* R, T w) {
+  int i = threadIdx.x;
+  int j = blockIdx.x;
+
+  if(j>=i)
+    R[i + j*n] = Q[i + j*m] * sqrt(w);
+  else
+    R[i + j*n] = 0.0;
+}
+template __global__ void copy_R(int, int, double*, double*, double);
+template __global__ void copy_R(int, int, float*, float*, float);
+
+template<class T>
+__global__ void div_Q(int m, int n, T* Q, T w) {
+  int i = threadIdx.x;
+  int j = blockIdx.x;
+
+  Q[i + j*m] /= sqrt(w);
+}
+template __global__ void div_Q(int, int, double*, double);
+template __global__ void div_Q(int, int, float*, float);
+
+template<class T>
 __global__ void fill_gpu(int n, T* v, T alpha){
   int idx = threadIdx.x + blockDim.x * blockIdx.x;
 

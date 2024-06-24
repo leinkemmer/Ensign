@@ -40,6 +40,45 @@ template void orthogonalize_unit_test(std::function<double(double*,double*)> inn
 template void orthogonalize_unit_test(double inner_product);
 template void orthogonalize_unit_test(double* inner_product);
 
+
+
+void orthogonalize_unit_test_gpu(double inner_product){
+  multi_array<double,2> _A({4,3});
+  multi_array<double,2> _R({3,3});
+
+  _A(0,0) = 1.0; _A(0,1) = 3.0; _A(0,2) = 5.0;
+  _A(1,0) = 2.0; _A(1,1) = 0.0; _A(1,2) = 1.0;
+  _A(2,0) = 4.0; _A(2,1) = 4.0; _A(2,2) = 8.0;
+  _A(3,0) = 2.0; _A(3,1) = 5.0; _A(3,2) = 7.0;
+
+  multi_array<double,2> _Ac;
+  _Ac = _A;
+
+  multi_array<double,2> A({4,3},stloc::device);
+  multi_array<double,2> R({3,3},stloc::device);
+
+  A = _A;
+
+  orthogonalize gs(&blas);
+  gs(A, R, inner_product);
+
+  multi_array<double,2> id({3,3});
+  set_identity(id);
+
+  multi_array<double,2> R1({3,3});
+  multi_array<double,2> R2({4,3});
+
+  _A = A;
+  _R = R;
+
+  blas_ops blas;
+  blas.matmul_transa(_A,_A,R1);
+  REQUIRE(bool(R1==id));
+
+  blas.matmul(_A,_R,R2);
+  REQUIRE(bool(R2 == _Ac));
+};
+
 TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
 
   SECTION("Gram-Schmidt"){
@@ -50,11 +89,21 @@ TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
 
   }
 
-  SECTION("Householder constant weight"){
+  SECTION("Householder constant weight, GPU"){
 
-    double ip = 1.0;
+  double ip = 1.0;
 
-    orthogonalize_unit_test(ip);
+  #ifdef __CUDACC__
+
+  cout << "Test for GPU"<< endl;
+  orthogonalize_unit_test_gpu(ip);
+  cout << "Test for GPU over"<< endl;
+  
+  #else
+
+  orthogonalize_unit_test(ip);
+
+  #endif
 
   }
 
@@ -63,7 +112,7 @@ TEST_CASE( "Low rank structure 2D", "[low_rank]" ) {
     multi_array<double,1> ip({4});
     ip(0) = 1.0; ip(1) = 1.0; ip(2) = 1.0; ip(3) = 1.0;
 
-    //orthogonalize_unit_test(ip.data());
+    orthogonalize_unit_test(ip.data());
 
   }
     
