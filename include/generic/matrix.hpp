@@ -3,6 +3,7 @@
 #include <generic/common.hpp>
 #include <generic/storage.hpp>
 #include <generic/kernels.hpp>
+#include <generic/index_functions.hpp>
 
 /* Set matrix to zero
 */
@@ -98,3 +99,82 @@ private:
 */
 template<class T>
 void svd(const multi_array<T,2>& input, multi_array<T,2>& U, multi_array<T,2>& V, multi_array<T,1>& sigma_diag, const blas_ops& blas);
+
+/* Additions from kinetic-cme
+*/
+namespace Matrix {
+template <class InputIt, class OutputIt>
+void RemoveElement(InputIt first, InputIt last, OutputIt d_first, const Index idx)
+{
+    std::copy(first, first + idx, d_first);
+    std::copy(first + idx + 1, last, d_first + idx);
+}
+
+template <size_t m, size_t d, class T>
+void Matricize(const multi_array<T, d>& input, multi_array<T, 2>& output)
+{
+    std::array<Index, d> shape{input.shape()};
+    std::array<Index, d - 1> cols_shape, vec_index_cols;
+    RemoveElement(std::begin(shape), std::end(shape), std::begin(cols_shape), m);
+    std::vector<Index> vec_index(d, 0);
+    Index i, j;
+
+    assert(shape[m] == output.shape()[1] && prod(cols_shape) == output.shape()[0]);
+
+    for (auto const& el : input) {
+        i = vec_index[m];
+        RemoveElement(std::begin(vec_index), std::end(vec_index),
+                      std::begin(vec_index_cols), m);
+        j = IndexFunction::VecIndexToCombIndex(std::begin(vec_index_cols),
+                                               std::end(vec_index_cols),
+                                               std::begin(cols_shape));
+        output(j, i) = el;
+        IndexFunction::IncrVecIndex(std::begin(shape), std::begin(vec_index),
+                                    std::end(vec_index));
+    }
+}
+
+template <>
+void Matricize<0, 3, double>(const multi_array<double, 3>& input,
+                             multi_array<double, 2>& output);
+template <>
+void Matricize<1, 3, double>(const multi_array<double, 3>& input,
+                             multi_array<double, 2>& output);
+template <>
+void Matricize<2, 3, double>(const multi_array<double, 3>& input,
+                             multi_array<double, 2>& output);
+
+template <size_t m, size_t d, class T>
+void Tensorize(const multi_array<T, 2>& input, multi_array<T, d>& output)
+{
+    std::array<Index, d> shape{output.shape()};
+    std::array<Index, d - 1> cols_shape, vec_index_cols;
+    RemoveElement(std::begin(shape), std::end(shape), std::begin(cols_shape), m);
+    std::vector<Index> vec_index(d, 0);
+    Index i, j;
+
+    assert(shape[m] == input.shape()[1] && prod(cols_shape) == input.shape()[0]);
+
+    for (auto& el : output) {
+        i = vec_index[m];
+        RemoveElement(std::begin(vec_index), std::end(vec_index),
+                      std::begin(vec_index_cols), m);
+        j = IndexFunction::VecIndexToCombIndex(std::begin(vec_index_cols),
+                                               std::end(vec_index_cols),
+                                               std::begin(cols_shape));
+        el = input(j, i);
+        IndexFunction::IncrVecIndex(std::begin(shape), std::begin(vec_index),
+                                    std::end(vec_index));
+    }
+}
+
+template <>
+void Tensorize<0, 3, double>(const multi_array<double, 2>& input,
+                             multi_array<double, 3>& output);
+template <>
+void Tensorize<1, 3, double>(const multi_array<double, 2>& input,
+                             multi_array<double, 3>& output);
+template <>
+void Tensorize<2, 3, double>(const multi_array<double, 2>& input,
+                             multi_array<double, 3>& output);
+} // namespace Matrix
