@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.9)
 include(ExternalProject)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake-modules")
 
-project(dynlr)
+project(Ensign)
 enable_testing()
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -117,3 +117,20 @@ include_directories("${PROJECT_BINARY_DIR}/extern/Catch2/src/Catch2/single_inclu
 include_directories(include)
 add_subdirectory(tests)
 add_subdirectory(examples)
+
+
+# Introducing a namespace
+add_library(${PROJECT_NAME} INTERFACE)
+target_include_directories(
+  ${PROJECT_NAME}
+  INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+install(TARGETS ${PROJECT_NAME}
+        EXPORT ${PROJECT_NAME}_Targets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(EXPORT ${PROJECT_NAME}_Targets
+        FILE ${PROJECT_NAME}Targets.cmake
+        NAMESPACE ${PROJECT_NAME}::
+        DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/${PROJECT_NAME}/cmake)
