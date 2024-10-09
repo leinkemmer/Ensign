@@ -119,32 +119,55 @@ add_subdirectory(tests)
 add_subdirectory(examples)
 
 
-# Introducing a namespace
+
 include(GNUInstallDirs)
-add_library(${PROJECT_NAME} INTERFACE)
-target_include_directories(
-  ${PROJECT_NAME}
-  INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-install(TARGETS ${PROJECT_NAME}
-        EXPORT ${PROJECT_NAME}_Targets
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# Add a library under a namespace
+add_library(Ensign
+    src/generic/fft.cpp
+    src/generic/matrix.cpp
+    src/generic/netcdf.cpp
+    src/generic/timer.cpp
+    src/generic/utility.cpp
+    src/lr/coefficients.cpp
+    src/lr/lr.cpp
+)
+
+# Include directories for the library
+target_include_directories(Ensign
+    PUBLIC 
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
+
+# Install targets and export configuration
+install(TARGETS Ensign
+    EXPORT EnsignTargets
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+    INCLUDES DESTINATION include
+)
+
+# Install the headers
+install(DIRECTORY include/ DESTINATION include)
+
+install(EXPORT EnsignTargets
+    FILE EnsignConfig.cmake
+    NAMESPACE Ensign::
+    DESTINATION lib/cmake/Ensign
+)
+
+# Package versioning support (optional)
 include(CMakePackageConfigHelpers)
-write_basic_package_version_file("${PROJECT_NAME}ConfigVersion.cmake"
-                                 VERSION ${PROJECT_VERSION}
-                                 COMPATIBILITY SameMajorVersion)
-configure_package_config_file(
-  "${PROJECT_SOURCE_DIR}/cmake-modules/${PROJECT_NAME}Config.cmake.in"
-  "${PROJECT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
-  INSTALL_DESTINATION
-  ${CMAKE_INSTALL_DATAROOTDIR}/${PROJECT_NAME}/cmake)
-install(EXPORT ${PROJECT_NAME}_Targets
-        FILE ${PROJECT_NAME}Targets.cmake
-        NAMESPACE ${PROJECT_NAME}::
-        DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/${PROJECT_NAME}/cmake)
-install(FILES "${PROJECT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
-              "${PROJECT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
-        DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/${PROJECT_NAME}/cmake)
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/${PROJECT_NAME} DESTINATION include)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/EnsignConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+# Install the version configuration file
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/EnsignConfigVersion.cmake"
+    DESTINATION lib/cmake/Ensign
+)
