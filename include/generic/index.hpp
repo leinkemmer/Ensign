@@ -3,11 +3,14 @@
 #include <iterator>
 #include <vector>
 
+#include <generic/common.hpp>
 #include <generic/storage.hpp>
 
 #ifdef __OPENMP__
 #include <omp.h>
 #endif
+
+namespace Ensign{
 
 namespace IndexFunction {
 template <class InputIt, class InputItInt>
@@ -48,3 +51,5 @@ void IncrVecIndex(InputIt first, OutputIt d_first, OutputIt d_last)
 }
 
 } // namespace IndexFunction
+
+} // namespace Ensign

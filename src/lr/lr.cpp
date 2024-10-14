@@ -5,10 +5,13 @@
 #include <lr/coefficients.hpp>
 
 #include <cstring>
+#include <eigen3/Eigen/Dense>
 
 #ifdef __CUDACC__
 #include <curand.h>
 #endif
+
+namespace Ensign{
 
 template<class T>
 std::function<T(T*,T*)> inner_product_from_weight(T* w, Index N) {
@@ -90,8 +93,6 @@ void gram_schmidt_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, std::f
     }
   }
 };
-
-#include<eigen3/Eigen/Dense>
 
 void orthogonalize_householder_constw(multi_array<double,2>& Q, multi_array<double,2>& R, double w) { //Removed blas argument because not needed
   array<Index,2> dims = Q.shape();
@@ -716,3 +717,5 @@ double lr_norm_sq(const lr2<T>& A, const blas_ops& blas) {
 }
 
 template double lr_norm_sq(const lr2<double>& A, const blas_ops& blas);
+
+} // namespace Ensign

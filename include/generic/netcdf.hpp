@@ -6,6 +6,7 @@
 #define ERRCODE 2
 #define ERR(e) {printf("Error: %s\n", nc_strerror(e)); exit(ERRCODE);}
 
+namespace Ensign{
 
 struct nc_writer {
 
@@ -22,3 +23,5 @@ private:
     std::map<string,int> dim_ids;
     std::map<string,int> var_ids;
 };
+
+} // namespace Ensign

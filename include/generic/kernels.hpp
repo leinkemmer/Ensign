@@ -2,6 +2,8 @@
 
 #ifdef __CUDACC__
 
+namespace Ensign{
+
 template<class T>
 __global__ void fill_gpu(int n, T* v, T alpha);
 
@@ -97,5 +99,7 @@ __global__ void copy_R(int m, int n, T* Q, T* R, T w);
 
 template<class T>
 __global__ void div_Q(int m, int n, T* Q, T w);
+
+} // namespace Ensign
 
 #endif

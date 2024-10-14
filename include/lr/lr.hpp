@@ -5,6 +5,8 @@
 #include <generic/kernels.hpp>
 #include <generic/matrix.hpp>
 
+namespace Ensign{
+
 /* Class to store the low-rank factors (X, S, V) that are used in the computation.
 *
 * The low-rank factors can reside either on the host (CPU) or the device (GPU)
@@ -176,3 +178,5 @@ private:
   curandGenerator_t gen;
   #endif
 };
+
+} // namespace Ensign

@@ -3,6 +3,8 @@
 #include <generic/common.hpp>
 #include <generic/storage.hpp>
 
+namespace Ensign{
+
 template<size_t d, size_t dim>
 struct fft {
 
@@ -75,3 +77,5 @@ array<cufftHandle,2> create_plans_3d(array<Index,3> dims_, int howmany);
 */
 void destroy_plans(array<cufftHandle,2>& plans);
 #endif
+
+} // namespace Ensign

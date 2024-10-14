@@ -1,6 +1,7 @@
 #include <generic/matrix.hpp>
 #include <generic/timer.hpp>
 
+namespace Ensign{
 
 #ifndef __MKL__
 extern "C" {
@@ -745,7 +746,7 @@ void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_arr
 /* Additions from kinetic-cme
 */
 template <>
-void Matrix::Matricize<0, 3, double>(const multi_array<double, 3>& input,
+void Tensor::matricize<0, 3, double>(const multi_array<double, 3>& input,
                                      multi_array<double, 2>& output)
 {
     const auto n = input.shape();
@@ -759,7 +760,7 @@ void Matrix::Matricize<0, 3, double>(const multi_array<double, 3>& input,
 }
 
 template <>
-void Matrix::Matricize<1, 3, double>(const multi_array<double, 3>& input,
+void Tensor::matricize<1, 3, double>(const multi_array<double, 3>& input,
                                      multi_array<double, 2>& output)
 {
     const auto n = input.shape();
@@ -773,7 +774,7 @@ void Matrix::Matricize<1, 3, double>(const multi_array<double, 3>& input,
 }
 
 template <>
-void Matrix::Matricize<2, 3, double>(const multi_array<double, 3>& input,
+void Tensor::matricize<2, 3, double>(const multi_array<double, 3>& input,
                                      multi_array<double, 2>& output)
 {
     const auto n = input.shape();
@@ -787,7 +788,7 @@ void Matrix::Matricize<2, 3, double>(const multi_array<double, 3>& input,
 }
 
 template <>
-void Matrix::Tensorize<0, 3, double>(const multi_array<double, 2>& input,
+void Tensor::tensorize<0, 3, double>(const multi_array<double, 2>& input,
                                      multi_array<double, 3>& output)
 {
     const auto n = output.shape();
@@ -801,7 +802,7 @@ void Matrix::Tensorize<0, 3, double>(const multi_array<double, 2>& input,
 }
 
 template <>
-void Matrix::Tensorize<1, 3, double>(const multi_array<double, 2>& input,
+void Tensor::tensorize<1, 3, double>(const multi_array<double, 2>& input,
                                      multi_array<double, 3>& output)
 {
     const auto n = output.shape();
@@ -815,7 +816,7 @@ void Matrix::Tensorize<1, 3, double>(const multi_array<double, 2>& input,
 }
 
 template <>
-void Matrix::Tensorize<2, 3, double>(const multi_array<double, 2>& input,
+void Tensor::tensorize<2, 3, double>(const multi_array<double, 2>& input,
                                      multi_array<double, 3>& output)
 {
     const auto n = output.shape();
@@ -827,3 +828,5 @@ void Matrix::Tensorize<2, 3, double>(const multi_array<double, 2>& input,
         }
     }
 }
+
+} // namespace Ensign

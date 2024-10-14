@@ -3,6 +3,8 @@
 #include <cufft.h>
 #endif
 
+namespace Ensign{
+
 array<fftw_plan,2> create_plans_1d(Index dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq){
   array<fftw_plan,2> out;
   int dims = int(dims_);
@@ -239,3 +241,4 @@ template void fft<2, 2>::backward(multi_array<complex<double>,2>& freq, multi_ar
 template void fft<1, 3>::backward(multi_array<complex<double>,1>& freq, multi_array<double,1>& real);
 template void fft<2, 3>::backward(multi_array<complex<double>,2>& freq, multi_array<double,2>& real);
 
+} // namespace Ensign

@@ -5,6 +5,8 @@
 #include <generic/kernels.hpp>
 #include <iomanip>
 
+namespace Ensign{
+
 template<class T, size_t d>
 struct multi_array {
   array<Index,d> e;
@@ -372,3 +374,5 @@ void print(const multi_array<T,2>& ma) {
   }
   cout << endl;
 }
+
+} // namespace Ensign

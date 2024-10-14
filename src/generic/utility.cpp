@@ -1,5 +1,7 @@
 #include <generic/utility.hpp>
 
+namespace Ensign{
+
 #ifdef __CUDACC__
 void* gpu_malloc(size_t size) {
     void *p;
@@ -11,3 +13,5 @@ void* gpu_malloc(size_t size) {
     return p;
 }
 #endif
+
+} // namespace Ensign

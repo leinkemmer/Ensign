@@ -2,6 +2,8 @@
 
 #ifdef __CUDACC__
 
+namespace Ensign{
+
 template<class T>
 __global__ void copy_R(int m, int n, T* Q, T* R, T w) {
   int i = threadIdx.x;
@@ -625,5 +627,7 @@ __global__ void second_ord_stage_fourier_3d(int N, int nx, int ny, int nz, cuDou
   }
 
 }
+
+} // namespace Ensign
 
 #endif

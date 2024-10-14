@@ -17,6 +17,8 @@
 #include <omp.h>
 #endif
 
+namespace Ensign{
+
 timer::timer() {
     counter = 0;
     elapsed = 0.0;
@@ -147,3 +149,5 @@ namespace gt {
         return timers[name].deviation();
     }
 }
+
+} // namespace Ensign

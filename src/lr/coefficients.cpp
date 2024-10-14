@@ -1,5 +1,7 @@
 #include <lr/coefficients.hpp>
 
+namespace Ensign{
+
 template<class T>
 void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, T w, multi_array<T,2>& out, const blas_ops& blas) {
   blas.matmul_transa(a,b,out);
@@ -83,3 +85,5 @@ void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, const multi_arr
 }
 template void coeff(const multi_array<double,2>& a, const multi_array<double,2>& b, const multi_array<double,2>& c, double w, multi_array<double,3>& out, const blas_ops& blas);
 template void coeff(const multi_array<float,2>& a, const multi_array<float,2>& b, const multi_array<float,2>& c, float w, multi_array<float,3>& out, const blas_ops& blas);
+
+} // namespace Ensign
