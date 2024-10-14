@@ -2,6 +2,8 @@
 #include <catch2/catch.hpp>
 #include <generic/matrix.hpp>
 
+using namespace Ensign;
+
 
 TEST_CASE( "matrix basic operations", "[matrix]" ) {
 

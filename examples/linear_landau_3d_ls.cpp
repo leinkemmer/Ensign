@@ -6,6 +6,8 @@
 #include <generic/timer.hpp>
 #include <generic/fft.hpp>
 
+using namespace Ensign;
+
 double tot_gpu_mem = 0.0;
 
 

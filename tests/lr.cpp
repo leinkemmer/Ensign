@@ -4,6 +4,8 @@
 #include <lr/lr.hpp>
 #include <generic/matrix.hpp>
 
+using namespace Ensign;
+
 blas_ops blas;
 
 template<class IP>

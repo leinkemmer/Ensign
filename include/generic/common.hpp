@@ -67,5 +67,3 @@ std::unique_ptr<T> make_unique_ptr(Args&&... args)
 }
 
 } // namespace Ensign
-
-using namespace Ensign;

@@ -7,6 +7,8 @@
   cublasHandle_t  handle;
 #endif
 
+using namespace Ensign;
+
 
 TEST_CASE( "multi_array basic operations", "[multi_array]" ) {
 

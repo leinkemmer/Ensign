@@ -6,6 +6,8 @@
 
 #include <lr/coefficients.hpp>
 
+using namespace Ensign;
+
 
 TEST_CASE( "coefficients", "[coefficients]" ) {
 

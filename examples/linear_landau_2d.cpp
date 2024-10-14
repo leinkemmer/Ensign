@@ -6,6 +6,8 @@
 #include <generic/timer.hpp>
 #include <generic/fft.hpp>
 
+using namespace Ensign;
+
 lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int r,double tstar, Index nsteps, int nsteps_split, int nsteps_ee, int nsteps_rk4, array<double,4> lim_xx, array<double,4> lim_vv, double alpha, double kappa1, double kappa2, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_xx, array<fftw_plan,2> plans_vv, const blas_ops& blas){
   double tau = tstar/nsteps;
 

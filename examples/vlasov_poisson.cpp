@@ -10,6 +10,8 @@
 
 #include <cxxopts.hpp>
 
+using namespace Ensign;
+
 bool CPU;
 
 template<size_t d> using mind = array<Index,d>;
