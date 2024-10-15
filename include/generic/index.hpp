@@ -14,7 +14,7 @@ namespace Ensign{
 
 namespace IndexFunction {
 template <class InputIt, class InputItInt>
-Index VecIndexToCombIndex(InputIt first, InputIt last, InputItInt first_int)
+Index vec_index_to_comb_index(InputIt first, InputIt last, InputItInt first_int)
 {
     Index comb_index = 0;
     Index stride = 1;
@@ -26,7 +26,7 @@ Index VecIndexToCombIndex(InputIt first, InputIt last, InputItInt first_int)
 }
 
 template <class InputItInt, class OutputIt>
-void CombIndexToVecIndex(Index comb_index, InputItInt first, OutputIt d_first,
+void comb_index_to_vec_index(Index comb_index, InputItInt first, OutputIt d_first,
                          OutputIt d_last)
 {
     assert(d_first != d_last);
@@ -38,7 +38,7 @@ void CombIndexToVecIndex(Index comb_index, InputItInt first, OutputIt d_first,
 }
 
 template <class InputIt, class OutputIt>
-void IncrVecIndex(InputIt first, OutputIt d_first, OutputIt d_last)
+void incr_vec_index(InputIt first, OutputIt d_first, OutputIt d_last)
 {
     assert(d_first != d_last);
     for (; d_first != std::next(d_last, -1); ++first, ++d_first) {

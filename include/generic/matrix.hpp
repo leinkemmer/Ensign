@@ -103,6 +103,10 @@ private:
 template<class T>
 void svd(const multi_array<T,2>& input, multi_array<T,2>& U, multi_array<T,2>& V, multi_array<T,1>& sigma_diag, const blas_ops& blas);
 
+/* Forward decleration needed for ortho (otherwise we need to loop the includes of lr.hpp and matrix.hpp)
+*/
+struct orthogonalize;
+
 /* Additions from kinetic-cme
 */
 namespace Tensor {
@@ -122,11 +126,11 @@ void matricize(const multi_array<T, d>& input, multi_array<T, 2>& output)
         i = vec_index[m];
         remove_element(std::begin(vec_index), std::end(vec_index),
                       std::begin(vec_index_cols), m);
-        j = IndexFunction::VecIndexToCombIndex(std::begin(vec_index_cols),
+        j = IndexFunction::vec_index_to_comb_index(std::begin(vec_index_cols),
                                                std::end(vec_index_cols),
                                                std::begin(cols_shape));
         output(j, i) = el;
-        IndexFunction::IncrVecIndex(std::begin(shape), std::begin(vec_index),
+        IndexFunction::incr_vec_index(std::begin(shape), std::begin(vec_index),
                                     std::end(vec_index));
     }
 }
@@ -156,11 +160,11 @@ void tensorize(const multi_array<T, 2>& input, multi_array<T, d>& output)
         i = vec_index[m];
         remove_element(std::begin(vec_index), std::end(vec_index),
                       std::begin(vec_index_cols), m);
-        j = IndexFunction::VecIndexToCombIndex(std::begin(vec_index_cols),
+        j = IndexFunction::vec_index_to_comb_index(std::begin(vec_index_cols),
                                                std::end(vec_index_cols),
                                                std::begin(cols_shape));
         el = input(j, i);
-        IndexFunction::IncrVecIndex(std::begin(shape), std::begin(vec_index),
+        IndexFunction::incr_vec_index(std::begin(shape), std::begin(vec_index),
                                     std::end(vec_index));
     }
 }
@@ -174,6 +178,42 @@ void tensorize<1, 3, double>(const multi_array<double, 2>& input,
 template <>
 void tensorize<2, 3, double>(const multi_array<double, 2>& input,
                              multi_array<double, 3>& output);
+
+template <class T>
+multi_array<T, 2> ortho(multi_array<T, 2>& input,
+                                        const Index n_basisfunctions, const T weight,
+                                        const blas_ops& blas)
+{
+    Index rows = input.shape()[0];
+    Index cols = input.shape()[1];
+
+    assert(n_basisfunctions <= cols);
+
+    std::default_random_engine generator(1234);
+    std::normal_distribution<double> distribution(0.0, 1.0);
+
+#ifdef __OPENMP__
+#pragma omp parallel for
+#endif
+    for (Index k = n_basisfunctions; k < cols; ++k) {
+        for (Index i = 0; i < rows; ++i) {
+            input(i, k) = distribution(generator);
+        }
+    }
+
+    multi_array<T, 2> R({cols, cols});
+
+    orthogonalize gs(&blas);
+    gs(input, R, weight);
+
+    for (Index j = n_basisfunctions; j < cols; ++j) {
+        for (Index i = 0; i < cols; ++i) {
+            R(i, j) = T(0.0);
+        }
+    }
+    return R;
+}
+
 } // namespace Tensor
 
 } // namespace Ensign
