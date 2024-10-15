@@ -129,6 +129,7 @@ add_library(Ensign
     src/generic/netcdf.cpp
     src/generic/timer.cpp
     src/generic/utility.cpp
+    src/generic/tree.cpp
     src/lr/coefficients.cpp
     src/lr/lr.cpp
 )
