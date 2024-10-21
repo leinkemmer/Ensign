@@ -7,6 +7,7 @@
 #include <generic/fft.hpp>
 
 using namespace Ensign;
+using namespace Ensign::Matrix;
 
 lr2<double> integration_first_order(Index Nx,Index Nv, int r,double tstar, Index nsteps, int nsteps_ee, int nsteps_rk4, double ax, double bx, double av, double bv, double alpha, double kappa, bool ee_flag, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_x, array<fftw_plan,2> plans_v, const blas_ops& blas){
 

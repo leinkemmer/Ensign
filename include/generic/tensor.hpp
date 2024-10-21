@@ -79,7 +79,7 @@ void tensorize<2, 3, double>(const multi_array<double, 2>& input,
 template <class T>
 multi_array<T, 2> ortho(multi_array<T, 2>& input,
                                         const Index n_basisfunctions, const T weight,
-                                        const blas_ops& blas)
+                                        const Ensign::Matrix::blas_ops& blas)
 {
     Index rows = input.shape()[0];
     Index cols = input.shape()[1];

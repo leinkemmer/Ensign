@@ -3,6 +3,7 @@
 #include <generic/matrix.hpp>
 
 using namespace Ensign;
+using namespace Ensign::Matrix;
 
 
 TEST_CASE( "matrix basic operations", "[matrix]" ) {

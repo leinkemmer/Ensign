@@ -7,6 +7,7 @@
 #include <lr/coefficients.hpp>
 
 using namespace Ensign;
+using namespace Ensign::Matrix;
 
 
 TEST_CASE( "coefficients", "[coefficients]" ) {

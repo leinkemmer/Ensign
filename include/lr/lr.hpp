@@ -44,7 +44,7 @@ struct lr2 {
 
   /* Computes the full matrix (can be very expensive and should not be used in production code)
   */
-  multi_array<T,2> full(const blas_ops& blas) const {
+  multi_array<T,2> full(const Ensign::Matrix::blas_ops& blas) const {
     multi_array<T, 2> K = X;
     blas.matmul(X, S, K);
     multi_array<T, 2> out({size_X(), size_V()});
@@ -62,7 +62,7 @@ template<class T, class IP>
 void lr_add(T alpha, const lr2<T>& A, T beta, const lr2<T>& B, lr2<T>& out,
             IP inner_product_X,
             IP inner_product_V,
-            const blas_ops& blas);
+            const Ensign::Matrix::blas_ops& blas);
 
 /*  Add three low-rank representations together.
 *
@@ -73,7 +73,7 @@ void lr_add(T alpha, const lr2<T>& A, T beta, const lr2<T>& B,
             T gamma, const lr2<T>& C, lr2<T>& out,
             IP inner_product_X,
             IP inner_product_V,
-            const blas_ops& blas);
+            const Ensign::Matrix::blas_ops& blas);
 
 
 /* Multiplies two low-rank representations together.
@@ -84,14 +84,14 @@ template<class T, class IP>
 void lr_mul(const lr2<T>& A, const lr2<T>& B, lr2<T>& out,
             IP inner_product_X,
             IP inner_product_V,
-            const blas_ops& blas);
+            const Ensign::Matrix::blas_ops& blas);
 
 /*  Truncate a low-rank representation inplace to a fixed rank r.
 *
 *   The rank is determined by the size of out.
 */
 template<class T>
-void lr_truncate(const lr2<T>& in, lr2<T>& out, const blas_ops& blas);
+void lr_truncate(const lr2<T>& in, lr2<T>& out, const Ensign::Matrix::blas_ops& blas);
 
 
 /* Computes the inner product of two low-rank representations.
@@ -99,7 +99,7 @@ void lr_truncate(const lr2<T>& in, lr2<T>& out, const blas_ops& blas);
 *  Computes the inner product of two low-rank representations.
 */
 template<class T>
-double lr_inner_product(const lr2<T>& A, const lr2<T>&B, T w, const blas_ops& blas);
+double lr_inner_product(const lr2<T>& A, const lr2<T>&B, T w, const Ensign::Matrix::blas_ops& blas);
 
 
 /* Computes the norm of a low-rank representations.
@@ -109,7 +109,7 @@ double lr_inner_product(const lr2<T>& A, const lr2<T>&B, T w, const blas_ops& bl
 *  \sum_{ij} S_{ij}^2
 */
 template<class T>
-double lr_norm_sq(const lr2<T>& A, const blas_ops& blas);
+double lr_norm_sq(const lr2<T>& A, const Ensign::Matrix::blas_ops& blas);
 
 
 
@@ -125,7 +125,7 @@ template<class T, class IP>
 void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V,
                 IP inner_product_X,
                 IP inner_product_V,
-                const blas_ops& blas);
+                const Ensign::Matrix::blas_ops& blas);
 
 
 /* Return an inner product function object for use in, e.g., in gram_schmidt.
@@ -148,14 +148,14 @@ std::function<T(T*,T*)> inner_product_from_weight(const T* w, Index N);
 /*
 struct gram_schmidt {
 
-  gram_schmidt(const blas_ops* _blas);
+  gram_schmidt(const Ensign::Matrix::blas_ops* _blas);
   ~gram_schmidt();
 
   void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product);
   void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, double w);
   
 private:
-  const blas_ops* blas;
+  const Ensign::Matrix::blas_ops* blas;
   #ifdef __CUDACC__
   curandGenerator_t gen;
   #endif
@@ -164,7 +164,7 @@ private:
 
 struct orthogonalize {
 
-  orthogonalize(const blas_ops* _blas);
+  orthogonalize(const Ensign::Matrix::blas_ops* _blas);
   ~orthogonalize();
 
   void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product);
@@ -173,7 +173,7 @@ struct orthogonalize {
 
   
 private:
-  const blas_ops* blas;
+  const Ensign::Matrix::blas_ops* blas;
   #ifdef __CUDACC__
   curandGenerator_t gen;
   #endif

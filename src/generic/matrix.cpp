@@ -3,6 +3,8 @@
 
 namespace Ensign{
 
+namespace Matrix{
+
 #ifndef __MKL__
 extern "C" {
   extern void dgees_(char*,char*,void*,int*,double*,int*, int*, double*, double*, double*, int*, double*, int*, bool*,int*);
@@ -742,5 +744,7 @@ void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_arr
   // lapack actually computes V^T and not V
   transpose_inplace(V);
 }
+
+} // namespace Matrix
 
 } // namespace Ensign

@@ -344,7 +344,7 @@ void orthogonalize_householder_constw_gpu(multi_array<double,2>& Q, multi_array<
 #endif
 
 
-orthogonalize::orthogonalize(const blas_ops* _blas) {
+orthogonalize::orthogonalize(const Ensign::Matrix::blas_ops* _blas) {
   blas = _blas;
 
   #ifdef __CUDACC__
@@ -424,7 +424,7 @@ void gram_schmidt(multi_array<float,2>& Q, multi_array<float,2>& R, std::functio
 
 
 template<class T, class IP>
-void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, IP inner_product_X, IP inner_product_V, const blas_ops& blas) {
+void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, IP inner_product_X, IP inner_product_V, const Ensign::Matrix::blas_ops& blas) {
 
   int n_b = X.size();
   Index r = lr.rank();
@@ -484,10 +484,10 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, IP inner_pro
   blas.matmul_transb(X_R, V_R, lr.S);
 
 };
-template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const blas_ops& blas);
-template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, double inner_product_X, double inner_product_V, const blas_ops& blas);
-template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, double* inner_product_X, double* inner_product_V, const blas_ops& blas);
-//template void initialize(lr2<float>& lr, vector<const float*> X, vector<const float*> V, std::function<float(float*,float*)> inner_product_X, std::function<float(float*,float*)> inner_product_V, const blas_ops& blas);
+template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const Ensign::Matrix::blas_ops& blas);
+template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, double inner_product_X, double inner_product_V, const Ensign::Matrix::blas_ops& blas);
+template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, double* inner_product_X, double* inner_product_V, const Ensign::Matrix::blas_ops& blas);
+//template void initialize(lr2<float>& lr, vector<const float*> X, vector<const float*> V, std::function<float(float*,float*)> inner_product_X, std::function<float(float*,float*)> inner_product_V, const Ensign::Matrix::blas_ops& blas);
 
 
 
@@ -496,7 +496,7 @@ template<class T, class IP>
 void lr_add(vector<const lr2<T>*> A, const vector<T>& alpha, lr2<T>& out,
             IP inner_product_X,
             IP inner_product_V,
-            const blas_ops& blas) {
+            const Ensign::Matrix::blas_ops& blas) {
 
   // check dimensions
   Index total_r=0;
@@ -571,14 +571,14 @@ template<class T, class IP>
 void lr_add(T alpha, const lr2<T>& A, T beta, const lr2<T>& B, lr2<T>& out,
             IP inner_product_X,
             IP inner_product_V,
-            const blas_ops& blas) {
+            const Ensign::Matrix::blas_ops& blas) {
 
   lr_add({&A, &B}, {alpha, beta}, out, inner_product_X, inner_product_V, blas);
 }
 
-template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, lr2<double>& out, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const blas_ops& blas);
-template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, lr2<double>& out, double inner_product_X, double inner_product_V, const blas_ops& blas);
-template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, lr2<double>& out, double* inner_product_X, double* inner_product_V, const blas_ops& blas);
+template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, lr2<double>& out, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const Ensign::Matrix::blas_ops& blas);
+template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, lr2<double>& out, double inner_product_X, double inner_product_V, const Ensign::Matrix::blas_ops& blas);
+template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, lr2<double>& out, double* inner_product_X, double* inner_product_V, const Ensign::Matrix::blas_ops& blas);
 
 
 template<class T, class IP>
@@ -586,22 +586,22 @@ void lr_add(T alpha, const lr2<T>& A, T beta, const lr2<T>& B,
             T gamma, const lr2<T>& C, lr2<T>& out,
             IP inner_product_X,
             IP inner_product_V,
-            const blas_ops& blas) {
+            const Ensign::Matrix::blas_ops& blas) {
 
   lr_add({&A, &B, &C}, {alpha, beta, gamma}, out, inner_product_X, inner_product_V, blas);
 }
 
   
-template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, double gamma, const lr2<double>& C, lr2<double>& out, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const blas_ops& blas);
-template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, double gamma, const lr2<double>& C, lr2<double>& out, double inner_product_X, double inner_product_V, const blas_ops& blas);
-template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, double gamma, const lr2<double>& C, lr2<double>& out, double* inner_product_X, double* inner_product_V, const blas_ops& blas);
+template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, double gamma, const lr2<double>& C, lr2<double>& out, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const Ensign::Matrix::blas_ops& blas);
+template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, double gamma, const lr2<double>& C, lr2<double>& out, double inner_product_X, double inner_product_V, const Ensign::Matrix::blas_ops& blas);
+template void lr_add(double alpha, const lr2<double>& A, double beta, const lr2<double>& B, double gamma, const lr2<double>& C, lr2<double>& out, double* inner_product_X, double* inner_product_V, const Ensign::Matrix::blas_ops& blas);
 
 
 template<class T, class IP>
 void lr_mul(const lr2<T>& A, const lr2<T>& B, lr2<T>& out,
             IP inner_product_X,
             IP inner_product_V,
-            const blas_ops& blas) {
+            const Ensign::Matrix::blas_ops& blas) {
 
   // check dimensions
   if(A.size_X() != out.size_X()) {
@@ -653,13 +653,13 @@ void lr_mul(const lr2<T>& A, const lr2<T>& B, lr2<T>& out,
   blas.matmul_transb(tmp, R_V, out.S);
 }
 
-template void lr_mul(const lr2<double>& A, const lr2<double>& B, lr2<double>& out, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const blas_ops& blas);
-template void lr_mul(const lr2<double>& A, const lr2<double>& B, lr2<double>& out, double inner_product_X, double inner_product_V, const blas_ops& blas);
-template void lr_mul(const lr2<double>& A, const lr2<double>& B, lr2<double>& out, double* inner_product_X, double* inner_product_V, const blas_ops& blas);
+template void lr_mul(const lr2<double>& A, const lr2<double>& B, lr2<double>& out, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const Ensign::Matrix::blas_ops& blas);
+template void lr_mul(const lr2<double>& A, const lr2<double>& B, lr2<double>& out, double inner_product_X, double inner_product_V, const Ensign::Matrix::blas_ops& blas);
+template void lr_mul(const lr2<double>& A, const lr2<double>& B, lr2<double>& out, double* inner_product_X, double* inner_product_V, const Ensign::Matrix::blas_ops& blas);
 
 
 template<class T>
-void lr_truncate(const lr2<T>& in, lr2<T>& out, const blas_ops& blas) {
+void lr_truncate(const lr2<T>& in, lr2<T>& out, const Ensign::Matrix::blas_ops& blas) {
   if(out.rank() > in.rank()) {
     cout << "ERROR in lr_truncate: rank of output is larger than rank of input." << endl;
     exit(1);
@@ -682,11 +682,11 @@ void lr_truncate(const lr2<T>& in, lr2<T>& out, const blas_ops& blas) {
 
 }
 
-template void lr_truncate(const lr2<double>& in, lr2<double>& out, const blas_ops& blas);
+template void lr_truncate(const lr2<double>& in, lr2<double>& out, const Ensign::Matrix::blas_ops& blas);
 
 
 template<class T>
-double lr_inner_product(const lr2<T>& A, const lr2<T>&B, T w, const blas_ops& blas) {
+double lr_inner_product(const lr2<T>& A, const lr2<T>&B, T w, const Ensign::Matrix::blas_ops& blas) {
   multi_array<double,2> XtX({A.rank(), B.rank()});
   blas.matmul_transa(A.X, B.X, XtX);
   
@@ -704,11 +704,11 @@ double lr_inner_product(const lr2<T>& A, const lr2<T>&B, T w, const blas_ops& bl
   return ip;
 }
 
-template double lr_inner_product(const lr2<double>& A, const lr2<double>&B, double w, const blas_ops& blas);
+template double lr_inner_product(const lr2<double>& A, const lr2<double>&B, double w, const Ensign::Matrix::blas_ops& blas);
 
 
 template<class T>
-double lr_norm_sq(const lr2<T>& A, const blas_ops& blas) {
+double lr_norm_sq(const lr2<T>& A, const Ensign::Matrix::blas_ops& blas) {
   double norm_sq = 0.0;
   for(Index j=0;j<A.rank();j++)
     for(Index i=0;i<A.rank();i++)
@@ -716,6 +716,6 @@ double lr_norm_sq(const lr2<T>& A, const blas_ops& blas) {
   return norm_sq;
 }
 
-template double lr_norm_sq(const lr2<double>& A, const blas_ops& blas);
+template double lr_norm_sq(const lr2<double>& A, const Ensign::Matrix::blas_ops& blas);
 
 } // namespace Ensign

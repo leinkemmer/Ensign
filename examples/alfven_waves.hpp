@@ -10,6 +10,7 @@
 #include <eigen3/Eigen/SVD>
 
 using namespace Ensign;
+using namespace Ensign::Matrix;
 
 template<size_t d> using mind = array<Index,d>;
 template<size_t d> using mfp  = array<double,d>;

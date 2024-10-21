@@ -5,6 +5,7 @@
 #include <generic/matrix.hpp>
 
 using namespace Ensign;
+using namespace Ensign::Matrix;
 
 blas_ops blas;
 

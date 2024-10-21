@@ -9,6 +9,7 @@
 #include <cxxopts.hpp>
 
 using namespace Ensign;
+using namespace Ensign::Matrix;
 
 bool CPU;
 
