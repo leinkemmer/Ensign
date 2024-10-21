@@ -54,6 +54,18 @@ endif()
 add_test(NAME lr COMMAND lr)
 
 #
+# index test
+#
+add_executable(index index.cpp)
+add_test(NAME index COMMAND index)
+
+#
+# tensor test
+#
+add_executable(tensor tensor.cpp ../src/lr/lr.cpp ../src/generic/matrix.cpp ../src/generic/tensor.cpp)
+add_test(NAME tensor COMMAND tensor)
+
+#
 # Add common libraries to all tests
 #
 target_link_libraries(matrix ${FFTW_LIBRARIES})
@@ -64,8 +76,10 @@ if(${MKL_ENABLED})
   target_link_libraries(matrix       ${MKL_LIBRARIES})
   target_link_libraries(coefficients ${MKL_LIBRARIES})
   target_link_libraries(lr           ${MKL_LIBRARIES})
+  target_link_libraries(tensor       ${MKL_LIBRARIES})
 else()
   target_link_libraries(matrix       ${OPENBLAS_LIBRARIES} Threads::Threads "-lgfortran")
   target_link_libraries(coefficients ${OPENBLAS_LIBRARIES} Threads::Threads "-lgfortran")
   target_link_libraries(lr           ${OPENBLAS_LIBRARIES} Threads::Threads "-lgfortran")
+  target_link_libraries(tensor       ${OPENBLAS_LIBRARIES} Threads::Threads "-lgfortran")
 endif()
