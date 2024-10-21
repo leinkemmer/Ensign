@@ -80,7 +80,7 @@ template <class T> struct internal_node : virtual node<T> {
 
     void Write(int ncid, int id_r_in, std::array<int, 2> id_r_out) const;
 
-    Ensign::multi_array<T, 2> ortho(const T weight,
+    Ensign::multi_array<T, 2> orthogonalize(const T weight,
                                             const Ensign::Matrix::blas_ops& blas);
 };
 
@@ -104,29 +104,29 @@ template <class T> struct external_node : virtual node<T> {
 
     void Write(int ncid, int id_r_in, int id_dx) const;
 
-    Ensign::multi_array<T, 2> ortho(const T weight,
+    Ensign::multi_array<T, 2> orthogonalize(const T weight,
                                             const Ensign::Matrix::blas_ops& blas);
 };
 
 template <class T>
-Ensign::multi_array<T, 2> internal_node<T>::ortho(const T weight,
+Ensign::multi_array<T, 2> internal_node<T>::orthogonalize(const T weight,
                                                           const Ensign::Matrix::blas_ops& blas)
 {
     Ensign::multi_array<T, 2> Qmat({Ensign::prod(RankOut()), node<T>::RankIn()});
     Ensign::multi_array<T, 2> Q_R({node<T>::RankIn(), node<T>::RankIn()});
     Ensign::Tensor::matricize<2>(Q, Qmat);
-    Q_R = Tensor::ortho(Qmat, node<T>::n_basisfunctions, weight, blas);
+    Q_R = Tensor::orthogonalize(Qmat, node<T>::n_basisfunctions, weight, blas);
     Ensign::Tensor::tensorize<2>(Qmat, Q);
 
     return Q_R;
 };
 
 template <class T>
-Ensign::multi_array<T, 2> external_node<T>::ortho(const T weight,
+Ensign::multi_array<T, 2> external_node<T>::orthogonalize(const T weight,
                                                           const Ensign::Matrix::blas_ops& blas)
 {
     Ensign::multi_array<T, 2> X_R({node<T>::RankIn(), node<T>::RankIn()});
-    X_R = Tensor::ortho(X, node<T>::n_basisfunctions, weight, blas);
+    X_R = Tensor::orthogonalize(X, node<T>::n_basisfunctions, weight, blas);
 
     return X_R;
 };

@@ -77,7 +77,7 @@ void tensorize<2, 3, double>(const multi_array<double, 2>& input,
                              multi_array<double, 3>& output);
 
 template <class T>
-multi_array<T, 2> ortho(multi_array<T, 2>& input,
+multi_array<T, 2> orthogonalize(multi_array<T, 2>& input,
                                         const Index n_basisfunctions, const T weight,
                                         const Ensign::Matrix::blas_ops& blas)
 {
@@ -100,7 +100,7 @@ multi_array<T, 2> ortho(multi_array<T, 2>& input,
 
     multi_array<T, 2> R({cols, cols});
 
-    orthogonalize gs(&blas);
+    Ensign::orthogonalize gs(&blas);
     gs(input, R, weight);
 
     for (Index j = n_basisfunctions; j < cols; ++j) {
