@@ -7,6 +7,7 @@
 #include <generic/storage.hpp>
 #include <generic/timer.hpp>
 #include <generic/netcdf.hpp>
+#include <generic/tensor.hpp>
 #include <lr/coefficients.hpp>
 #include <lr/lr.hpp>
 

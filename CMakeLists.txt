@@ -130,6 +130,7 @@ add_library(Ensign
     src/generic/timer.cpp
     src/generic/utility.cpp
     src/generic/tree.cpp
+    src/generic/tensor.cpp
     src/lr/coefficients.cpp
     src/lr/lr.cpp
 )
