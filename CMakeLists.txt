@@ -76,9 +76,10 @@ include_directories("${PROJECT_BINARY_DIR}/extern/cxxopts/src/cxxopts/include")
 
 # BLAS and LAPACK
 option("MKL_ENABLED" OFF)
-message("$ENV{MKLROOT}")
 set(MKL_INCLUDEDIR "$ENV{MKLROOT}/include" CACHE PATH "Intel MKL include directory")
 set(MKL_LIBDIR "$ENV{MKLROOT}/lib/intel64" CACHE PATH "Intel MKL lib directory")
+set(MKL_INCLUDEDIR "$ENV{MKLINCLUDEDIR}")
+set(MKL_LIBDIR "$ENV{MKLLIBDIR}")
 if(${MKL_ENABLED})
   set(MKL_DEFINES    "-D__MKL__" "-DMKL_ILP64" "-m64")
   set(MKL_LIBRARIES  "-L{MKL_LIBDIR} -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_gnu_thread -lmkl_core -lgomp -lpthread -lm -ldl")
