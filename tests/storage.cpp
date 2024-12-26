@@ -1,5 +1,5 @@
 #define CATCH_CONFIG_MAIN
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 
 #include <generic/storage.hpp>
 
@@ -43,7 +43,7 @@ TEST_CASE( "multi_array basic operations", "[multi_array]" ) {
 
     SECTION("accessing elements") {
         a(1,2) = 3.5;
-        REQUIRE( a(1,2) == Approx(3.5) );
+        REQUIRE( a(1,2) == Catch::Approx(3.5) );
     }
 
     # ifdef __CUDACC__
@@ -60,8 +60,8 @@ TEST_CASE( "multi_array basic operations", "[multi_array]" ) {
 
         a_cpu1 = a_gpu;
 
-        REQUIRE( a_cpu1(0,0) == Approx(2.2) );
-        REQUIRE( a_cpu1(0,1) == Approx(1.5) );
+        REQUIRE( a_cpu1(0,0) == Catch::Approx(2.2) );
+        REQUIRE( a_cpu1(0,1) == Catch::Approx(1.5) );
         REQUIRE( bool(a_cpu1 == a_cpu2));
     }
 

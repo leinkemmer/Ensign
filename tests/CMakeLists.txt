@@ -7,7 +7,7 @@ if(${CUDA_ENABLED})
 else()
     add_executable(storage storage.cpp)
 endif()
-target_link_libraries(storage Ensign::Ensign Catch2::Catch2)
+target_link_libraries(storage Ensign::Ensign Catch2::Catch2WithMain)
 add_test(NAME storage COMMAND storage)
 
 #
@@ -21,7 +21,7 @@ if(${CUDA_ENABLED})
 else()
     add_executable(matrix matrix.cpp)
 endif()
-target_link_libraries(matrix Ensign::Ensign Catch2::Catch2)
+target_link_libraries(matrix Ensign::Ensign Catch2::Catch2WithMain)
 add_test(NAME matrix COMMAND matrix)
 
 #
@@ -35,7 +35,7 @@ if(${CUDA_ENABLED})
 else()
     add_executable(coefficients coefficients.cpp)
 endif()
-target_link_libraries(coefficients Ensign::Ensign Catch2::Catch2)
+target_link_libraries(coefficients Ensign::Ensign Catch2::Catch2WithMain)
 add_test(NAME coefficients COMMAND coefficients)
 
 #
@@ -50,19 +50,19 @@ if(${CUDA_ENABLED})
 else()
     add_executable(lr lr.cpp)
 endif()
-target_link_libraries(lr Ensign::Ensign Catch2::Catch2)
+target_link_libraries(lr Ensign::Ensign Catch2::Catch2WithMain)
 add_test(NAME lr COMMAND lr)
 
 #
 # index test
 #
 add_executable(index index.cpp)
-target_link_libraries(index Ensign::Ensign Catch2::Catch2)
+target_link_libraries(index Ensign::Ensign Catch2::Catch2WithMain)
 add_test(NAME index COMMAND index)
 
 #
 # tensor test
 #
 add_executable(tensor tensor.cpp)
-target_link_libraries(tensor Ensign::Ensign Catch2::Catch2)
+target_link_libraries(tensor Ensign::Ensign Catch2::Catch2WithMain)
 add_test(NAME tensor COMMAND tensor)

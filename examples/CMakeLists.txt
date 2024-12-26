@@ -45,7 +45,7 @@ add_executable(alfven_waves alfven_waves.cpp)
 target_link_libraries(alfven_waves Ensign::Ensign cxxopts::cxxopts)
 
 add_executable(alfven_waves_test alfven_waves_test.cpp)
-target_link_libraries(alfven_waves_test Ensign::Ensign Catch2::Catch2)
+target_link_libraries(alfven_waves_test Ensign::Ensign Catch2::Catch2WithMain)
 
 add_test(NAME alfven_waves COMMAND alfven_waves_test)
 

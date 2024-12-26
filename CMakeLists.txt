@@ -102,7 +102,7 @@ find_package(Catch2 QUIET)
 if(NOT catch2_FOUND)
   FetchContent_Declare(Catch2
     GIT_REPOSITORY "https://github.com/catchorg/Catch2"
-    GIT_TAG "v2.13.10"
+    GIT_TAG "v3.7.1"
     GIT_SHALLOW ON
     GIT_PROGRESS ON
     OVERRIDE_FIND_PACKAGE
