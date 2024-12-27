@@ -18,9 +18,6 @@ if(NOT CMAKE_BUILD_TYPE)
     )
 endif(NOT CMAKE_BUILD_TYPE)
 
-# NOTE: this sets the compile options of all targets (i.e., Ensign library, examples and tests)
-add_compile_options(-Wall -Wno-maybe-uninitialized)
-
 
 ################################################################################
 # Configuration options
@@ -69,12 +66,6 @@ endif()
 ################################################################################
 
 set_directory_properties(PROPERTIES EP_BASE ${FETCHCONTENT_BASE_DIR})
-
-# Retrieve a copy of the `COMPILE_OPTIONS` of the current directory
-get_directory_property(old_dir_compile_options COMPILE_OPTIONS)
-
-# Disable warnings for external libraries
-add_compile_options(-w)
 
 
 ################################################################################
@@ -155,11 +146,13 @@ endif()
 # Ensign library
 ################################################################################
 
-# Restore the old `COMPILE_OPTIONS` of the current directory
-set_directory_properties(PROPERTIES COMPILE_OPTIONS "${old_dir_compile_options}")
-
-add_subdirectory(tests)
-add_subdirectory(examples)
+# If Ensign is being bundled, disable tests and examples in that case
+if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+  if (BUILD_TESTING)
+    add_subdirectory(tests)
+  endif()
+  add_subdirectory(examples)
+endif()
 
 add_library(Ensign
   STATIC
@@ -183,7 +176,8 @@ target_include_directories(Ensign
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-target_compile_definitions(Ensign PUBLIC ${OPENMP_DEFINES})
+target_compile_definitions(Ensign PRIVATE ${OPENMP_DEFINES})
+target_compile_options(Ensign PRIVATE -Wall -Wno-maybe-uninitialized)
 
 
 ################################################################################

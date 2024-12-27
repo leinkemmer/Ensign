@@ -17,6 +17,8 @@ endif()
 
 ################################################################################
 
+add_compile_options(-Wall -Wno-maybe-uninitialized)
+
 #
 # storage test
 #
