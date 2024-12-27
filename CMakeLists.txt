@@ -18,6 +18,7 @@ if(NOT CMAKE_BUILD_TYPE)
     )
 endif(NOT CMAKE_BUILD_TYPE)
 
+# NOTE: this sets the compile options of all targets (i.e., Ensign library, examples and tests)
 add_compile_options(-Wall -Wno-maybe-uninitialized)
 
 
@@ -96,40 +97,6 @@ find_package(Threads REQUIRED)
 
 
 ################################################################################
-# catch2
-
-find_package(Catch2 QUIET)
-if(NOT catch2_FOUND)
-  FetchContent_Declare(Catch2
-    GIT_REPOSITORY "https://github.com/catchorg/Catch2"
-    GIT_TAG "v3.7.1"
-    GIT_SHALLOW ON
-    GIT_PROGRESS ON
-    OVERRIDE_FIND_PACKAGE
-  )
-  FetchContent_MakeAvailable(Catch2)
-  find_package(Catch2 REQUIRED)
-endif()
-
-
-################################################################################
-# cxxopts
-
-find_package(cxxopts QUIET)
-if(NOT cxxopts_FOUND)
-  FetchContent_Declare(cxxopts
-    GIT_REPOSITORY "https://github.com/jarro2783/cxxopts.git"
-    GIT_TAG "v3.2.1"
-    GIT_SHALLOW ON
-    GIT_PROGRESS ON
-    OVERRIDE_FIND_PACKAGE
-  )
-  FetchContent_MakeAvailable(cxxopts)
-  find_package(cxxopts REQUIRED)
-endif()
-
-
-################################################################################
 # fftw3
 
 find_package(FFTW3 QUIET)
@@ -146,14 +113,6 @@ if(NOT fftw3_FOUND)
     INSTALL_COMMAND ""
     UPDATE_COMMAND ""
   )
-  ExternalProject_Get_Property(fftw3 SOURCE_DIR)
-  ExternalProject_Get_Property(fftw3 BINARY_DIR)
-  set(fftw3_HDR_DIR ${SOURCE_DIR}/api)
-  if(${OPENMP})
-    set(fftw3_LIBRARIES "${BINARY_DIR}/libfftw3.a" "${BINARY_DIR}/libfftw3_omp.a")
-  else()
-    set(fftw3_LIBRARIES "${BINARY_DIR}/libfftw3.a")
-  endif()
 endif()
 
 
@@ -188,11 +147,6 @@ else()
       INSTALL_COMMAND ""
       UPDATE_COMMAND ""
     )
-    ExternalProject_Get_Property(openblas SOURCE_DIR)
-    ExternalProject_Get_Property(openblas BINARY_DIR)
-    set(openblas_HDR_DIRS ${SOURCE_DIR};${BINARY_DIR})
-    set(openblas_LIB_DIRS ${BINARY_DIR}/lib)
-    set(openblas_LIBRARY ${BINARY_DIR}/lib/libopenblas.a)
   endif()
 endif()
 
@@ -235,7 +189,6 @@ target_compile_definitions(Ensign PUBLIC ${OPENMP_DEFINES})
 ################################################################################
 # Link and include directories for external libraries
 
-# BLAS and LAPACK
 if (${MKL_ENABLED})
   if(mkl_FOUND)
     target_link_libraries(Ensign PUBLIC MKL::MKL)
@@ -247,36 +200,12 @@ if (${MKL_ENABLED})
     )
   endif()
 else()
-  if(openblas_FOUND)
-    target_link_libraries(Ensign PUBLIC OpenBLAS::OpenBLAS)
-  else()
-    target_include_directories(Ensign
-      PUBLIC 
-      "$<BUILD_INTERFACE:${openblas_HDR_DIRS}>"
-    )
-    target_link_directories(Ensign
-      PUBLIC
-      "$<BUILD_INTERFACE:${openblas_LIB_DIRS}>"
-    )
-    target_link_libraries(Ensign PUBLIC ${openblas_LIBRARY})
-  endif()
+  target_link_libraries(Ensign PUBLIC OpenBLAS::OpenBLAS)
 endif()
 
-# NetCDF
 target_link_libraries(Ensign PRIVATE ${NETCDF_LIBRARIES})
-
-# Threads
 target_link_libraries(Ensign PRIVATE Threads::Threads)
-
-# fftw3
-if(fftw3_FOUND)
-  target_link_libraries(Ensign PRIVATE FFTW3:fftw3)
-else()
-  target_include_directories(Ensign PRIVATE ${fftw3_HDR_DIR})
-  target_link_libraries(Ensign PRIVATE ${fftw3_LIBRARIES})
-endif()
-
-# gfortran
+target_link_libraries(Ensign PUBLIC FFTW3::fftw3)
 target_link_options(Ensign PUBLIC -lgfortran)
 
 
