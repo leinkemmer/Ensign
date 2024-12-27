@@ -1,3 +1,22 @@
+################################################################################
+# catch2
+
+find_package(Catch2 QUIET)
+if(NOT catch2_FOUND)
+  FetchContent_Declare(Catch2
+    GIT_REPOSITORY "https://github.com/catchorg/Catch2"
+    GIT_TAG "v3.7.1"
+    GIT_SHALLOW ON
+    GIT_PROGRESS ON
+    OVERRIDE_FIND_PACKAGE
+  )
+  FetchContent_MakeAvailable(Catch2)
+  find_package(Catch2 REQUIRED)
+endif()
+
+
+################################################################################
+
 #
 # storage test
 #
@@ -66,3 +85,10 @@ add_test(NAME index COMMAND index)
 add_executable(tensor tensor.cpp)
 target_link_libraries(tensor Ensign::Ensign Catch2::Catch2WithMain)
 add_test(NAME tensor COMMAND tensor)
+
+#
+# Alfven waves test
+#
+add_executable(alfven_waves_test alfven_waves.cpp)
+target_link_libraries(alfven_waves_test Ensign::Ensign Catch2::Catch2WithMain)
+add_test(NAME alfven_waves COMMAND alfven_waves_test)

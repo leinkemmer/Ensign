@@ -1,3 +1,23 @@
+################################################################################
+# cxxopts
+
+find_package(cxxopts QUIET)
+if(NOT cxxopts_FOUND)
+  FetchContent_Declare(cxxopts
+    GIT_REPOSITORY "https://github.com/jarro2783/cxxopts.git"
+    GIT_TAG "v3.2.1"
+    GIT_SHALLOW ON
+    GIT_PROGRESS ON
+    OVERRIDE_FIND_PACKAGE
+  )
+  FetchContent_MakeAvailable(cxxopts)
+  find_package(cxxopts REQUIRED)
+endif()
+
+
+################################################################################
+# Set up examples
+
 set(LR_SOURCES_GPU ../src/lr/lr.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/timer.cu ../src/generic/fft.cu ../src/generic/kernels.cu ../src/generic/netcdf.cpp)
 
 if(${CUDA_ENABLED})
@@ -43,9 +63,3 @@ target_link_libraries(vlasov_poisson Ensign::Ensign cxxopts::cxxopts)
 
 add_executable(alfven_waves alfven_waves.cpp)
 target_link_libraries(alfven_waves Ensign::Ensign cxxopts::cxxopts)
-
-add_executable(alfven_waves_test alfven_waves_test.cpp)
-target_link_libraries(alfven_waves_test Ensign::Ensign Catch2::Catch2WithMain)
-
-add_test(NAME alfven_waves COMMAND alfven_waves_test)
-
