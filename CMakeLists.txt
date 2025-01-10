@@ -225,7 +225,7 @@ else()
       PUBLIC
       "$<BUILD_INTERFACE:${openblas_LIB_DIRS}>"
     )
-    target_link_libraries(Ensign PUBLIC OpenBLAS)
+    target_link_libraries(Ensign PUBLIC ${openblas_LIBRARY})
   endif()
 endif()
 
@@ -247,7 +247,7 @@ else()
   target_link_libraries(Ensign PUBLIC ${fftw3_LIBRARIES})
 endif()
 
-target_link_options(Ensign PUBLIC -lgfortran)
+target_link_libraries(Ensign PUBLIC "-lgfortran")
 
 
 ################################################################################
