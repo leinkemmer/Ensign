@@ -15,7 +15,7 @@ if(NOT CMAKE_BUILD_TYPE)
     "Release" CACHE STRING 
     "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel."
     FORCE
-    )
+  )
 endif(NOT CMAKE_BUILD_TYPE)
 
 
@@ -69,13 +69,16 @@ set_directory_properties(PROPERTIES EP_BASE ${FETCHCONTENT_BASE_DIR})
 
 
 ################################################################################
+# Eigen
+
+find_package(Eigen3 3.4 REQUIRED NO_MODULE)
+
+
+################################################################################
 # NetCDF
 
-find_package(NetCDF)
-if(${NETCDF_FOUND})
-  include_directories(${NETCDF_INCLUDE_DIR})
-  add_definitions("-D__NETCDF__")
-else()
+find_package(NetCDF QUIET)
+if(NOT ${NETCDF_FOUND})
   message("NetCDF has _not_ been found. If you want to write snapshots to disk please set the path in CMake appropriately.")
   set(NETCDF_LIBRARIES "")
 endif()
@@ -91,8 +94,9 @@ find_package(Threads REQUIRED)
 # fftw3
 
 find_package(FFTW3 QUIET)
+
 if(NOT fftw3_FOUND)
-  ExternalProject_Add(fftw3
+  ExternalProject_Add(fftw
     URL "http://fftw.org/fftw-3.3.10.tar.gz"
     URL_HASH MD5=8ccbf6a5ea78a16dbc3e1306e234cc5c
     CMAKE_ARGS
@@ -104,6 +108,14 @@ if(NOT fftw3_FOUND)
     INSTALL_COMMAND ""
     UPDATE_COMMAND ""
   )
+  ExternalProject_Get_Property(fftw SOURCE_DIR)
+  ExternalProject_Get_Property(fftw BINARY_DIR)
+  set(fftw3_HDR_DIR ${SOURCE_DIR}/api)
+  if(${OPENMP})
+    set(fftw3_LIBRARIES "${BINARY_DIR}/libfftw3.a" "${BINARY_DIR}/libfftw3_omp.a")
+  else()
+    set(fftw3_LIBRARIES "${BINARY_DIR}/libfftw3.a")
+  endif()
 endif()
 
 
@@ -138,6 +150,11 @@ else()
       INSTALL_COMMAND ""
       UPDATE_COMMAND ""
     )
+    ExternalProject_Get_Property(openblas SOURCE_DIR)
+    ExternalProject_Get_Property(openblas BINARY_DIR)
+    set(openblas_HDR_DIRS ${SOURCE_DIR};${BINARY_DIR})
+    set(openblas_LIB_DIRS ${BINARY_DIR}/lib)
+    set(openblas_LIBRARY ${BINARY_DIR}/lib/libopenblas.a)
   endif()
 endif()
 
@@ -146,9 +163,9 @@ endif()
 # Ensign library
 ################################################################################
 
-# If Ensign is being bundled, disable tests and examples in that case
-if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
-  if (BUILD_TESTING)
+# If Ensign is being bundled, disable tests and examples
+if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+  if(BUILD_TESTING)
     add_subdirectory(tests)
   endif()
   add_subdirectory(examples)
@@ -168,6 +185,7 @@ add_library(Ensign
 )
 
 add_library(Ensign::Ensign ALIAS Ensign)
+add_dependencies(Ensign openblas fftw)
 
 # Include directories for the library
 target_include_directories(Ensign
@@ -183,7 +201,9 @@ target_compile_options(Ensign PRIVATE -Wall -Wno-maybe-uninitialized)
 ################################################################################
 # Link and include directories for external libraries
 
-if (${MKL_ENABLED})
+target_link_libraries(Ensign PUBLIC Eigen3::Eigen)
+
+if(${MKL_ENABLED})
   if(mkl_FOUND)
     target_link_libraries(Ensign PUBLIC MKL::MKL)
   else()
@@ -194,12 +214,39 @@ if (${MKL_ENABLED})
     )
   endif()
 else()
-  target_link_libraries(Ensign PUBLIC OpenBLAS::OpenBLAS)
+  if(openblas_FOUND)
+    target_link_libraries(Ensign PUBLIC OpenBLAS::OpenBLAS)
+  else()
+    target_include_directories(Ensign
+      PUBLIC 
+      "$<BUILD_INTERFACE:${openblas_HDR_DIRS}>"
+    )
+    target_link_directories(Ensign
+      PUBLIC
+      "$<BUILD_INTERFACE:${openblas_LIB_DIRS}>"
+    )
+    target_link_libraries(Ensign PUBLIC OpenBLAS)
+  endif()
 endif()
 
-target_link_libraries(Ensign PRIVATE ${NETCDF_LIBRARIES})
+if(${NETCDF_FOUND})
+  target_link_libraries(Ensign PRIVATE ${NETCDF_LIBRARIES})
+  target_include_directories(Ensign PRIVATE ${NETCDF_INCLUDE_DIR})
+  target_compile_definitions(Ensign PRIVATE "__NETCDF__")
+endif()
+
 target_link_libraries(Ensign PRIVATE Threads::Threads)
-target_link_libraries(Ensign PUBLIC FFTW3::fftw3)
+
+if(fftw3_FOUND)
+  target_link_libraries(Ensign PUBLIC FFTW3::fftw3)
+else()
+  target_include_directories(Ensign
+    PUBLIC
+    "$<BUILD_INTERFACE:${fftw3_HDR_DIR}>"
+  )
+  target_link_libraries(Ensign PUBLIC ${fftw3_LIBRARIES})
+endif()
+
 target_link_options(Ensign PUBLIC -lgfortran)
 
 

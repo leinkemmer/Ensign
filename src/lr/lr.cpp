@@ -5,7 +5,7 @@
 #include <lr/coefficients.hpp>
 
 #include <cstring>
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 
 #ifdef __CUDACC__
 #include <curand.h>

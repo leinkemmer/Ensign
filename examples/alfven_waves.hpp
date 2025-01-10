@@ -6,8 +6,8 @@
 #include <generic/fft.hpp>
 #include <iomanip>
 
-#include <eigen3/Eigen/Core>
-#include <eigen3/Eigen/SVD>
+#include <Eigen/Core>
+#include <Eigen/SVD>
 
 using namespace Ensign;
 using namespace Ensign::Matrix;

@@ -8,10 +8,8 @@ if(NOT cxxopts_FOUND)
     GIT_TAG "v3.2.1"
     GIT_SHALLOW ON
     GIT_PROGRESS ON
-    OVERRIDE_FIND_PACKAGE
   )
   FetchContent_MakeAvailable(cxxopts)
-  find_package(cxxopts REQUIRED)
 endif()
 
 
@@ -50,7 +48,7 @@ endif()
 
 target_link_libraries(linear_landau    Ensign::Ensign)
 target_link_libraries(linear_landau_2d Ensign::Ensign)
-target_link_libraries(linear_landau_3d Ensign::Ensign cxxopts::cxxopts)
+target_link_libraries(linear_landau_3d Ensign::Ensign)
 
 if(${CUDA_ENABLED})
   cuda_add_executable(vlasov_poisson vlasov_poisson.cu ${LR_SOURCES_GPU})
@@ -61,7 +59,18 @@ if(${CUDA_ENABLED})
 else()
   add_executable(vlasov_poisson vlasov_poisson.cpp)
 endif()
-target_link_libraries(vlasov_poisson Ensign::Ensign cxxopts::cxxopts)
+
+target_link_libraries(vlasov_poisson Ensign::Ensign cxxopts)
 
 add_executable(alfven_waves alfven_waves.cpp)
-target_link_libraries(alfven_waves Ensign::Ensign cxxopts::cxxopts)
+target_link_libraries(alfven_waves Ensign::Ensign cxxopts)
+
+if(cxxopts_FOUND)
+  target_link_libraries(linear_landau_3d cxxopts::cxxopts)
+  target_link_libraries(vlasov_poisson cxxopts::cxxopts)
+  target_link_libraries(alfven_waves cxxopts::cxxopts)
+else()
+  target_link_libraries(linear_landau_3d cxxopts)
+  target_link_libraries(vlasov_poisson cxxopts)
+  target_link_libraries(alfven_waves cxxopts)
+endif()
