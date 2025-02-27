@@ -149,6 +149,7 @@ else()
         -DBUILD_LAPACK_DEPRECATED=OFF
       INSTALL_COMMAND ""
       UPDATE_COMMAND ""
+      BUILD_BYPRODUCTS ${BINARY_DIR}/lib/libopenblas.a
     )
     ExternalProject_Get_Property(openblas SOURCE_DIR)
     ExternalProject_Get_Property(openblas BINARY_DIR)
@@ -162,14 +163,6 @@ endif()
 ################################################################################
 # Ensign library
 ################################################################################
-
-# If Ensign is being bundled, disable tests and examples
-if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
-  if(BUILD_TESTING)
-    add_subdirectory(tests)
-  endif()
-  add_subdirectory(examples)
-endif()
 
 add_library(Ensign
   STATIC
@@ -197,6 +190,14 @@ target_include_directories(Ensign
 target_compile_definitions(Ensign PRIVATE ${OPENMP_DEFINES})
 target_compile_options(Ensign PRIVATE -Wall -Wno-maybe-uninitialized)
 
+# If Ensign is being bundled, disable tests and examples
+# TODO: this does not work with Ninja
+if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+  if(BUILD_TESTING)
+    add_subdirectory(tests)
+  endif()
+    add_subdirectory(examples)
+endif()
 
 ################################################################################
 # Link and include directories for external libraries
