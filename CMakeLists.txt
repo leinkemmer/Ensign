@@ -94,7 +94,6 @@ find_package(Threads REQUIRED)
 # fftw3
 
 find_package(FFTW3 QUIET)
-
 if(NOT fftw3_FOUND)
   ExternalProject_Add(fftw
     URL "http://fftw.org/fftw-3.3.10.tar.gz"
@@ -105,7 +104,7 @@ if(NOT fftw3_FOUND)
       -DENABLE_THREADS=ON
       -DENABLE_OPENMP=${OPENMP}
       -DBUILD_SHARED_LIBS=OFF
-    INSTALL_COMMAND ""
+      -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
     UPDATE_COMMAND ""
   )
   ExternalProject_Get_Property(fftw SOURCE_DIR)
@@ -125,11 +124,8 @@ endif()
 if(${MKL_ENABLED})
   find_package(MKL QUIET)
   if(NOT mkl_FOUND)
-    set(MKL_INCLUDEDIR "$ENV{MKLROOT}/include" CACHE PATH "Intel MKL include directory")
-    set(MKL_LIBDIR "$ENV{MKLROOT}/lib/intel64" CACHE PATH "Intel MKL lib directory")
-    # TODO: Why are the following set commands shadowing the cache variables?
-    set(MKL_INCLUDEDIR "$ENV{MKLINCLUDEDIR}")
-    set(MKL_LIBDIR "$ENV{MKLLIBDIR}")
+    set(MKL_INCLUDEDIR "$ENV{MKLINCLUDEDIR}" CACHE PATH "Intel MKL include directory")
+    set(MKL_LIBDIR "$ENV{MKLLIBDIR}" CACHE PATH "Intel MKL lib directory")
     set(MKL_DEFINES    "-D__MKL__" "-DMKL_ILP64" "-m64")
     set(MKL_LIBRARIES  "-L{MKL_LIBDIR} -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_gnu_thread -lmkl_core -lgomp -lpthread -lm -ldl")
   endif()
@@ -147,9 +143,8 @@ else()
         -DBUILD_TESTING=OFF
         -DBUILD_SHARED_LIBS=OFF
         -DBUILD_LAPACK_DEPRECATED=OFF
-      INSTALL_COMMAND ""
+        -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
       UPDATE_COMMAND ""
-      BUILD_BYPRODUCTS ${BINARY_DIR}/lib/libopenblas.a
     )
     ExternalProject_Get_Property(openblas SOURCE_DIR)
     ExternalProject_Get_Property(openblas BINARY_DIR)
@@ -158,7 +153,6 @@ else()
     set(openblas_LIBRARY ${BINARY_DIR}/lib/libopenblas.a)
   endif()
 endif()
-
 
 ################################################################################
 # Ensign library
@@ -191,7 +185,6 @@ target_compile_definitions(Ensign PRIVATE ${OPENMP_DEFINES})
 target_compile_options(Ensign PRIVATE -Wall -Wno-maybe-uninitialized)
 
 # If Ensign is being bundled, disable tests and examples
-# TODO: this does not work with Ninja
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
   if(BUILD_TESTING)
     add_subdirectory(tests)
@@ -221,12 +214,18 @@ else()
     target_include_directories(Ensign
       PUBLIC 
       "$<BUILD_INTERFACE:${openblas_HDR_DIRS}>"
+      "$<INSTALL_INTERFACE:include/openblas>"
     )
     target_link_directories(Ensign
       PUBLIC
       "$<BUILD_INTERFACE:${openblas_LIB_DIRS}>"
+      "$<INSTALL_INTERFACE:lib>"
     )
-    target_link_libraries(Ensign PUBLIC ${openblas_LIBRARY})
+    target_link_libraries(Ensign
+      PUBLIC 
+      "$<BUILD_INTERFACE:${openblas_LIBRARY}>"
+      "$<INSTALL_INTERFACE:libopenblas.a>"
+      )
   endif()
 endif()
 
@@ -245,7 +244,10 @@ else()
     PUBLIC
     "$<BUILD_INTERFACE:${fftw3_HDR_DIR}>"
   )
-  target_link_libraries(Ensign PUBLIC ${fftw3_LIBRARIES})
+  target_link_libraries(Ensign PUBLIC 
+  "$<BUILD_INTERFACE:${fftw3_LIBRARIES}>"
+  "$<INSTALL_INTERFACE:libfftw3.a>"
+  )
 endif()
 
 target_link_libraries(Ensign PUBLIC "-lgfortran")
@@ -267,6 +269,7 @@ install(TARGETS Ensign
 install(
   DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+  FILES_MATCHING PATTERN "*.hpp"
 )
 
 install(EXPORT EnsignTargets
@@ -276,8 +279,8 @@ install(EXPORT EnsignTargets
 )
 
 # Include config helpers
-configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/Config.cmake.in
-  "${CMAKE_CURRENT_BINARY_DIR}/EnsignConfig.cmake"
+configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/EnsignConfig.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/EnsignConfig.cmake
   INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Ensign
 )
 

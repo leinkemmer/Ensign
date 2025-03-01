@@ -58,11 +58,14 @@ if(${CUDA_ENABLED})
   target_link_libraries(vlasov_poisson ${CUDA_cusolver_LIBRARY})
 else()
   add_executable(vlasov_poisson vlasov_poisson.cpp)
+  add_dependencies(vlasov_poisson Ensign)
 endif()
 
 target_link_libraries(vlasov_poisson Ensign::Ensign cxxopts)
 
 add_executable(alfven_waves alfven_waves.cpp)
+add_dependencies(alfven_waves Ensign)
+
 target_link_libraries(alfven_waves Ensign::Ensign cxxopts)
 
 if(cxxopts_FOUND)
