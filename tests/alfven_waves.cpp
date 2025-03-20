@@ -1,7 +1,7 @@
-#include "alfven_waves.hpp"
+#include "../examples/alfven_waves.hpp"
 
 #define CATCH_CONFIG_MAIN
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 
 const vector<string> methods = {"lie", "unconventional", "augmented", "strang", "bug_midpoint"};
 
@@ -441,7 +441,7 @@ void test_advection_v_dtA(string method, discretization discr) {
 
 TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
 
-  #ifdef __OPENMP
+  #ifdef __OPENMP__
   omp_set_num_threads(1);
   #endif
 

@@ -3,6 +3,8 @@
 #include <generic/common.hpp>
 #include <generic/storage.hpp>
 
+namespace Ensign{
+
 /* FFT for arbitrary dimensional data, specified by dim.
    The class can also be used to e.g. perform multiple 1d FFTS on a 2d array (in this case dim=1 and d=2).
 */
@@ -78,3 +80,5 @@ array<cufftHandle,2> create_plans_3d(array<Index,3> dims_, int howmany);
 */
 void destroy_plans(array<cufftHandle,2>& plans);
 #endif
+
+} // namespace Ensign

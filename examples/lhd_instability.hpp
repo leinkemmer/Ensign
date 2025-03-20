@@ -5,6 +5,9 @@
 #include <generic/timer.hpp>
 #include <generic/fft.hpp>
 
+using namespace Ensign;
+using namespace Ensign::Matrix;
+
 template<size_t d> using mind = array<Index,d>;
 template<size_t d> using mfp  = array<double,d>;
 
@@ -405,7 +408,7 @@ struct vlasov {
   std::function<double(double*,double*)> ip_x, ip_v;
   grid_info gi;
   blas_ops blas;
-  gram_schmidt gs;
+  orthogonalize gs;
 };
 
 

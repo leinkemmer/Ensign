@@ -1,7 +1,7 @@
-#include "lhd_instability.hpp"
+#include "../examples/lhd_instability.hpp"
 
 #define CATCH_CONFIG_MAIN
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 
 mfp<3> a = {0.0, -1.125, -1.128};
 mfp<3> b = {1.414, 1.125, 1.122};

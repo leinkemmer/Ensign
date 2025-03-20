@@ -1,6 +1,9 @@
 #include <generic/matrix.hpp>
 #include <generic/timer.hpp>
 
+namespace Ensign{
+
+namespace Matrix{
 
 #ifndef __MKL__
 extern "C" {
@@ -158,6 +161,14 @@ blas_ops::blas_ops(bool _gpu) : gpu(_gpu) {
 #ifdef __CUDACC__
   handle = 0;
   handle_devres = 0;
+  handle_cusolver = 0;
+
+  cusolverStatus_t status_cusolver = cusolverDnCreate(&handle_cusolver);
+  if (status_cusolver != CUSOLVER_STATUS_SUCCESS) {
+    cout << "ERROR: cusolverDnCreate failed. Error code: " << status_cusolver << endl;
+    exit(1);
+  }
+  
   if (gpu) {
     cublasStatus_t status = cublasCreate(&handle);
     if (status != CUBLAS_STATUS_SUCCESS) {
@@ -178,6 +189,10 @@ blas_ops::~blas_ops() {
  
   if(handle_devres)
       cublasDestroy(handle_devres);
+
+  if(handle_cusolver)
+      cusolverDnDestroy(handle_cusolver);
+
   #endif
 }
 
@@ -729,3 +744,6 @@ void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_arr
   transpose_inplace(V);
 }
 
+} // namespace Matrix
+
+} // namespace Ensign

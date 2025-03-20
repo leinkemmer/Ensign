@@ -1,5 +1,7 @@
 #include <generic/netcdf.hpp>
 
+namespace Ensign{
+
 #ifdef __NETCDF__
 #include <netcdf.h>
 
@@ -65,3 +67,5 @@ void nc_writer::write(string name, double* data) {
     ERR(retval);
   #endif
 }
+
+} // namespace Ensign

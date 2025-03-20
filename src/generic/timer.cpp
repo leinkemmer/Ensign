@@ -17,6 +17,8 @@
 #include <omp.h>
 #endif
 
+namespace Ensign{
+
 timer::timer() {
     counter = 0;
     elapsed = 0.0;
@@ -68,7 +70,12 @@ double timer::average() {
 }
 
 double timer::deviation() {
-    return sqrt(elapsed_sq/double(counter)-average()*average());
+    if (counter == 1) {
+        return 0.0;
+    }
+    else {
+        return sqrt(elapsed_sq/double(counter)-average()*average());
+    }
 }
 
 unsigned timer::count() {
@@ -142,3 +149,5 @@ namespace gt {
         return timers[name].deviation();
     }
 }
+
+} // namespace Ensign

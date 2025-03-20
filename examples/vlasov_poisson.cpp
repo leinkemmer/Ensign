@@ -10,6 +10,9 @@
 
 #include <cxxopts.hpp>
 
+using namespace Ensign;
+using namespace Ensign::Matrix;
+
 bool CPU;
 
 template<size_t d> using mind = array<Index,d>;
@@ -1049,7 +1052,7 @@ void integration_first_order(double final_time, double tau, int nsteps_split, in
 
   stloc sl = (CPU) ? stloc::host : stloc::device;
 
-  gram_schmidt gs(&blas);
+  orthogonalize gs(&blas);
 
   // For C coefficients
   coeff_C compute_C(sl, gi);

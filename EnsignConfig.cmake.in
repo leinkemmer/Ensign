@@ -1,0 +1,16 @@
+@PACKAGE_INIT@
+set(MKL_ENABLED @MKL_ENABLED@)
+
+include(CMakeFindDependencyMacro)
+include("${CMAKE_CURRENT_LIST_DIR}/EnsignTargets.cmake")
+
+check_required_components(Ensign)
+
+find_dependency(NetCDF)
+find_dependency(Threads)
+find_dependency(FFTW3)
+if (${MKL_ENABLED})
+    find_dependency(MKL)
+else()
+    find_dependency(OpenBLAS)
+endif()

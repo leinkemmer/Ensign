@@ -1,6 +1,9 @@
 #define CATCH_CONFIG_MAIN
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 #include <generic/matrix.hpp>
+
+using namespace Ensign;
+using namespace Ensign::Matrix;
 
 
 TEST_CASE( "matrix basic operations", "[matrix]" ) {
