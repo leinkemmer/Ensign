@@ -151,10 +151,10 @@ endif()
 if(${MKL_ENABLED})
   find_package(MKL QUIET)
   if(NOT mkl_FOUND)
-    set(MKL_INCLUDEDIR "$ENV{MKLINCLUDEDIR}" CACHE PATH "Intel MKL include directory")
-    set(MKL_LIBDIR "$ENV{MKLLIBDIR}" CACHE PATH "Intel MKL lib directory")
+    set(MKL_INCLUDEDIR "$ENV{MKLINCLUDEDIR}")
+    set(MKL_LIBDIR "$ENV{MKLLIBDIR}")
     set(MKL_DEFINES    "-D__MKL__" "-DMKL_ILP64" "-m64")
-    set(MKL_LIBRARIES  "-L{MKL_LIBDIR} -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_gnu_thread -lmkl_core -lgomp -lpthread -lm -ldl")
+    set(MKL_LIBRARIES  "-L${MKL_LIBDIR} -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_gnu_thread -lmkl_core -lgomp -lpthread -lm -ldl")
   endif()
 else()
   message("OpenBLAS is used by default. MKL support is available by setting MKL_ENABLED to ON (set MKLROOT environment variable appropriately).")
@@ -199,7 +199,10 @@ add_library(Ensign
 )
 
 add_library(Ensign::Ensign ALIAS Ensign)
-add_dependencies(Ensign openblas fftw)
+add_dependencies(Ensign fftw)
+if(NOT ${MKL_ENABLED})
+  add_dependencies(Ensign openblas)
+endif()
 
 # Include directories for the library
 target_include_directories(Ensign
@@ -228,11 +231,21 @@ if(${MKL_ENABLED})
   if(mkl_FOUND)
     target_link_libraries(Ensign PUBLIC MKL::MKL)
   else()
-    target_compile_definitions(Ensign ${MKL_DEFINES})
+    target_compile_options(Ensign PUBLIC ${MKL_DEFINES})
     target_include_directories(Ensign
       PUBLIC
-      $<BUILD_INTERFACE:${MKL_INCLUDEDIR}>
+      "$<BUILD_INTERFACE:${MKL_INCLUDEDIR}>"
     )
+    target_link_directories(Ensign
+      PUBLIC
+      "$<BUILD_INTERFACE:${MKL_LIBDIR}>"
+      "$<INSTALL_INTERFACE:lib>"
+    )
+    target_link_libraries(Ensign
+      PUBLIC 
+      "$<BUILD_INTERFACE:${MKL_LIBDIR}/libblas.so>"
+      "$<INSTALL_INTERFACE:lib>"
+      )
   endif()
 else()
   if(openblas_FOUND)
