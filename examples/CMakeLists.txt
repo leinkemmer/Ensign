@@ -53,6 +53,7 @@ else()
   target_link_libraries(vlasov_poisson ${OPENBLAS_LIBRARIES} Threads::Threads "-lgfortran")
 endif()
 
+
 add_executable(alfven_waves alfven_waves.cpp ${LR_SOURCES})
 target_link_libraries(alfven_waves ${FFTW_LIBRARIES} ${NETCDF_LIBRARIES})
 if(${MKL_ENABLED})
@@ -70,3 +71,20 @@ else()
 endif()
 add_test(NAME alfven_waves COMMAND alfven_waves_test)
 
+
+add_executable(lhd_instability lhd_instability.cpp ${LR_SOURCES})
+target_link_libraries(lhd_instability ${FFTW_LIBRARIES} ${NETCDF_LIBRARIES})
+if(${MKL_ENABLED})
+  target_link_libraries(lhd_instability ${MKL_LIBRARIES})
+else()
+  target_link_libraries(lhd_instability ${OPENBLAS_LIBRARIES} Threads::Threads "-lgfortran")
+endif()
+
+add_executable(lhd_instability_test lhd_instability_test.cpp ${LR_SOURCES})
+target_link_libraries(lhd_instability_test ${FFTW_LIBRARIES} ${NETCDF_LIBRARIES})
+if(${MKL_ENABLED})
+  target_link_libraries(lhd_instability_test ${MKL_LIBRARIES})
+else()
+  target_link_libraries(lhd_instability_test ${OPENBLAS_LIBRARIES} Threads::Threads "-lgfortran")
+endif()
+add_test(NAME lhd_instability COMMAND lhd_instability_test)
