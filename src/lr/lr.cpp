@@ -21,7 +21,7 @@ std::function<T(T*,T*)> inner_product_from_weight(T* w, Index N) {
     #pragma omp parallel for reduction(+:result)
     #endif
     for(Index i=0;i<N;i++)
-    result += w[i]*a[i]*b[i];
+      result += w[i]*a[i]*b[i];
     return result;
   };
 };
@@ -75,9 +75,6 @@ void gram_schmidt_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, std::f
       cblas_dscal(dims[0],1.0/R(j,j),Q.extract({j}),1);
     } else {
 
-      #ifdef __OPENMP__
-      #pragma omp parallel for
-      #endif
       for(Index l = 0; l < dims[0]; l++){
         Q(l,j) = distribution(generator);
       }
@@ -97,10 +94,6 @@ void gram_schmidt_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, std::f
 void orthogonalize_householder_constw(multi_array<double,2>& Q, multi_array<double,2>& R, double w) { //Removed blas argument because not needed
   array<Index,2> dims = Q.shape();
 
-
-  //multi_array<double, 2> R2({dims[1],dims[1]});
-  //gram_schmidt_cpu(Q, R2, inner_product);
-
   using namespace Eigen;
   MatrixXd A(dims[0], dims[1]);
   for(Index j=0;j<dims[1];j++) {
@@ -113,12 +106,6 @@ void orthogonalize_householder_constw(multi_array<double,2>& Q, multi_array<doub
   qr.compute(A);
   MatrixXd q = qr.householderQ()*MatrixXd::Identity(A.rows(), A.cols());
   MatrixXd temp = qr.matrixQR().triangularView<Upper>();
-  // cout << A.rows() << " " << A.cols() << " " << temp.rows() << " " << temp.cols() << " " << q.rows() << " " << q.cols() << endl;
-  // cout << "Q: " << Q << endl;
-  // cout << "R: " << temp << endl;
-  // cout << "A: " << A << endl;
-  // //cout << "GS_Q: " << Q << endl;
-  // //cout << "GS_R: " << R2 << endl;
 
   MatrixXd RR(A.cols(), A.cols());
   RR.setZero();
@@ -126,41 +113,11 @@ void orthogonalize_householder_constw(multi_array<double,2>& Q, multi_array<doub
     for(Index i=0;i<std::min(A.cols(),temp.rows());i++)
       RR(i,j) = temp(i,j);
 
-  // cout << "RR: " << RR << endl;
-
-  // cout << "QR: " << (q * RR - A).norm() << endl;
-
-  // //MatrixXd r = temp.topRows(A.cols());
-  // //cout << "r: " << r << endl;
-
   for(Index j=0;j<dims[1];j++) {
     for(Index i=0;i<dims[0];i++) {
       Q(i,j) = q(i,j);
     }
   }
-/*
-  multi_array<double, 2> R1({dims[1],dims[1]});
-  for(Index j=0;j<dims[1];j++) {
-    for(Index i=0;i<dims[1];i++) {
-      R1(i,j) = RR(i,j);
-    }
-  }
-
-
-  multi_array<double, 2> R2({dims[1],dims[1]});
-  gram_schmidt_cpu(Q, R2, inner_product);
-  blas->matmul(R2, R1, R);
-  */
-
-  // h is like the weight w
-/*
-  multi_array<double,1> a({dims[0]}), b({dims[0]});
-  for(Index i=0;i<dims[0];i++) {
-    a(i) = (i==0);
-    b(i) = (i==0);
-  }
-  double h = inner_product(a.data(), b.data());
-  */
 
   for(Index j=0;j<dims[1];j++)
     for(Index i=0;i<dims[0];i++)
@@ -352,7 +309,7 @@ orthogonalize::orthogonalize(const Ensign::Matrix::blas_ops* _blas) {
   if(blas->gpu) {
     curandStatus_t status = curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
     if(status != CURAND_STATUS_SUCCESS) {
-        cout << "ERROR: curandCreateGenerator failsed. Error code: " << status <<  endl;
+        cout << "ERROR: curandCreateGenerator failed. Error code: " << status <<  endl;
         exit(1);
     }
     curandSetPseudoRandomGeneratorSeed(gen,1234);

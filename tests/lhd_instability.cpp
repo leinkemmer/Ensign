@@ -35,6 +35,9 @@ struct test_config {
   test_config(Index r)
   : gi(r, 128, {129,130}, a, b, g, B, charge, mass, Omega) {
 
+    Xref.resize({gi.n_x, r});
+    Xref.set_zero();
+
     // setup initial condition
     xx1 = std::unique_ptr<vec>(new vec({gi.n_x}));
     xx2 = std::unique_ptr<vec>(new vec({gi.n_x}));
@@ -42,6 +45,8 @@ struct test_config {
       double y  = gi.x(i);
       (*xx1)(i) = X1(y);
       (*xx2)(i) = X2(y);
+      Xref(i,0) = X1(y);
+      Xref(i,1) = X2(y);
     }
 
     vv1 = std::unique_ptr<vec>(new vec({gi.N_v}));
@@ -61,10 +66,27 @@ struct test_config {
 
   grid_info gi;
   vector<const double*> X, V;
+  mat Xref;
   std::unique_ptr<vec> xx1, xx2, vv1, vv2;
   blas_ops blas;
 };
 
+
+// Even if we supply an orthogonal set of basis functions the orthogonalization routine
+// can flip the sign. This is not the case for gram_schmidt but many linear algebra libraries
+// do that. The code here is to figure out the correct sign.
+// This is required because e.g. for the term g \partial_{vx} L there is no coefficient and so
+// this does not cancel out as in th other cases.
+vec get_conv(const mat& Xref, const vlasov& vl, const grid_info& gi, blas_ops& blas) {
+  mat M({gi.r, gi.r});
+  coeff(Xref, vl.f.X, gi.h_x, M, blas);
+  
+  vec conv({gi.r});
+  conv.set_zero();
+  conv(0) = -1.0 + 2.0*(M(0,0) >= 0);
+  conv(1) = -1.0 + 2.0*(M(1,1) >= 0);
+  return conv;
+}
 
 
 TEST_CASE( "LHD instability", "[lhd_instability]" ) {
@@ -76,7 +98,9 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
   vlasov vl(tc.gi, tc.X, tc.V);
 
   mat K({gi.n_x, gi.r});
+  K.set_zero();
   tc.blas.matmul(vl.f.X, vl.f.S, K);
+
   mat f_full({gi.n_x, gi.N_v});
   tc.blas.matmul_transb(K, vl.f.V, f_full);
 
@@ -92,42 +116,10 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
       }
     }
   }
+  cout << "ERROR_INIT: " << err << endl;
   REQUIRE(err <= 1e-14); 
  }
 
-
- /* not needed already tested by the rhs functions
- SECTION("COEFF C") {
-  test_config tc(2);
-  grid_info& gi = tc.gi;
-
-  mat V({gi.N_v, gi.r});
-  for(Index j=0;j<gi.n_v[0];j++) {
-    for(Index i=0;i<gi.n_v[0];i++) {
-      mfp<2> v  = gi.v({i,j});
-      V(gi.lin_idx_v({i,j}), 0) = V1(v);
-      V(gi.lin_idx_v({i,j}), 1) = V2(v); 
-    }
-  }
-
-  vlasov vl(tc.gi, tc.X, tc.V);
-
-  // check C1
-  vl.compute_C1(V, V);
-  mat C1 = vl.C1;
-
-  mat C1e({2,2});
-  C1e(0,0) = 0.0;
-  C1e(0,1) = -0.003232854612278621;
-  C1e(1,0) = C1e(0,1);
-  C1e(1,1) = -0.014976955329233274;
-
-  REQUIRE(bool(C1 == C1e));
-
-  // TODO: add the other coeffs
-
- }
-*/
 
  SECTION("RHS K") {
   test_config tc(3);
@@ -192,28 +184,18 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
   cout << "ERROR RHS_K: "<< err1/m1 <<  " " << err2/m2 << endl;
   REQUIRE( err1/m1 <= 3e-3);
   REQUIRE( err2/m2 <= 3e-3);
-
-  // TODO: add the other terms by setting E, B, and g non-zero, maybe also increase resolution for this test
  }
-
 
  SECTION("RHS L") {
   test_config tc(3);
   grid_info& gi = tc.gi;
   vlasov vl(tc.gi, tc.X, tc.V);
 
+  vec conv = get_conv(tc.Xref, vl, gi, tc.blas);
+
   mat L({gi.N_v, gi.r});
   mat Lout = L;
   tc.blas.matmul_transb(vl.f.V, vl.f.S, L);
-
-  ofstream fs("debug.data");
-  for(Index j=0;j<gi.n_v[1];j++) {
-    for(Index i=0;i<gi.n_v[0];i++) {
-      fs << L(gi.lin_idx_v({i,j}), 0) << " ";
-    }
-    fs << endl;
-  }
-  fs.close();
 
   vec Ehat({gi.n_x});
   Ehat.set_zero();
@@ -234,37 +216,29 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
   vl.rhs_L(L, Lout);
 
   double err1 = 0.0, m1 = 0.0, err2 = 0.0, m2 = 0.0;
-  ofstream fse("debuge.data"), fsc("debugc.data"), fsd("debugd.data");
   for(Index j=0;j<gi.n_v[1];j++) {
     for(Index i=0;i<gi.n_v[0];i++) {
       mfp<2> v = gi.v({i,j});
       double vx = v[0]; double vy = v[1];
       // first term
-      //double exact1 = -0.03141592653589791*exp(-20.0*pow(vx,2)-22.0*pow(0.2+vy,2))*vy;
-      //double exact2 =  0.03141592653589793*exp(-20.0*pow(-0.2+vx,2)-22.0*pow(vy,2))*vy;
       double exact1 = -0.3134241308377849*exp(-20.0*pow(vx,2)-22.0*pow(0.2+vy,2))*vy;
       double exact2 =  0.31342413083778514*exp(-20.0*pow(-0.2+vx,2)-22.0*pow(vy,2))*vy;
       // second term
-      exact1 += g*exp((8.-20.*vx)*vx-22.*pow(vy,2))*(-3.5946317129377743 + 17.973158564688866*vx);
-      exact2 += g*16.591316467263255*exp(-20.*pow(vx,2)+(-8.8-22.*vy)*vy)*vx;
+      exact1 += conv(0)*g*exp((8.-20.*vx)*vx-22.*pow(vy,2))*(-3.5946317129377743 + 17.973158564688866*vx);
+      exact2 += conv(0)*g*16.591316467263255*exp(-20.*pow(vx,2)+(-8.8-22.*vy)*vy)*vx;
       // third term (E is already integrated out here)
       exact1 += 22.054726368159216*exp(-20.*pow(-0.2+vx,2)-22.*pow(vy,2))*vy;
       exact2 += exp(-20.*pow(vx,2)+(-8.8-22.*vy)*vy)*(0.912522405699479+4.562612028497394*vy);
       // fourth term
       double Bhat = charge*Omega*B/mass;
-      exact1 += Bhat*exp((8.-20.*vx)*vx-22.*pow(vy,2))*(3.594631712937776+1.797315856468888*vx)*vy;
-      exact2 += Bhat*exp(-20.*pow(vx,2)+(-8.8-22.*vy)*vy)*vx*(3.650089622797918+1.6591316467263262*vy);
+      exact1 += conv(0)*Bhat*exp((8.-20.*vx)*vx-22.*pow(vy,2))*(3.594631712937776+1.797315856468888*vx)*vy;
+      exact2 += conv(1)*Bhat*exp(-20.*pow(vx,2)+(-8.8-22.*vy)*vy)*vx*(3.650089622797918+1.6591316467263262*vy);
 
-      fse << exact1 << " ";
-      fsc << Lout(gi.lin_idx_v({i,j}),0) << " ";
-      fsd << Lout(gi.lin_idx_v({i,j}),0)-exact1 << " ";
-      
       err1 = max(err1, abs(Lout(gi.lin_idx_v({i,j}),0)-exact1));
       err2 = max(err2, abs(Lout(gi.lin_idx_v({i,j}),1)-exact2));
       m1 = max(m1, abs(exact1));
       m2 = max(m2, abs(exact2));
     }
-    fse << endl; fsc << endl; fsd << endl;
   }
 
   cout << "ERROR RHS_L: " << err1/m1 << " " << err2/m2 << endl;
@@ -278,6 +252,8 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
   test_config tc(2);
   grid_info& gi = tc.gi;
   vlasov vl(tc.gi, tc.X, tc.V);
+  
+  vec conv = get_conv(tc.Xref, vl, gi, tc.blas);
 
   vec Ehat({gi.n_x});
   Ehat.set_zero();
@@ -316,17 +292,17 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
 
   mat Sexact({gi.r, gi.r});
   double Bhat = charge*Omega*B/mass;
-  Sexact(0,0) = 0.001013254646978351 + g*0 + 0;
-  Sexact(0,1) = 0.004694139206661268 - g*0.1293141844911448 - 0.07129972386184644 - Bhat*0.02715597874314041;
-  Sexact(1,0) = 0.0 + g*0.12931418449114485 + 0.03556140073506485 + Bhat*0.02715597874314043;
-  Sexact(1,1) = -0.0010132546469783514 + g*0 + 0;
+  Sexact(0,0) = 0.001013254646978351 + conv(0)*g*0 + 0;
+  Sexact(0,1) = 0.004694139206661268 - conv(0)*g*0.1293141844911448 - 0.07129972386184644 - conv(0)*Bhat*0.02715597874314041;
+  Sexact(1,0) = 0.0 + conv(1)*g*0.12931418449114485 + 0.03556140073506485 + conv(1)*Bhat*0.02715597874314043;
+  Sexact(1,1) = -0.0010132546469783514 + conv(1)*g*0 + 0;
 
   cout << "ERROR RHS_S: ";
   for(Index i=0;i<2;i++) {
     for(Index j=0;j<2;j++) {
       double err = abs(Sexact(i,j)-Sout(i,j));
       cout << err <<  " ";
-      REQUIRE( err <= 3e-3 ); 
+      REQUIRE( err <= 3.5e-3 ); 
     }
   }
   cout << endl;

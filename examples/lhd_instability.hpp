@@ -68,9 +68,9 @@ grid_info modify_r(grid_info gi, Index r) {
 // Note that using a std::function object has a non-negligible performance overhead
 template<class func>
 void componentwise_vec_omp(const mind<2>& N, func F) {
-  //#ifdef __OPENMP__
-  //#pragma omp parallel for
-  //#endif
+  #ifdef __OPENMP__
+  #pragma omp parallel for
+  #endif
   for(Index j = 0; j < N[1]; j++){
     for(Index i = 0; i < N[0]; i++){
       Index idx = i+j*N[0];
@@ -169,7 +169,7 @@ struct vlasov {
 
     f.X = K;
     gt::start("orthogonalize");
-    gs(f.X, f.S, ip_x);
+    gs(f.X, f.S, gi.h_x);
     gt::stop("orthogonalize");
 
     // S step
@@ -192,7 +192,7 @@ struct vlasov {
     
     f.V = L;
     gt::start("orthogonalize");
-    gs(f.V, f.S, ip_v);
+    gs(f.V, f.S, gi.h_v[0]*gi.h_v[1]);
     gt::stop("orthogonalize");
     transpose_inplace(f.S);
   }
@@ -336,7 +336,9 @@ struct vlasov {
 
   void deriv_vx(const mat& in, mat& out) {
     gt::start("deriv_vx");
+    #ifdef __OPENMP__
     #pragma omp parallel for
+    #endif
     for(Index ir=0;ir<gi.r;ir++) {
       for(Index iv2=0;iv2<gi.n_v[1];iv2++)
         for(Index iv1=0;iv1<gi.n_v[0];iv1++) {
@@ -348,7 +350,9 @@ struct vlasov {
 
   void deriv_vy(const mat& in, mat& out) {
     gt::start("deriv_vy");
+    #ifdef __OPENMP__
     #pragma omp parallel for
+    #endif
     for(Index ir=0;ir<gi.r;ir++) {
       for(Index iv2=0;iv2<gi.n_v[1];iv2++)
         for(Index iv1=0;iv1<gi.n_v[0];iv1++) {
@@ -368,14 +372,11 @@ struct vlasov {
   }
 
   vlasov(grid_info _gi, vector<const double*> X0, vector<const double*> V0) : f(_gi.r, {_gi.n_x, _gi.N_v}), gi(_gi), gs(&blas) {
-    ip_x = inner_product_from_const_weight(gi.h_x, gi.n_x);
-    ip_v = inner_product_from_const_weight(gi.h_v[0]*gi.h_v[1], gi.N_v);
-    
-    initialize(f, X0, V0, ip_x, ip_v, blas);
+
+    initialize(f, X0, V0, gi.h_x, gi.h_v[0]*gi.h_v[1], blas);
 
     K.resize({gi.n_x, gi.r});
     L.resize({gi.N_v, gi.r});
-    S.resize({gi.r, gi.r});
     
     Xtmp.resize({gi.n_x, gi.r});
     Vtmp.resize({gi.N_v, gi.r});
@@ -402,10 +403,9 @@ struct vlasov {
   }
 
   lr2<double> f;
-  mat K, L, S, Xtmp, Vtmp, Ltmp, Ltmp2;
+  mat K, L, Xtmp, Vtmp, Ltmp, Ltmp2;
   mat C1, C2, C3, C4, C5, D1, D2;
   vec v_x, v_y;
-  std::function<double(double*,double*)> ip_x, ip_v;
   grid_info gi;
   blas_ops blas;
   orthogonalize gs;
