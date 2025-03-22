@@ -105,9 +105,15 @@ struct multi_array {
   }
 
   void set_zero() {
-    Index n = num_elements();
-    for(Index i=0;i<n;i++)
-      v[i] = T(0.0);
+    if(sl == stloc::host) {
+      Index n = num_elements();
+      for(Index i=0;i<n;i++)
+        v[i] = T(0.0);
+    } else {
+      #ifdef __CUDACC__
+      cudaMemset(v, 0, sizeof(T)*num_elements());
+      #endif
+    }
   }
 
   Index linear_idx(array<Index,d> idx) const {
@@ -129,7 +135,6 @@ struct multi_array {
     std::ofstream fs(fn.c_str(), std::ios::binary);
     fs.write((char*)data(), sizeof(T)*num_elements());
   }
-
 
   T& operator()(array<Index,d> idx) {
     return v[linear_idx(idx)];

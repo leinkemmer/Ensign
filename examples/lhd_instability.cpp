@@ -52,7 +52,7 @@ int main(int argc, char** argv) {
   vec xx1_e({n_x}), xx1_i({n_x});
   for(Index i=0;i<n_x;i++) {
     double y  = gi_e.x(i);
-    double p = sin(86.6262*(y-0.5*b_e[0]))/(y-0.5*b_e[0]); // TODO: do we need a sinc function here?
+    double p = abs(y-0.5*b_e[0]) <= 1e-14 ? 0.0 : sin(86.6262*(y-0.5*b_e[0]))/(y-0.5*b_e[0]);
     xx1_e(i) = 1.0+alpha*p;
     xx1_i(i) = 1.0+alpha*p;
   }
