@@ -53,8 +53,10 @@ endif()
 option("Sanitizer" "Enable address sanitizer" OFF)
 option("OPENMP" "Enable OpenMP" ON)
 option("CUDA_ENABLED" "Enable CUDA" OFF)
+option("INSTALL_THIRD_PARTY_LIBS" "Install FFTW3 and OpenBLAS" OFF)
 option("MKL_ENABLED" "Enable Intel MKL" OFF)
-option("INSTALL_THIRD_PARTY_LIB" "Install FFTW3 and OpenBLAS" OFF)
+set("MKL_INCLUDEDIR" "" CACHE PATH "Path to include directory for MKL")
+set("MKL_LIBDIR" "" CACHE PATH "Path to lib directory for MKL")
 
 
 ################################################################################
@@ -99,19 +101,25 @@ set_directory_properties(PROPERTIES EP_BASE ${FETCHCONTENT_BASE_DIR})
 ################################################################################
 # Eigen
 
-FetchContent_Declare(Eigen
-  GIT_REPOSITORY "https://gitlab.com/libeigen/eigen.git"
-  GIT_TAG "3.4.0"
-  GIT_SHALLOW ON
-  GIT_PROGRESS ON
-  FIND_PACKAGE_ARGS
-)
-set(BUILD_TESTING OFF)
-set(EIGEN_BUILD_TESTING OFF)
-set(EIGEN_MPL2_ONLY ON)
-set(EIGEN_BUILD_PKGCONFIG OFF)
-set(EIGEN_BUILD_DOC OFF)
-FetchContent_MakeAvailable(Eigen)
+find_package(Eigen3 3.4 QUIET NO_MODULE)
+if(NOT eigen3_FOUND)
+  ExternalProject_Add(eigen
+    GIT_REPOSITORY "https://gitlab.com/libeigen/eigen.git"
+    GIT_TAG "3.4.0"
+    GIT_SHALLOW ON
+    GIT_PROGRESS ON
+    CMAKE_ARGS
+      -DBUILD_TESTING=OFF
+      -DEIGEN_BUILD_TESTING=OFF
+      -DEIGEN_MPL2_ONLY=ON
+      -DEIGEN_BUILD_PKGCONFIG=OFF
+      -DEIGEN_BUILD_DOC=OFF
+    UPDATE_COMMAND ""
+    INSTALL_COMMAND ""
+  )
+  ExternalProject_Get_Property(eigen SOURCE_DIR)
+  set(eigen_HDR_DIR ${SOURCE_DIR})
+endif()
 
 
 ################################################################################
@@ -133,22 +141,36 @@ find_package(Threads REQUIRED)
 ################################################################################
 # fftw3
 
-# TODO: install depending on install of Ensign option(FFTW_INSTALL)
-
 find_package(FFTW3 QUIET)
 if(NOT fftw3_FOUND)
-  ExternalProject_Add(fftw
-    URL "http://fftw.org/fftw-3.3.10.tar.gz"
-    URL_HASH MD5=8ccbf6a5ea78a16dbc3e1306e234cc5c
-    CMAKE_ARGS
-      -Wno-dev
-      -DBUILD_TESTS=OFF
-      -DENABLE_THREADS=ON
-      -DENABLE_OPENMP=${OPENMP}
-      -DBUILD_SHARED_LIBS=OFF
-      -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
-    UPDATE_COMMAND ""
-  )
+  if(${INSTALL_THIRD_PARTY_LIBS})
+    ExternalProject_Add(fftw
+      URL "http://fftw.org/fftw-3.3.10.tar.gz"
+      URL_HASH MD5=8ccbf6a5ea78a16dbc3e1306e234cc5c
+      CMAKE_ARGS
+        -Wno-dev
+        -DBUILD_TESTS=OFF
+        -DENABLE_THREADS=ON
+        -DENABLE_OPENMP=${OPENMP}
+        -DBUILD_SHARED_LIBS=OFF
+        -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+      UPDATE_COMMAND ""
+    )
+  else()
+    ExternalProject_Add(fftw
+      URL "http://fftw.org/fftw-3.3.10.tar.gz"
+      URL_HASH MD5=8ccbf6a5ea78a16dbc3e1306e234cc5c
+      CMAKE_ARGS
+        -Wno-dev
+        -DBUILD_TESTS=OFF
+        -DENABLE_THREADS=ON
+        -DENABLE_OPENMP=${OPENMP}
+        -DBUILD_SHARED_LIBS=OFF
+        -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+      UPDATE_COMMAND ""
+      INSTALL_COMMAND ""
+    )
+  endif()
   ExternalProject_Get_Property(fftw SOURCE_DIR)
   ExternalProject_Get_Property(fftw BINARY_DIR)
   set(fftw3_HDR_DIR ${SOURCE_DIR}/api)
@@ -166,8 +188,6 @@ endif()
 if(${MKL_ENABLED})
   find_package(MKL QUIET)
   if(NOT mkl_FOUND)
-    set(MKL_INCLUDEDIR "$ENV{MKLINCLUDEDIR}")
-    set(MKL_LIBDIR "$ENV{MKLLIBDIR}")
     set(MKL_DEFINES    "-D__MKL__" "-DMKL_ILP64" "-m64")
     set(MKL_LIBRARIES  "-L${MKL_LIBDIR} -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_gnu_thread -lmkl_core -lgomp -lpthread -lm -ldl")
     message("MKL not found automatically. Please set MKL_INCLUDEDIR and MKL_LIBDIR")
@@ -178,19 +198,36 @@ else()
   message("OpenBLAS is used by default. MKL support is available by setting MKL_ENABLED to ON (set MKLROOT environment variable appropriately).")
   find_package(OpenBLAS QUIET)
   if(NOT openblas_FOUND)
-    ExternalProject_Add(openblas
-      GIT_REPOSITORY "https://github.com/OpenMathLib/OpenBLAS.git"
-      GIT_TAG "v0.3.28"
-      GIT_SHALLOW ON
-      GIT_PROGRESS ON
-      CMAKE_ARGS
-        -Wno-dev
-        -DBUILD_TESTING=OFF
-        -DBUILD_SHARED_LIBS=OFF
-        -DBUILD_LAPACK_DEPRECATED=OFF
-        -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
-      UPDATE_COMMAND ""
-    )
+    if(${INSTALL_THIRD_PARTY_LIBS})
+      ExternalProject_Add(openblas
+        GIT_REPOSITORY "https://github.com/OpenMathLib/OpenBLAS.git"
+        GIT_TAG "v0.3.28"
+        GIT_SHALLOW ON
+        GIT_PROGRESS ON
+        CMAKE_ARGS
+          -Wno-dev
+          -DBUILD_TESTING=OFF
+          -DBUILD_SHARED_LIBS=OFF
+          -DBUILD_LAPACK_DEPRECATED=OFF
+          -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+        UPDATE_COMMAND ""
+      )
+    else()
+      ExternalProject_Add(openblas
+        GIT_REPOSITORY "https://github.com/OpenMathLib/OpenBLAS.git"
+        GIT_TAG "v0.3.28"
+        GIT_SHALLOW ON
+        GIT_PROGRESS ON
+        CMAKE_ARGS
+          -Wno-dev
+          -DBUILD_TESTING=OFF
+          -DBUILD_SHARED_LIBS=OFF
+          -DBUILD_LAPACK_DEPRECATED=OFF
+          -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+        UPDATE_COMMAND ""
+        INSTALL_COMMAND ""
+      ) 
+    endif()
     ExternalProject_Get_Property(openblas SOURCE_DIR)
     ExternalProject_Get_Property(openblas BINARY_DIR)
     set(openblas_HDR_DIRS ${SOURCE_DIR};${BINARY_DIR})
@@ -198,6 +235,7 @@ else()
     set(openblas_LIBRARY ${BINARY_DIR}/lib/libopenblas.a)
   endif()
 endif()
+
 
 ################################################################################
 # Ensign library
@@ -217,7 +255,7 @@ add_library(Ensign
 )
 
 add_library(Ensign::Ensign ALIAS Ensign)
-add_dependencies(Ensign fftw)
+add_dependencies(Ensign fftw eigen)
 if(NOT ${MKL_ENABLED})
   add_dependencies(Ensign openblas)
 endif()
@@ -238,10 +276,18 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
   add_subdirectory(examples)
 endif()
 
+
 ################################################################################
 # Link and include directories for external libraries
 
-target_link_libraries(Ensign PUBLIC Eigen3::Eigen)
+if(eigen_FOUND)
+  target_link_libraries(Ensign PUBLIC Eigen3::Eigen)
+else()
+  target_include_directories(Ensign
+    PUBLIC
+    "$<BUILD_INTERFACE:${eigen_HDR_DIR}>"
+  )
+endif()
 
 if(${MKL_ENABLED})
   if(mkl_FOUND)
