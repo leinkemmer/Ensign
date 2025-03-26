@@ -94,3 +94,11 @@ add_test(NAME tensor COMMAND tensor)
 add_executable(alfven_waves_test alfven_waves.cpp)
 target_link_libraries(alfven_waves_test Ensign::Ensign Catch2::Catch2WithMain)
 add_test(NAME alfven_waves COMMAND alfven_waves_test)
+
+
+#
+# LHD waves test
+#
+add_executable(lhd_instability_test lhd_instability.cpp)
+target_link_libraries(lhd_instability_test Ensign::Ensign Catch2::Catch2WithMain)
+add_test(NAME lhd_instability COMMAND lhd_instability_test)

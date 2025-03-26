@@ -20,6 +20,8 @@ add_compile_options(-Wall -Wno-maybe-uninitialized)
 
 set(LR_SOURCES_GPU ../src/lr/lr.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/timer.cu ../src/generic/fft.cu ../src/generic/kernels.cu ../src/generic/netcdf.cpp)
 
+# Vlasov-Poisson examples
+
 if(${CUDA_ENABLED})
   cuda_add_executable(linear_landau linear_landau.cu)
   cuda_add_cublas_to_target(linear_landau)
@@ -61,19 +63,51 @@ else()
   add_dependencies(vlasov_poisson Ensign)
 endif()
 
+
 target_link_libraries(vlasov_poisson Ensign::Ensign cxxopts)
 
+
+# Alfven waves example
 add_executable(alfven_waves alfven_waves.cpp)
 add_dependencies(alfven_waves Ensign)
 
 target_link_libraries(alfven_waves Ensign::Ensign cxxopts)
 
+
+# LHD instability example
+add_executable(lhd_instability lhd_instability.cpp)
+add_dependencies(lhd_instability Ensign)
+
+target_link_libraries(lhd_instability Ensign::Ensign cxxopts)
+
+
 if(cxxopts_FOUND)
   target_link_libraries(linear_landau_3d cxxopts::cxxopts)
   target_link_libraries(vlasov_poisson cxxopts::cxxopts)
   target_link_libraries(alfven_waves cxxopts::cxxopts)
+  target_link_libraries(lhd_instability cxxopts::cxxopts)
 else()
   target_link_libraries(linear_landau_3d cxxopts)
   target_link_libraries(vlasov_poisson cxxopts)
   target_link_libraries(alfven_waves cxxopts)
+  target_link_libraries(lhd_instability cxxopts)
 endif()
+
+
+
+#add_executable(lhd_instability lhd_instability.cpp ${LR_SOURCES})
+#target_link_libraries(lhd_instability ${FFTW_LIBRARIES} ${NETCDF_LIBRARIES})
+#if(${MKL_ENABLED})
+#  target_link_libraries(lhd_instability ${MKL_LIBRARIES})
+#else()
+#  target_link_libraries(lhd_instability ${OPENBLAS_LIBRARIES} Threads::Threads "-lgfortran")
+#endif()
+#
+#add_executable(lhd_instability_test lhd_instability_test.cpp ${LR_SOURCES})
+#target_link_libraries(lhd_instability_test ${FFTW_LIBRARIES} ${NETCDF_LIBRARIES})
+#if(${MKL_ENABLED})
+#  target_link_libraries(lhd_instability_test ${MKL_LIBRARIES})
+#else()
+#  target_link_libraries(lhd_instability_test ${OPENBLAS_LIBRARIES} Threads::Threads "-lgfortran")
+#endif()
+#add_test(NAME lhd_instability COMMAND lhd_instability_test)

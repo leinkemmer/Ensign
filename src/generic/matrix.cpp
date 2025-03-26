@@ -119,7 +119,6 @@ void ptw_mult_row(const multi_array<T,2>& a, const multi_array<T,1>& w, multi_ar
     exit(1);
     #endif
   }
-
 }
 template void ptw_mult_row(const multi_array<double,2>&, const multi_array<double,1>&, multi_array<double,2>&);
 template void ptw_mult_row(const multi_array<float,2>&, const multi_array<float,1>&, multi_array<float,2>&);
