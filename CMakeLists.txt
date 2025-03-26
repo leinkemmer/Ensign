@@ -27,6 +27,7 @@ option("Sanitizer" "Enable address sanitizer" OFF)
 option("OPENMP" "Enable OpenMP" ON)
 option("CUDA_ENABLED" "Enable CUDA" OFF)
 option("MKL_ENABLED" "Enable Intel MKL" OFF)
+option("INSTALL_THIRD_PARTY_LIB" "Install FFTW3 and OpenBLAS" OFF)
 
 
 ################################################################################
@@ -71,7 +72,19 @@ set_directory_properties(PROPERTIES EP_BASE ${FETCHCONTENT_BASE_DIR})
 ################################################################################
 # Eigen
 
-find_package(Eigen3 3.4 REQUIRED NO_MODULE)
+FetchContent_Declare(Eigen
+  GIT_REPOSITORY "https://gitlab.com/libeigen/eigen.git"
+  GIT_TAG "3.4.0"
+  GIT_SHALLOW ON
+  GIT_PROGRESS ON
+  FIND_PACKAGE_ARGS
+)
+set(BUILD_TESTING OFF)
+set(EIGEN_BUILD_TESTING OFF)
+set(EIGEN_MPL2_ONLY ON)
+set(EIGEN_BUILD_PKGCONFIG OFF)
+set(EIGEN_BUILD_DOC OFF)
+FetchContent_MakeAvailable(Eigen)
 
 
 ################################################################################
@@ -92,6 +105,8 @@ find_package(Threads REQUIRED)
 
 ################################################################################
 # fftw3
+
+# TODO: install depending on install of Ensign option(FFTW_INSTALL)
 
 find_package(FFTW3 QUIET)
 if(NOT fftw3_FOUND)
@@ -124,6 +139,8 @@ endif()
 if(${MKL_ENABLED})
   find_package(MKL QUIET)
   if(NOT mkl_FOUND)
+    # TODO replace MKL_INCLUDEDIR as option, remove env MKLINCLUDEDIR
+    # TODO replace MKL_LIBDIR as option, remove env MKLLIBDIR
     set(MKL_INCLUDEDIR "$ENV{MKLINCLUDEDIR}" CACHE PATH "Intel MKL include directory")
     set(MKL_LIBDIR "$ENV{MKLLIBDIR}" CACHE PATH "Intel MKL lib directory")
     set(MKL_DEFINES    "-D__MKL__" "-DMKL_ILP64" "-m64")
@@ -186,10 +203,8 @@ target_compile_options(Ensign PRIVATE -Wall -Wno-maybe-uninitialized)
 
 # If Ensign is being bundled, disable tests and examples
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
-  if(BUILD_TESTING)
-    add_subdirectory(tests)
-  endif()
-    add_subdirectory(examples)
+  add_subdirectory(tests)
+  add_subdirectory(examples)
 endif()
 
 ################################################################################
