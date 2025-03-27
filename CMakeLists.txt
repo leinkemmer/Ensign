@@ -352,7 +352,9 @@ else()
   )
 endif()
 
-target_link_libraries(Ensign PUBLIC "-lgfortran")
+if(NOT ${MKL_ENABLED})
+  target_link_libraries(Ensign PUBLIC "-lgfortran")
+endif()
 
 
 ################################################################################
