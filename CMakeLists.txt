@@ -215,8 +215,8 @@ else()
     ExternalProject_Get_Property(openblas SOURCE_DIR)
     ExternalProject_Get_Property(openblas BINARY_DIR)
     set(openblas_HDR_DIRS ${CMAKE_INSTALL_PREFIX})
-    set(openblas_LIB_DIRS ${CMAKE_INSTALL_PREFIX}/lib)
-    set(openblas_LIBRARY ${CMAKE_INSTALL_PREFIX}/lib/libopenblas.a)
+    set(openblas_LIB_DIRS ${CMAKE_INSTALL_PREFIX}/lib64)
+    set(openblas_LIBRARY ${CMAKE_INSTALL_PREFIX}/lib64/libopenblas.a)
   endif()
 endif()
 
@@ -299,13 +299,13 @@ else()
   else()
     target_include_directories(Ensign
       PUBLIC 
-      "$<BUILD_INTERFACE:${openblas_HDR_DIRS}>"
+      "$<BUILD_INTERFACE:${openblas_HDR_DIRS}/include/openblas>"
       "$<INSTALL_INTERFACE:include/openblas>"
     )
     target_link_directories(Ensign
       PUBLIC
       "$<BUILD_INTERFACE:${openblas_LIB_DIRS}>"
-      "$<INSTALL_INTERFACE:lib>"
+      "$<INSTALL_INTERFACE:lib64>"
     )
     target_link_libraries(Ensign
       PUBLIC 
