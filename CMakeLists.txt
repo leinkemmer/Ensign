@@ -74,9 +74,13 @@ endif()
 if(${OPENMP})
   find_package(OpenMP)
   if(OPENMP_FOUND)
+    message("OpenMP has been enabled and found")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
     set(OPENMP_DEFINES "-D__OPENMP__ -DUSE_OPENMP")
+    add_compile_definitions(${OPENMP_DEFINES})
+  else()
+    message("Could not find support for OpenMP")
   endif()
 endif()
 
@@ -210,13 +214,14 @@ else()
         -DBUILD_LAPACK_DEPRECATED=OFF
         -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
         -DUSE_OPENMP=${OPENMP}
+        -DCMAKE_INSTALL_LIBDIR=lib
       UPDATE_COMMAND ""
     )
     ExternalProject_Get_Property(openblas SOURCE_DIR)
     ExternalProject_Get_Property(openblas BINARY_DIR)
     set(openblas_HDR_DIRS ${CMAKE_INSTALL_PREFIX})
-    set(openblas_LIB_DIRS ${CMAKE_INSTALL_PREFIX}/lib64)
-    set(openblas_LIBRARY ${CMAKE_INSTALL_PREFIX}/lib64/libopenblas.a)
+    set(openblas_LIB_DIRS ${CMAKE_INSTALL_PREFIX}/lib)
+    set(openblas_LIBRARY ${CMAKE_INSTALL_PREFIX}/lib/libopenblas.a)
   endif()
 endif()
 
@@ -251,7 +256,6 @@ target_include_directories(Ensign
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-target_compile_definitions(Ensign PRIVATE ${OPENMP_DEFINES})
 target_compile_options(Ensign PRIVATE -Wall -Wno-maybe-uninitialized)
 
 # If Ensign is being bundled, disable tests and examples
@@ -305,7 +309,7 @@ else()
     target_link_directories(Ensign
       PUBLIC
       "$<BUILD_INTERFACE:${openblas_LIB_DIRS}>"
-      "$<INSTALL_INTERFACE:lib64>"
+      "$<INSTALL_INTERFACE:lib>"
     )
     target_link_libraries(Ensign
       PUBLIC 
