@@ -201,7 +201,7 @@ else()
     if(${INSTALL_THIRD_PARTY_LIBS})
       ExternalProject_Add(openblas
         GIT_REPOSITORY "https://github.com/OpenMathLib/OpenBLAS.git"
-        GIT_TAG "v0.3.28"
+        GIT_TAG "v0.3.29"
         GIT_SHALLOW ON
         GIT_PROGRESS ON
         CMAKE_ARGS
