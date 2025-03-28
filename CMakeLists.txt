@@ -73,7 +73,7 @@ if(${OPENMP})
   if(OPENMP_FOUND)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-    set(OPENMP_DEFINES "-D__OPENMP__")
+    set(OPENMP_DEFINES "-D__OPENMP__ -DUSE_OPENMP")
   endif()
 endif()
 
@@ -174,13 +174,14 @@ else()
         -DBUILD_SHARED_LIBS=OFF
         -DBUILD_LAPACK_DEPRECATED=OFF
         -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+        -DUSE_OPENMP=${OPENMP}
       UPDATE_COMMAND ""
     )
     ExternalProject_Get_Property(openblas SOURCE_DIR)
     ExternalProject_Get_Property(openblas BINARY_DIR)
-    set(openblas_HDR_DIRS ${SOURCE_DIR};${BINARY_DIR})
-    set(openblas_LIB_DIRS ${BINARY_DIR}/lib)
-    set(openblas_LIBRARY ${BINARY_DIR}/lib/libopenblas.a)
+    set(openblas_HDR_DIRS ${CMAKE_INSTALL_PREFIX})
+    set(openblas_LIB_DIRS ${CMAKE_INSTALL_PREFIX}/lib)
+    set(openblas_LIBRARY ${CMAKE_INSTALL_PREFIX}/lib/libopenblas.a)
   endif()
 endif()
 

@@ -4,6 +4,7 @@
 #include <lr/coefficients.hpp>
 #include <generic/timer.hpp>
 #include <generic/fft.hpp>
+#include <generic/netcdf.hpp>
 
 using namespace Ensign;
 using namespace Ensign::Matrix;
@@ -475,3 +476,40 @@ struct poisson {
   blas_ops blas;
   double ee;
 };
+
+
+void save_lr(string fn, const lr2<double>& lr_sol, const grid_info& gi) {
+    nc_writer ncw(fn, {gi.n_x, gi.n_v[0], gi.n_v[1], gi.r}, {"y", "vx", "vy", "r"});
+    ncw.add_var("r", {"r"});
+    ncw.add_var("y", {"y"});
+    ncw.add_var("vx", {"vx"});
+    ncw.add_var("vy", {"vy"});
+    ncw.add_var("X", {"r", "y"});
+    ncw.add_var("S", {"r", "r"});
+    ncw.add_var("V", {"r", "vy", "vx"});
+
+    ncw.start_write_mode();
+
+    vector<double> vec_r(gi.r);
+    for(Index i=0;i<gi.r;i++)
+      vec_r[i] = i;
+
+    vector<double> vec_y(gi.n_x);
+    for(Index i=0;i<gi.n_x;i++)
+        vec_y[i] = gi.x(i);
+
+    vector<double> vec_vx(gi.n_v[0]), vec_vy(gi.n_v[1]);
+    for(Index i=0;i<gi.n_v[0];i++)
+        vec_vx[i] = gi.v(0, i);
+    for(Index i=0;i<gi.n_v[1];i++)
+        vec_vy[i] = gi.v(1, i);
+
+    ncw.write("r", vec_r.data());
+    ncw.write("y", vec_y.data());
+    ncw.write("vx", vec_vx.data());
+    ncw.write("vy", vec_vy.data());
+
+    ncw.write("X", lr_sol.X.data());
+    ncw.write("S", lr_sol.S.data());
+    ncw.write("V", lr_sol.V.data());
+}

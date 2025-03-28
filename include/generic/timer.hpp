@@ -5,9 +5,6 @@
 
 #include <generic/common.hpp>
 
-#ifdef __OPENMP__
-#include <omp.h>
-#endif
 
 namespace Ensign{
 

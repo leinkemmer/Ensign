@@ -13,10 +13,6 @@
 #include <string.h>
 #include <time.h>
 
-#ifdef __OPENMP__
-#include <omp.h>
-#endif
-
 namespace Ensign{
 
 timer::timer() {

@@ -6,10 +6,6 @@
 #include <generic/common.hpp>
 #include <generic/storage.hpp>
 
-#ifdef __OPENMP__
-#include <omp.h>
-#endif
-
 namespace Ensign{
 
 namespace IndexFunction {
