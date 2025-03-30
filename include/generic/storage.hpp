@@ -196,7 +196,11 @@ struct multi_array {
 
   multi_array& operator+=(const multi_array& lhs) {
     if(sl == stloc::host && lhs.sl == stloc::host) {
-      std::transform(begin(), end(), lhs.begin(), begin(), [](T& a, T& b){return a+b;} );
+      #ifdef __OPENMP__
+      #pragma omp parallel for simd
+      #endif
+      for(Index i=0;i<num_elements();i++)
+        v[i] += lhs.v[i];
     } else if(sl == stloc::device && lhs.sl == stloc::device) {
       #ifdef __CUDACC__
       if(std::is_same<T, complex<double>>::value)
@@ -217,7 +221,11 @@ struct multi_array {
 
   multi_array& operator+=(const T scalar) {
     if(sl == stloc::host){
-      std::transform(begin(), end(), begin(), [&scalar](T& a){return scalar+a;} );
+      #ifdef __OPENMP__
+      #pragma omp parallel for simd
+      #endif
+      for(Index i=0;i<num_elements();i++)
+        v[i] += scalar;
     }else{
       #ifdef __CUDACC__
         ptw_sum_scal<<<(num_elements()+n_threads-1)/n_threads,n_threads>>>(num_elements(),begin(),scalar);
@@ -228,7 +236,11 @@ struct multi_array {
 
   multi_array& operator-=(const multi_array& lhs) {
     if(sl == stloc::host){
-      std::transform(begin(), end(), lhs.begin(), begin(), [](T& a, T& b){return a-b;} );
+      #ifdef __OPENMP__
+      #pragma omp parallel for simd
+      #endif
+      for(Index i=0;i<num_elements();i++)
+        v[i] -= lhs.v[i];
     } else {
       #ifdef __CUDACC__
       if(std::is_same<T, double>::value)
@@ -244,7 +256,11 @@ struct multi_array {
 
   multi_array& operator*=(T scalar) {
     if(sl == stloc::host){
-      std::transform(begin(), end(), begin(), [&scalar](T& a){return scalar*a;} );
+      #ifdef __OPENMP__
+      #pragma omp parallel for simd
+      #endif
+      for(Index i=0;i<num_elements();i++)
+        v[i] = scalar*v[i];
     }else{
       #ifdef __CUDACC__
       run_ptw_mult_scal(num_elements(), v, scalar);
@@ -255,7 +271,11 @@ struct multi_array {
 
   multi_array& operator/=(const T scalar) {
     if(sl == stloc::host){
-      std::transform(begin(), end(), begin(), [&scalar](T& a){return a/scalar;} );
+      #ifdef __OPENMP__
+      #pragma omp parallel for simd
+      #endif
+      for(Index i=0;i<num_elements();i++)
+        v[i] /= scalar;
     } else {
       cout << "ERROR: operator/= is not implemented on the device." << endl;
       exit(1);
@@ -266,7 +286,11 @@ struct multi_array {
   multi_array operator+(const multi_array& lhs) {
     if(sl == stloc::host){
       multi_array<T,d> out(e);
-      std::transform(begin(), end(), lhs.begin(), out.begin(), [](T& a, T& b){return a+b;} );
+      #ifdef __OPENMP__
+      #pragma omp parallel for simd
+      #endif
+      for(Index i=0;i<num_elements();i++)
+        out[i] = v[i] + lhs.v[i];
       return out;
     } else {
       cout << "ERROR: operator+ is not implemented on the device." << endl;
@@ -277,7 +301,12 @@ struct multi_array {
   multi_array operator-(const multi_array& lhs) {
     if(sl == stloc::host){
       multi_array<T,d> out(e);
-      std::transform(begin(), end(), lhs.begin(), out.begin(), [](T& a, T& b){return a-b;} );
+      #ifdef __OPENMP__
+      #pragma omp parallel for simd
+      #endif
+      for(Index i=0;i<num_elements();i++)
+        out[i] = v[i] - lhs.v[i];
+      return out;
     } else {
       cout << "ERROR: operator- is not implemented on the device." << endl;
       exit(1);
@@ -287,7 +316,11 @@ struct multi_array {
   multi_array operator*(const T scalar) {
     if(sl == stloc::host){
       multi_array<T,d> out(e);
-      std::transform(begin(), end(), out.begin(), [&scalar](const T& c){return c*scalar;} );
+      #ifdef __OPENMP__
+      #pragma omp parallel for simd
+      #endif
+      for(Index i=0;i<num_elements();i++)
+        out.v[i] = v[i]*scalar;
       return out;
     } else {
       cout << "ERROR: operator* is not implemented on the device." << endl;
