@@ -95,56 +95,58 @@ void componentwise_mat_fourier_omp(Index r, const mind<2>& N,  func F) {
   }
 }
 
-void rk4(double tau, mat& U, std::function<void(const mat&, mat&)> rhs) {
-  gt::start("rk4");
-  gt::start("rk4_alloc");
-  mat k1(U);
-  mat k2(U);
-  mat k3(U);
-  mat k4(U);
-  mat tmp(U);
-  gt::stop("rk4_alloc");
-  mat in = U;
 
-  // k1
-  gt::start("rk4_rhs");
-  rhs(in, k1);
-  gt::stop("rk4_rhs");
+struct rk4 {
 
-  // k2
-  tmp = k1;
-  tmp *= 0.5*tau;
-  tmp += in;
-  gt::start("rk4_rhs");
-  rhs(tmp, k2);
-  gt::stop("rk4_rhs");
+  rk4(mind<2> n) : k1(n), k2(n), k3(n), k4(n), tmp(n) {
+  }
 
-  // k3
-  tmp = k2;
-  tmp *= 0.5*tau;
-  tmp += in;
-  gt::start("rk4_rhs");
-  rhs(tmp, k3);
-  gt::stop("rk4_rhs");
+  void step(double tau, mat& U, std::function<void(const mat&, mat&)> rhs) {
+    gt::start("rk4");
 
-  // k4
-  tmp = k3;
-  tmp *= tau;
-  tmp += in;
-  gt::start("rk4_rhs");
-  rhs(tmp, k4);
-  gt::stop("rk4_rhs");
-  
-  k1 *= 1.0/6.0*tau;
-  U += k1;
-  k2 *= 1.0/6.0*tau*2.0; 
-  U += k2;
-  k3 *= 1.0/6.0*tau*2.0;
-  U += k3;
-  k4 *= 1.0/6.0*tau;
-  U += k4;
-  gt::stop("rk4");
-}
+    // k1
+    rhs(U, k1);
+
+    // k2
+    #ifdef __OPENMP__
+    #pragma omp parallel for simd
+    #endif
+    for(Index i=0;i<tmp.num_elements();i++) {
+      tmp.data()[i] = U.data()[i] + 0.5*tau*k1.data()[i];
+    }
+    rhs(tmp, k2);
+
+    // k3
+    #ifdef __OPENMP__
+    #pragma omp parallel for simd
+    #endif
+    for(Index i=0;i<tmp.num_elements();i++) {
+      tmp.data()[i] = U.data()[i] + 0.5*tau*k2.data()[i];
+    }
+    rhs(tmp, k3);
+
+    // k4
+    #ifdef __OPENMP__
+    #pragma omp parallel for simd
+    #endif
+    for(Index i=0;i<tmp.num_elements();i++) {
+      tmp.data()[i] = U.data()[i] + tau*k3.data()[i];
+    }
+    rhs(tmp, k4);
+    
+    #ifdef __OPENMP__
+    #pragma omp parallel for simd
+    #endif
+    for(Index i=0;i<U.num_elements();i++) {
+      U.data()[i] += tau*(1.0/6.0*k1.data()[i] + 1.0/3.0*k2.data()[i] + 1.0/3.0*k3.data()[i] + 1.0/6.0*k4.data()[i]);
+    }
+
+    gt::stop("rk4");
+  }
+
+private:
+  mat k1, k2, k3, k4, tmp;
+};
 
 
 
@@ -164,7 +166,7 @@ struct vlasov {
     gt::stop("coeff_C");
 
     blas.matmul(f.X,f.S,K);
-    rk4(tau, K, [this, &Ehat](const mat& K, mat& Kout) {
+    rk4_K.step(tau, K, [this, &Ehat](const mat& K, mat& Kout) {
       rhs_K(K, Kout, Ehat);
     });
 
@@ -179,7 +181,7 @@ struct vlasov {
     compute_D2(f.X, f.X, Ehat);
     gt::stop("coeff_D");
 
-    rk4(tau, f.S, [this](const mat& S, mat& Sout) {
+    rk4_S.step(tau, f.S, [this](const mat& S, mat& Sout) {
       rhs_S(S, Sout);
       Sout *= -1.0; // projector splitting integrator runs S backward in time
     });
@@ -187,7 +189,7 @@ struct vlasov {
 
     // L step
     blas.matmul_transb(f.V,f.S,L);
-    rk4(tau, L, [this](const mat& L, mat& Lout) {
+    rk4_L.step(tau, L, [this](const mat& L, mat& Lout) {
       rhs_L(L, Lout);
     });
     
@@ -229,7 +231,9 @@ struct vlasov {
 
   void rhs_L(const mat& L, mat& Lout) {
     gt::start("rhs_L");
-
+/*
+    // This is the reference implementation using vector operations
+    // which however is slower than the implementation below.
     ptw_mult_row(L, v_y, Ltmp);
     blas.matmul_transb(Ltmp, D1, Lout);
     Lout *= -1.0;
@@ -247,8 +251,32 @@ struct vlasov {
     Lout -= Ltmp2; 
 
     ptw_mult_row(Ltmp, v_x, Ltmp2);
+    gt::start("L_vec_test");
     Ltmp2 *= gi.Bhat;
     Lout -= Ltmp2;
+   */
+    
+    deriv_vy(L, Ltmp);
+    blas.matmul_transb(Ltmp, D2, Ltmp2);
+    
+    blas.matmul_transb(L, D1, Ltmp);
+
+    #pragma omp parallel for simd
+    for(Index ir=0;ir<gi.r;ir++) {
+      for(Index iv2=0;iv2<gi.n_v[1];iv2++) {
+        for(Index iv1=0;iv1<gi.n_v[0];iv1++) {
+          double L_dvx = (L(gi.lin_idx_v({(iv1+1)%gi.n_v[0], iv2}), ir) - L(gi.lin_idx_v({(iv1-1+gi.n_v[0])%gi.n_v[0], iv2}), ir))/(2.0*gi.h_v[0]);
+          double L_dvy = (L(gi.lin_idx_v({iv1,(iv2+1)%gi.n_v[1]}), ir) - L(gi.lin_idx_v({iv1, (iv2-1+gi.n_v[1])%gi.n_v[1]}), ir))/(2.0*gi.h_v[1]);
+
+          Lout(gi.lin_idx_v({iv1,iv2}), ir) =
+            - gi.v(1, iv2)*Ltmp(gi.lin_idx_v({iv1,iv2}), ir)
+            - gi.g*L_dvx
+            - Ltmp2(gi.lin_idx_v({iv1,iv2}), ir)
+            + gi.Bhat*gi.v(1, iv2)*L_dvx
+            - gi.Bhat*gi.v(0, iv1)*L_dvy;
+        }
+      }
+    }
     
     gt::stop("rhs_L");
   }
@@ -372,7 +400,7 @@ struct vlasov {
       }
   }
 
-  vlasov(grid_info _gi, vector<const double*> X0, vector<const double*> V0) : f(_gi.r, {_gi.n_x, _gi.N_v}), gi(_gi), gs(&blas) {
+  vlasov(grid_info _gi, vector<const double*> X0, vector<const double*> V0) : f(_gi.r, {_gi.n_x, _gi.N_v}), rk4_K({_gi.n_x,_gi.r}), rk4_S({_gi.r,_gi.r}), rk4_L({_gi.N_v,_gi.r}), gi(_gi), gs(&blas) {
 
     initialize(f, X0, V0, gi.h_x, gi.h_v[0]*gi.h_v[1], blas);
 
@@ -407,6 +435,7 @@ struct vlasov {
   mat K, L, Xtmp, Vtmp, Ltmp, Ltmp2;
   mat C1, C2, C3, C4, C5, D1, D2;
   vec v_x, v_y;
+  rk4 rk4_K, rk4_S, rk4_L;
   grid_info gi;
   blas_ops blas;
   orthogonalize gs;
