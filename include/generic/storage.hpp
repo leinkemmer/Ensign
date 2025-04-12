@@ -290,7 +290,7 @@ struct multi_array {
       #pragma omp parallel for simd
       #endif
       for(Index i=0;i<num_elements();i++)
-        out[i] = v[i] + lhs.v[i];
+        out.v[i] = v[i] + lhs.v[i];
       return out;
     } else {
       cout << "ERROR: operator+ is not implemented on the device." << endl;
@@ -305,7 +305,7 @@ struct multi_array {
       #pragma omp parallel for simd
       #endif
       for(Index i=0;i<num_elements();i++)
-        out[i] = v[i] - lhs.v[i];
+        out.v[i] = v[i] - lhs.v[i];
       return out;
     } else {
       cout << "ERROR: operator- is not implemented on the device." << endl;
