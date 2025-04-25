@@ -30,3 +30,30 @@ If you prefer to use Intel MKL as the BLAS and LAPACK backend set
     cmake -DMKL_ENABLED=ON -DCUDA_ENABLED=ON ..
     make
 
+## MacOS
+
+### OpenBLAS
+If OpenBLAS is used as a BLAS backend, a Fortran compiler has to be installed. Since Apple Clang, the native compiler collection of MacOS, does not ship a Fortran compiler, one has to install a Fortran compiler manually. This can be done via brew:
+
+    brew install flang
+
+Besides Flang, Ensign is also compatible with the `gfortran` compiler of GCC (see next section).
+
+If CMake does not find the Fortran compiler automatically, you have to set the `FC` environment variable accordingly:
+
+    export FC=/path/to/fortran/compiler
+
+#### OpenMP
+Moreover, Apple clang does not officially support OpenMP. Therefore, you have to use instead different compiler, for example GCC. Install `gcc-11` (or a newer version) again via brew:
+
+    brew install gcc@11
+
+Invoke the brew command
+
+    brew info gcc@11
+
+to find the installation path of the C, C++ and Fortran compilers of `gcc-11`. With this installation path, set the `CC`, `CXX` and `FC` (when OpenBLAS is used) environment variables to use the Homebrew `gcc-11` when building Ensign:
+
+    export CC=/path/to/gcc-11
+    export CXX=/path/to/g++-11
+    export FC=/path/to/gfortran-11
