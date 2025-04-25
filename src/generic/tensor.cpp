@@ -1,8 +1,8 @@
 #include <generic/tensor.hpp>
 
-namespace Ensign{
+namespace Ensign {
 
-namespace Tensor{
+namespace Tensor {
 
 /* Additions from kinetic-cme
 */

@@ -6,9 +6,9 @@
 #include <generic/index.hpp>
 #include <generic/utility.hpp>
 
-namespace Ensign{
+namespace Ensign {
 
-namespace Matrix{
+namespace Matrix {
 
 /* Set matrix to zero
 */

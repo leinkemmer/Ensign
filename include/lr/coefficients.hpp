@@ -4,7 +4,7 @@
 #include <generic/storage.hpp>
 #include <generic/matrix.hpp>
 
-namespace Ensign{
+namespace Ensign {
 
 /* Computes a low-rank coefficient that approximates \int a_i(x) b_j(x) \,dx.
  *

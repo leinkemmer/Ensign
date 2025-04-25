@@ -2,7 +2,7 @@
 
 #include <generic/common.hpp>
 
-namespace Ensign{
+namespace Ensign {
 
 // product of an array of numbers
 template<class T, size_t d>

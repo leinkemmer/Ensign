@@ -2,7 +2,7 @@
 
 #ifdef __CUDACC__
 
-namespace Ensign{
+namespace Ensign {
 
 template<class T>
 __global__ void fill_gpu(int n, T* v, T alpha);

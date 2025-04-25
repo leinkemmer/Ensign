@@ -13,7 +13,7 @@
 #include <string.h>
 #include <time.h>
 
-namespace Ensign{
+namespace Ensign {
 
 timer::timer() {
     counter = 0;

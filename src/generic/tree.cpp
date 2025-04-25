@@ -1,6 +1,6 @@
 #include <generic/tree.hpp>
 
-namespace Ensign{
+namespace Ensign {
 
 // TODO: Add cast functions `to_internal_node`, `to_external_node`
 

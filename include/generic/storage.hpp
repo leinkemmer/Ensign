@@ -5,7 +5,7 @@
 #include <generic/kernels.hpp>
 #include <iomanip>
 
-namespace Ensign{
+namespace Ensign {
 
 template<class T, size_t d>
 struct multi_array {

@@ -1,6 +1,6 @@
 #include <generic/netcdf.hpp>
 
-namespace Ensign{
+namespace Ensign {
 
 #ifdef __NETCDF__
 #include <netcdf.h>

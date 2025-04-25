@@ -57,7 +57,7 @@ const int n_threads_omp = 32;
 #endif
 
 
-namespace Ensign{
+namespace Ensign {
 
 // make_unique implementation for compiler that do not support it yet
 template<typename T, typename... Args>

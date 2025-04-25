@@ -6,7 +6,7 @@
 #include <generic/common.hpp>
 
 
-namespace Ensign{
+namespace Ensign {
 
 /// This timer class measures the elapsed time between two events. Timers can be
 /// started and stopped repeatedly. The total time as well as the average time

@@ -1,9 +1,9 @@
 #include <generic/matrix.hpp>
 #include <generic/timer.hpp>
 
-namespace Ensign{
+namespace Ensign {
 
-namespace Matrix{
+namespace Matrix {
 
 #ifndef __MKL__
 extern "C" {

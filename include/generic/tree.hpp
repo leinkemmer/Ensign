@@ -13,7 +13,7 @@
 
 #include <netcdf.h>
 
-namespace Ensign{
+namespace Ensign {
 
 #ifdef __OPENMP__
 #pragma omp declare reduction(+ : Ensign::multi_array<double, 2> : omp_out += omp_in)  \

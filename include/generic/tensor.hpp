@@ -2,7 +2,7 @@
 
 #include <lr/lr.hpp>
 
-namespace Ensign{
+namespace Ensign {
 
 /* Additions from kinetic-cme
 */

@@ -3,7 +3,7 @@
 #include <generic/common.hpp>
 #include <generic/storage.hpp>
 
-namespace Ensign{
+namespace Ensign {
 
 /* FFT for arbitrary dimensional data, specified by dim.
    The class can also be used to e.g. perform multiple 1d FFTS on a 2d array (in this case dim=1 and d=2).

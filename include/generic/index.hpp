@@ -6,7 +6,7 @@
 #include <generic/common.hpp>
 #include <generic/storage.hpp>
 
-namespace Ensign{
+namespace Ensign {
 
 namespace IndexFunction {
 template <class InputIt, class InputItInt>

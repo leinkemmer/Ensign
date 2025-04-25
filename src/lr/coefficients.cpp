@@ -1,6 +1,6 @@
 #include <lr/coefficients.hpp>
 
-namespace Ensign{
+namespace Ensign {
 
 template<class T>
 void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, T w, multi_array<T,2>& out, const Ensign::Matrix::blas_ops& blas) {

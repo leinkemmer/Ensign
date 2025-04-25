@@ -2,7 +2,7 @@
 
 #ifdef __CUDACC__
 
-namespace Ensign{
+namespace Ensign {
 
 template<class T>
 __global__ void copy_R(int m, int n, T* Q, T* R, T w) {

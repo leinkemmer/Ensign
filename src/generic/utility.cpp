@@ -1,6 +1,6 @@
 #include <generic/utility.hpp>
 
-namespace Ensign{
+namespace Ensign {
 
 #ifdef __CUDACC__
 void* gpu_malloc(size_t size) {

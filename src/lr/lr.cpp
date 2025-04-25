@@ -11,7 +11,7 @@
 #include <curand.h>
 #endif
 
-namespace Ensign{
+namespace Ensign {
 
 template<class T>
 std::function<T(T*,T*)> inner_product_from_weight(T* w, Index N) {

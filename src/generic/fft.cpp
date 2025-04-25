@@ -3,7 +3,7 @@
 #include <cufft.h>
 #endif
 
-namespace Ensign{
+namespace Ensign {
 
 array<fftw_plan,2> create_plans_1d(Index dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq){
   array<fftw_plan,2> out;

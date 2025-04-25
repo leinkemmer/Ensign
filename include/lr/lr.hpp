@@ -5,7 +5,7 @@
 #include <generic/kernels.hpp>
 #include <generic/matrix.hpp>
 
-namespace Ensign{
+namespace Ensign {
 
 /* Class to store the low-rank factors (X, S, V) that are used in the computation.
 *
