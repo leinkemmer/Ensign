@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.27 FATAL_ERROR)
-project(Ensign VERSION 1.0.1)
+project(Ensign 
+  VERSION 1.0.1
+  DESCRIPTION "Framework for dynamical low-rank simulations"
+  HOMEPAGE_URL "https://github.com/leinkemmer/Ensign"
+  LANGUAGES CXX
+)
 enable_testing()
 
 include(CMakePackageConfigHelpers)
@@ -18,6 +23,20 @@ if(NOT CMAKE_BUILD_TYPE)
   )
 endif(NOT CMAKE_BUILD_TYPE)
 
+
+################################################################################
+# Configuration options
+################################################################################
+
+option("Sanitizer" "Enable address sanitizer" OFF)
+option("OPENMP" "Enable OpenMP" ON)
+option("CUDA_ENABLED" "Enable CUDA" OFF)
+option("INSTALL_THIRD_PARTY_LIBS" "Install FFTW3 and OpenBLAS" OFF)
+option("MKL_ENABLED" "Enable Intel MKL" OFF)
+set("MKL_INCLUDEDIR" "" CACHE PATH "Path to include directory for MKL")
+set("MKL_LIBDIR" "" CACHE PATH "Path to lib directory for MKL")
+
+
 ################################################################################
 # Compiler options
 ################################################################################
@@ -33,9 +52,9 @@ if(CMAKE_CXX_COMPILER_ID MATCHES Intel)
       "-O3 -ip -xHOST"
     )
 
-else(CMAKE_CXX_COMPILER_ID MATCHES GNU)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES GNU)
     set(CMAKE_CXX_FLAGS
-      "${CMAKE_CXX_FLAGS} -Wall -fPIC"
+      "${CMAKE_CXX_FLAGS} -Wall -fPIC -Wno-maybe-uninitialized"
     )
     set(CMAKE_CXX_FLAGS_DEBUG
       "-O0 -g3 -ggdb3 -Wall -D_GLIBCXX_DEBUG -fno-omit-frame-pointer -ftrapv"
@@ -43,20 +62,12 @@ else(CMAKE_CXX_COMPILER_ID MATCHES GNU)
     set(CMAKE_CXX_FLAGS_RELEASE
       "-O3 -DNDEBUG -march=native -mtune=native"
     )
+
+elseif(CMAKE_CXX_COMPILER_ID MATCHES Clang)
+    set(CMAKE_CXX_FLAGS
+      "${CMAKE_CXX_FLAGS} -Wall -fPIC -Wno-uninitialized"
+    )
 endif()
-
-
-################################################################################
-# Configuration options
-################################################################################
-
-option("Sanitizer" "Enable address sanitizer" OFF)
-option("OPENMP" "Enable OpenMP" ON)
-option("CUDA_ENABLED" "Enable CUDA" OFF)
-option("INSTALL_THIRD_PARTY_LIBS" "Install FFTW3 and OpenBLAS" OFF)
-option("MKL_ENABLED" "Enable Intel MKL" OFF)
-set("MKL_INCLUDEDIR" "" CACHE PATH "Path to include directory for MKL")
-set("MKL_LIBDIR" "" CACHE PATH "Path to lib directory for MKL")
 
 
 ################################################################################
@@ -114,8 +125,6 @@ if(NOT eigen3_FOUND)
     GIT_PROGRESS ON
     CMAKE_ARGS
       -DBUILD_TESTING=OFF
-      -DEIGEN_BUILD_TESTING=OFF
-      -DEIGEN_MPL2_ONLY=ON
       -DEIGEN_BUILD_PKGCONFIG=OFF
       -DEIGEN_BUILD_DOC=OFF
     UPDATE_COMMAND ""
@@ -123,6 +132,13 @@ if(NOT eigen3_FOUND)
   )
   ExternalProject_Get_Property(eigen SOURCE_DIR)
   set(eigen_HDR_DIR ${SOURCE_DIR})
+endif()
+
+
+################################################################################
+# Fortran
+if(NOT ${MKL_ENABLED})
+  enable_language(Fortran)
 endif()
 
 
@@ -204,26 +220,41 @@ else()
   message("OpenBLAS is used by default. MKL support is available by setting MKL_ENABLED to ON (set MKLROOT environment variable appropriately).")
   find_package(OpenBLAS QUIET)
   if(NOT openblas_FOUND)
-    ExternalProject_Add(openblas
-      GIT_REPOSITORY "https://github.com/OpenMathLib/OpenBLAS.git"
-      GIT_TAG "v0.3.29"
-      GIT_SHALLOW ON
-      GIT_PROGRESS ON
-      CMAKE_ARGS
-        -Wno-dev
-        -DBUILD_TESTING=OFF
-        -DBUILD_SHARED_LIBS=OFF
-        -DBUILD_LAPACK_DEPRECATED=OFF
-        -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
-        -DUSE_OPENMP=${OPENMP}
-        -DCMAKE_INSTALL_LIBDIR=lib
-      UPDATE_COMMAND ""
-    )
+    if(${INSTALL_THIRD_PARTY_LIBS})
+      ExternalProject_Add(openblas
+        GIT_REPOSITORY "https://github.com/OpenMathLib/OpenBLAS.git"
+        GIT_TAG "v0.3.29"
+        GIT_SHALLOW ON
+        GIT_PROGRESS ON
+        CMAKE_ARGS
+          -Wno-dev
+          -DBUILD_TESTING=OFF
+          -DBUILD_SHARED_LIBS=OFF
+          -DBUILD_LAPACK_DEPRECATED=OFF
+          -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+        UPDATE_COMMAND ""
+      )
+    else()
+      ExternalProject_Add(openblas
+        GIT_REPOSITORY "https://github.com/OpenMathLib/OpenBLAS.git"
+        GIT_TAG "v0.3.28"
+        GIT_SHALLOW ON
+        GIT_PROGRESS ON
+        CMAKE_ARGS
+          -Wno-dev
+          -DBUILD_TESTING=OFF
+          -DBUILD_SHARED_LIBS=OFF
+          -DBUILD_LAPACK_DEPRECATED=OFF
+          -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+        UPDATE_COMMAND ""
+        INSTALL_COMMAND ""
+      ) 
+    endif()
     ExternalProject_Get_Property(openblas SOURCE_DIR)
     ExternalProject_Get_Property(openblas BINARY_DIR)
-    set(openblas_HDR_DIRS ${CMAKE_INSTALL_PREFIX})
-    set(openblas_LIB_DIRS ${CMAKE_INSTALL_PREFIX}/lib)
-    set(openblas_LIBRARY ${CMAKE_INSTALL_PREFIX}/lib/libopenblas.a)
+    set(openblas_HDR_DIRS ${SOURCE_DIR};${BINARY_DIR})
+    set(openblas_LIB_DIRS ${BINARY_DIR}/lib)
+    set(openblas_LIBRARY ${BINARY_DIR}/lib/libopenblas.a)
   endif()
 endif()
 
@@ -257,8 +288,6 @@ target_include_directories(Ensign
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
-
-target_compile_options(Ensign PRIVATE -Wall -Wno-maybe-uninitialized)
 
 # If Ensign is being bundled, disable tests and examples
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
@@ -305,7 +334,7 @@ else()
   else()
     target_include_directories(Ensign
       PUBLIC 
-      "$<BUILD_INTERFACE:${openblas_HDR_DIRS}/include/openblas>"
+      "$<BUILD_INTERFACE:${openblas_HDR_DIRS}>"
       "$<INSTALL_INTERFACE:include/openblas>"
     )
     target_link_directories(Ensign
@@ -343,7 +372,14 @@ else()
 endif()
 
 if(NOT ${MKL_ENABLED})
-  target_link_libraries(Ensign PUBLIC "-lgfortran")
+  target_link_directories(Ensign PUBLIC ${CMAKE_Fortran_IMPLICIT_LINK_DIRECTORIES})
+
+  if(CMAKE_Fortran_COMPILER_ID MATCHES GNU)
+    target_link_libraries(Ensign PUBLIC "-lgfortran")
+  elseif(CMAKE_Fortran_COMPILER_ID MATCHES Flang)
+    target_link_libraries(Ensign PUBLIC "-lFortranRuntime")
+    target_link_libraries(Ensign PUBLIC "-lFortranDecimal")
+  endif()
 endif()
 
 
