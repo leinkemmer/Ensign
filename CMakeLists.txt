@@ -234,6 +234,7 @@ else()
           -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
         UPDATE_COMMAND ""
       )
+      set(openblas_INSTALLED_DIR ${CMAKE_INSTALL_PREFIX})
     else()
       ExternalProject_Add(openblas
         GIT_REPOSITORY "https://github.com/OpenMathLib/OpenBLAS.git"
@@ -245,16 +246,14 @@ else()
           -DBUILD_TESTING=OFF
           -DBUILD_SHARED_LIBS=OFF
           -DBUILD_LAPACK_DEPRECATED=OFF
-          -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+          -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/installed-openblas
         UPDATE_COMMAND ""
-        INSTALL_COMMAND ""
       ) 
+      set(openblas_INSTALLED_DIR ${CMAKE_BINARY_DIR}/installed-openblas)
     endif()
-    ExternalProject_Get_Property(openblas SOURCE_DIR)
-    ExternalProject_Get_Property(openblas BINARY_DIR)
-    set(openblas_HDR_DIRS ${SOURCE_DIR};${BINARY_DIR})
-    set(openblas_LIB_DIRS ${BINARY_DIR}/lib)
-    set(openblas_LIBRARY ${BINARY_DIR}/lib/libopenblas.a)
+    set(openblas_HDR_DIRS ${openblas_INSTALLED_DIR}/include/openblas)
+    set(openblas_LIB_DIRS ${openblas_INSTALLED_DIR}/lib)
+    set(openblas_LIBRARY ${openblas_INSTALLED_DIR}/lib/libopenblas.a)
   endif()
 endif()
 
