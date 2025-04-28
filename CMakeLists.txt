@@ -3,10 +3,11 @@ project(Ensign
   VERSION 1.0.1
   DESCRIPTION "Framework for dynamical low-rank simulations"
   HOMEPAGE_URL "https://github.com/leinkemmer/Ensign"
-  LANGUAGES CXX
+  LANGUAGES CXX C
 )
 enable_testing()
 
+include(CheckCXXCompilerFlag)
 include(CMakePackageConfigHelpers)
 include(ExternalProject)
 include(FetchContent)
@@ -60,8 +61,13 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES GNU)
       "-O0 -g3 -ggdb3 -Wall -D_GLIBCXX_DEBUG -fno-omit-frame-pointer -ftrapv"
     )
     set(CMAKE_CXX_FLAGS_RELEASE
-      "-O3 -DNDEBUG -march=native -mtune=native"
+      "-O3 -DNDEBUG"
     )
+
+    CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
+    if(COMPILER_SUPPORTS_MARCH_NATIVE)
+        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
+    endif()
 
 elseif(CMAKE_CXX_COMPILER_ID MATCHES Clang)
     set(CMAKE_CXX_FLAGS
@@ -221,36 +227,23 @@ else()
   find_package(OpenBLAS QUIET)
   if(NOT openblas_FOUND)
     if(${INSTALL_THIRD_PARTY_LIBS})
-      ExternalProject_Add(openblas
-        GIT_REPOSITORY "https://github.com/OpenMathLib/OpenBLAS.git"
-        GIT_TAG "v0.3.29"
-        GIT_SHALLOW ON
-        GIT_PROGRESS ON
-        CMAKE_ARGS
-          -Wno-dev
-          -DBUILD_TESTING=OFF
-          -DBUILD_SHARED_LIBS=OFF
-          -DBUILD_LAPACK_DEPRECATED=OFF
-          -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
-        UPDATE_COMMAND ""
-      )
       set(openblas_INSTALLED_DIR ${CMAKE_INSTALL_PREFIX})
     else()
-      ExternalProject_Add(openblas
-        GIT_REPOSITORY "https://github.com/OpenMathLib/OpenBLAS.git"
-        GIT_TAG "v0.3.28"
-        GIT_SHALLOW ON
-        GIT_PROGRESS ON
-        CMAKE_ARGS
-          -Wno-dev
-          -DBUILD_TESTING=OFF
-          -DBUILD_SHARED_LIBS=OFF
-          -DBUILD_LAPACK_DEPRECATED=OFF
-          -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/installed-openblas
-        UPDATE_COMMAND ""
-      ) 
       set(openblas_INSTALLED_DIR ${CMAKE_BINARY_DIR}/installed-openblas)
     endif()
+    ExternalProject_Add(openblas
+      GIT_REPOSITORY "https://github.com/OpenMathLib/OpenBLAS.git"
+      GIT_TAG "v0.3.29"
+      GIT_SHALLOW ON
+      GIT_PROGRESS ON
+      CMAKE_ARGS
+        -Wno-dev
+        -DBUILD_TESTING=OFF
+        -DBUILD_SHARED_LIBS=OFF
+        -DBUILD_LAPACK_DEPRECATED=OFF
+        -DCMAKE_INSTALL_PREFIX=${openblas_INSTALLED_DIR}
+      UPDATE_COMMAND ""
+    )
     set(openblas_HDR_DIRS ${openblas_INSTALLED_DIR}/include/openblas)
     set(openblas_LIB_DIRS ${openblas_INSTALLED_DIR}/lib)
     set(openblas_LIBRARY ${openblas_INSTALLED_DIR}/lib/libopenblas.a)
