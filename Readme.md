@@ -1,4 +1,4 @@
-# Readme #
+# Readme
 
 The **Ensign** software framework facilitates the efficient implementation of dynamical low-rank algorithms both on multi-core CPU and GPUs. It provides many primitives to make the implementation of such schemes easier and can work easily with both methods based on the projector splitting and the unconventional integrator. For more details on the dynamical low-rank method and in particular the problems implemented in the examples folder see
 
@@ -13,7 +13,7 @@ To build the software the following are needed
 - C++11 compatible C++ compiler
 - Fortran compiler (if the included OpenBLAS is used)
 - CUDA (if GPU support is desired)
-- NetCDF (optinal, required for writing snapshots to disk)
+- NetCDF (optional, required for writing snapshots to disk)
 
 To build the example programs and tests execute
 
@@ -43,17 +43,19 @@ If CMake does not find the Fortran compiler automatically, you have to set the `
 
     export FC=/path/to/fortran/compiler
 
-#### OpenMP
-Moreover, Apple clang does not officially support OpenMP. Therefore, you have to use instead different compiler, for example GCC. Install `gcc-11` (or a newer version) again via brew:
+Additionally, you might also have to set the CMake cache entry `CMAKE_Fortran_COMPILER` to the full path of the Fortran compiler.
 
-    brew install gcc@11
+#### OpenMP
+Moreover, Apple clang does not officially support OpenMP. Therefore, you have to use instead different compiler, for example GCC. Install `gcc-14` again via brew:
+
+    brew install gcc@14
 
 Invoke the brew command
 
-    brew info gcc@11
+    brew info gcc@14
 
-to find the installation path of the C, C++ and Fortran compilers of `gcc-11`. With this installation path, set the `CC`, `CXX` and `FC` (when OpenBLAS is used) environment variables to use the Homebrew `gcc-11` when building Ensign:
+to find the installation path of the C, C++ and Fortran compilers of `gcc-14`. With this installation path, set the `CC`, `CXX` and `FC` (when OpenBLAS is used) environment variables to use the Homebrew `gcc-14` when building Ensign:
 
-    export CC=/path/to/gcc-11
-    export CXX=/path/to/g++-11
-    export FC=/path/to/gfortran-11
+    export CC=/path/to/gcc-14
+    export CXX=/path/to/g++-14
+    export FC=/path/to/gfortran-14
