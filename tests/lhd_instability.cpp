@@ -345,17 +345,19 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
  }
 
 
- SECTION("POISSON") {
+ SECTION("POISSON_AND_NU") {
   test_config tc(3);
   grid_info gi_e = tc.gi;
   grid_info gi_i = tc.gi;
   gi_i.q *= -1.0;
 
-  vec n_e({gi_e.n_x}), n_i({gi_i.n_x});
+  vec n_e({gi_e.n_x}), n_i({gi_i.n_x}), hy_e({gi_e.n_x}), hy_i({gi_i.n_x});
   for(Index i=0;i<gi_e.n_x;i++) {
     double y = gi_e.x(i);
-    n_e(i) = 0.1*cos(2.0*M_PI/1.414*y);
-    n_i(i) = 0.1*sin(2.0*M_PI/1.414*y);
+    n_e(i) = 0.2 + 0.1*cos(2.0*M_PI/1.414*y);
+    n_i(i) = 0.2 + 0.1*sin(2.0*M_PI/1.414*y);
+    hy_e(i) = 0.1 + 0.05*sin(4.0*M_PI/1.414*y);
+    hy_i(i) = 0.1 + 0.05*cos(4.0*M_PI/1.414*y);
   }
 
   poisson po(gi_e, gi_i);
@@ -374,6 +376,13 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
   cout << "ERROR Poisson: " << err/m << " " << abs(po.ee-ee_exact)/ee_exact << endl;
   REQUIRE( err/m <= 1e-14 );
   REQUIRE( abs(po.ee-ee_exact)/ee_exact <= 1e-14 );
+
+  // check nu
+  double nu_exact = 0.0993588362775873*charge/mass;
+  double nu = po.compute_anomcoll(n_e, n_i, hy_e, hy_i);
+  double err_nu = abs(nu - nu_exact)/abs(nu_exact); 
+  cout << "ERROR nu: " << err_nu << endl;
+  REQUIRE( err_nu <= 1e-14 );
  }
 
 }
