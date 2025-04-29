@@ -171,8 +171,8 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
 
     // third term
     double Bhat = charge*Omega*B/mass;
-    exact1 += Bhat*0.03229652179979716*sin(4.443553965473541*y);
-    exact2 += Bhat*(-0.02278021005896862-0.002278021005896863*cos(4.443553965473541*y));
+    exact1 += Bhat*(-0.03229652179979716)*sin(4.443553965473541*y);
+    exact2 += Bhat*(0.02278021005896862+0.002278021005896863*cos(4.443553965473541*y));
     
     err1 = max(err1, abs(Kout(i,0)-exact1));
     err2 = max(err2, abs(Kout(i,1)-exact2));
@@ -231,8 +231,8 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
       exact2 += exp(-20.*pow(vx,2)+(-8.8-22.*vy)*vy)*(0.912522405699479+4.562612028497394*vy);
       // fourth term
       double Bhat = charge*Omega*B/mass;
-      exact1 += conv(0)*Bhat*exp((8.-20.*vx)*vx-22.*pow(vy,2))*(3.594631712937776+1.797315856468888*vx)*vy;
-      exact2 += conv(1)*Bhat*exp(-20.*pow(vx,2)+(-8.8-22.*vy)*vy)*vx*(3.650089622797918+1.6591316467263262*vy);
+      exact1 += conv(0)*Bhat*exp((8.-20.*vx)*vx-22.*pow(vy,2))*(-3.594631712937776-1.797315856468888*vx)*vy;
+      exact2 += conv(1)*Bhat*exp(-20.*pow(vx,2)+(-8.8-22.*vy)*vy)*vx*(-3.650089622797918-1.6591316467263262*vy);
 
       err1 = max(err1, abs(Lout(gi.lin_idx_v({i,j}),0)-exact1));
       err2 = max(err2, abs(Lout(gi.lin_idx_v({i,j}),1)-exact2));
@@ -293,8 +293,8 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
   mat Sexact({gi.r, gi.r});
   double Bhat = charge*Omega*B/mass;
   Sexact(0,0) = 0.001013254646978351 + conv(0)*g*0 + 0;
-  Sexact(0,1) = 0.004694139206661268 - conv(0)*g*0.1293141844911448 - 0.07129972386184644 - conv(0)*Bhat*0.02715597874314041;
-  Sexact(1,0) = 0.0 + conv(1)*g*0.12931418449114485 + 0.03556140073506485 + conv(1)*Bhat*0.02715597874314043;
+  Sexact(0,1) = 0.004694139206661268 - conv(0)*g*0.1293141844911448 - 0.07129972386184644 + conv(0)*Bhat*0.02715597874314041;
+  Sexact(1,0) = 0.0 + conv(1)*g*0.12931418449114485 + 0.03556140073506485 - conv(1)*Bhat*0.02715597874314043;
   Sexact(1,1) = -0.0010132546469783514 + conv(1)*g*0 + 0;
 
   cout << "ERROR RHS_S: ";

@@ -220,10 +220,10 @@ struct vlasov {
     Ktmp = K;
     Ktmp *= gi.Bhat;
     blas.matmul_transb(Ktmp, C4, Ktmp2);
-    Kout += Ktmp2;
+    Kout -= Ktmp2;
 
     blas.matmul_transb(Ktmp, C5, Ktmp2);
-    Kout -= Ktmp2;
+    Kout += Ktmp2;
 
     gt::stop("rhs_K");
   }
@@ -272,8 +272,8 @@ struct vlasov {
             - gi.v(1, iv2)*Ltmp(gi.lin_idx_v({iv1,iv2}), ir)
             - gi.g*L_dvx
             - Ltmp2(gi.lin_idx_v({iv1,iv2}), ir)
-            + gi.Bhat*gi.v(1, iv2)*L_dvx
-            - gi.Bhat*gi.v(0, iv1)*L_dvy;
+            - gi.Bhat*gi.v(1, iv2)*L_dvx
+            + gi.Bhat*gi.v(0, iv1)*L_dvy;
         }
       }
     }
@@ -298,11 +298,11 @@ struct vlasov {
 
     blas.matmul_transb(S, C4, Stmp);
     Stmp *= gi.Bhat;
-    Sout += Stmp;
+    Sout -= Stmp;
 
     blas.matmul_transb(S, C5, Stmp);
     Stmp *= gi.Bhat;
-    Sout -= Stmp;
+    Sout += Stmp;
   }
 
 
