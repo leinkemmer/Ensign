@@ -65,6 +65,12 @@ grid_info modify_r(grid_info gi, Index r) {
   return gi;
 }
 
+double integrate_x(const vec& n, const grid_info& gi) {
+  double s = 0.0;
+  for(Index i=0;i<gi.n_x;i++)
+    s += gi.h_x*n(i);
+  return s;
+}
 
 // Note that using a std::function object has a non-negligible performance overhead
 template<class func>
@@ -344,22 +350,31 @@ struct vlasov {
   }
 
 
-  void compute_nh(vec& nout, vec& hxout, vec& hyout) {
-    vec int_V({gi.r});
+  double compute_nh(vec& nout, vec& hxout, vec& hyout) {
+    vec int_V({gi.r}), tmp({gi.n_x});
     mat K(f.X);
     mat Vtmp(f.V);
     blas.matmul(f.X,f.S,K);
 
+    // n
     integrate(f.V,gi.h_v[0]*gi.h_v[1],int_V,blas);
     blas.matvec(K,int_V,nout);
     
+    // hx
     ptw_mult_row(f.V, v_x, Vtmp);
     integrate(Vtmp,gi.h_v[0]*gi.h_v[1],int_V,blas);
     blas.matvec(K,int_V,hxout);
     
+    // hy
     ptw_mult_row(f.V, v_y, Vtmp);
     integrate(Vtmp,gi.h_v[0]*gi.h_v[1],int_V,blas);
     blas.matvec(K,int_V,hyout);
+
+    // kinetic energy
+    ptw_mult_row(f.V, v_sq, Vtmp);
+    integrate(Vtmp,gi.h_v[0]*gi.h_v[1],int_V,blas);
+    blas.matvec(K,int_V,tmp);
+    return gi.m*integrate_x(tmp, gi); 
   }
 
 
@@ -429,12 +444,17 @@ struct vlasov {
     componentwise_vec_omp(gi.n_v, [this](Index idx, mind<2> i) {
       v_y(idx) = gi.v(1, i[1]);
     });
+    
+    v_sq.resize({gi.N_v});
+    componentwise_vec_omp(gi.n_v, [this](Index idx, mind<2> i) {
+      v_sq(idx) = 0.5*(pow(gi.v(0, i[0]), 2) + pow(gi.v(1, i[1]), 2));
+    });
   }
 
   lr2<double> f;
   mat K, L, Xtmp, Vtmp, Ltmp, Ltmp2;
   mat C1, C2, C3, C4, C5, D1, D2;
-  vec v_x, v_y;
+  vec v_x, v_y, v_sq;
   rk4 rk4_K, rk4_S, rk4_L;
   grid_info gi;
   blas_ops blas;

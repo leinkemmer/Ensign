@@ -45,7 +45,6 @@ int main(int argc, char** argv) {
   double Omega_e = 2.5;
   double Omega_i = 0.1;
   double alpha = 2e-4;
-  //double alpha = 8e-5; // this is in the paper
   double T_e = 6.25e-4;
   double T_i = T_e;
 
@@ -67,7 +66,7 @@ int main(int argc, char** argv) {
   vec vv1_e({gi_e.N_v}), vv1_i({gi_i.N_v});
   componentwise_vec_omp(gi_e.n_v, [&vv1_e, &vv1_i, &gi_e, &gi_i, &T_e, &T_i, &Omega_e, &Omega_i](Index idx, array<Index,2> i) {
     mfp<2> v_e  = gi_e.v(i);
-    vv1_e(idx) = gi_e.m/(2.0*M_PI*T_e)*exp(-gi_e.m/(2.0*T_e)*(pow(v_e[1]+gi_e.g/Omega_e,2)+pow(v_e[0],2)));
+    vv1_e(idx) = gi_e.m/(2.0*M_PI*T_e)*exp(-gi_e.m/(2.0*T_e)*(pow(v_e[1]-gi_e.g/Omega_e,2)+pow(v_e[0],2)));
     mfp<2> v_i  = gi_i.v(i);
     vv1_i(idx) = gi_i.m/(2.0*M_PI*T_i)*exp(-gi_i.m/(2.0*T_i)*(pow(v_i[1]+gi_i.g/Omega_i,2)+pow(v_i[0],2)));
   });
@@ -94,6 +93,17 @@ int main(int argc, char** argv) {
   }
 
   std::ofstream fs("evolution.data");
+  fs << "# electric_energy nu mass_err_electrons mass_err_ions mom_err_electrons mom_err_ions energy_err kinetic_energy_electrons kinetic_energy_ions sum_g_energy_electrons sum_g_energy_ions" << endl;
+  double ken_e_0 = vlasov_e.compute_nh(n_e, hx_e, hy_e);
+  double ken_i_0 = vlasov_i.compute_nh(n_i, hx_i, hy_i);
+  double mass_e_0 = integrate_x(n_e, gi_e);
+  double mass_i_0 = integrate_x(n_i, gi_i);
+  double mom_e_0 = integrate_x(hy_e, gi_e);
+  double mom_i_0 = integrate_x(hy_i, gi_i);
+  poi.compute(n_e, n_i);
+  double energy_0 = ken_e_0 + ken_i_0 + poi.ee;
+  double sum_g_energy_e = 0.0, sum_g_energy_i = 0.0;
+
   double t = 0.0;
   Index num_steps = ceil(t_final/deltat);
   gt::start("simulation");
@@ -102,12 +112,19 @@ int main(int argc, char** argv) {
       deltat = t_final - t;
 
     gt::start("diagnostics");
-    vlasov_e.compute_nh(n_e, hx_e, hy_e);
-    vlasov_i.compute_nh(n_i, hx_i, hy_i);
+    double ken_e = vlasov_e.compute_nh(n_e, hx_e, hy_e);
+    double ken_i = vlasov_i.compute_nh(n_i, hx_i, hy_i);
     poi.compute(n_e, n_i);
     double nu = poi.compute_anomcoll(n_e, n_i, hy_e, hy_i);
+    double mass_e = integrate_x(n_e, gi_e);
+    double mass_i = integrate_x(n_i, gi_i);
+    double mom_e = integrate_x(hy_e, gi_e);
+    double mom_i = integrate_x(hy_i, gi_i);
+    sum_g_energy_e -= deltat*gi_e.g*gi_e.m*integrate_x(hx_e, gi_e);
+    sum_g_energy_i -= deltat*gi_i.g*gi_i.m*integrate_x(hx_i, gi_i);
+    double energy = ken_e + ken_i + poi.ee + sum_g_energy_e + sum_g_energy_i;
     gt::stop("diagnostics");
-    fs << t << "\t\t" << poi.ee << "\t\t" << nu << endl;
+    fs << t << "\t\t" << poi.ee << "\t\t" << nu << "\t\t" << abs(mass_e-mass_e_0)/mass_e_0 << "\t\t" << abs(mass_i-mass_i_0)/mass_i_0 << "\t\t" << abs(mom_e-mom_e_0) << "\t\t" << abs(mom_i-mom_i_0) << "\t\t" << abs(energy-energy_0)/abs(energy_0) << " " << ken_e << " " << ken_i << " " << sum_g_energy_e << " " << sum_g_energy_i << endl;
 
     gt::start("step");
     vlasov_e.step(deltat, poi.E);
@@ -116,7 +133,7 @@ int main(int argc, char** argv) {
 
     t += deltat;
   
-    if(snapshots>2 && n != 0 && (n % int(ceil(num_steps/double(snapshots-1))) == 0)) {
+    if(snapshots>2 && n != 0 && ((n+1) % int(ceil(num_steps/double(snapshots-1))) == 0)) {
       std::stringstream ss_e, ss_i;
       ss_e << "f_e_" << t << ".nc";
       ss_i << "f_i_" << t << ".nc";

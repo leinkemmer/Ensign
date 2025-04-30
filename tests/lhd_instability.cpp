@@ -8,7 +8,7 @@ mfp<3> b = {1.414, 1.125, 1.122};
 double g = 0.5;
 double B = 0.8;
 double Omega = 2.5;
-double charge = -1.0;
+double charge = -0.5;
 double mass = 1.0/25.0;
 double alpha = 2e-4;
 double T_e = 6.25e-5;
@@ -300,6 +300,7 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
   cout << "ERROR RHS_S: ";
   for(Index i=0;i<2;i++) {
     for(Index j=0;j<2;j++) {
+      cout << Sexact(i,j) << " " << Sout(i,j) << endl;
       double err = abs(Sexact(i,j)-Sout(i,j));
       cout << err <<  " ";
       REQUIRE( err <= 3.5e-3 ); 
@@ -366,19 +367,19 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
   double err = 0.0, m = 0.0;
   for(Index i=0;i<gi_e.n_x;i++) {
      double y = gi_e.x(i);
-     double exact = -0.022504508953194*cos(4.443553965473541*y)-0.022504508953194*sin(4.443553965473541*y);
+     double exact = abs(charge)*(-0.022504508953194*cos(4.443553965473541*y)-0.022504508953194*sin(4.443553965473541*y));
      double val = po.E(i);
      err = max(err, abs(val-exact));
      m = max(m, abs(exact));
   }
 
-  double ee_exact = 0.0003580622167196429;
+  double ee_exact = pow(charge,2)*0.0003580622167196429;
   cout << "ERROR Poisson: " << err/m << " " << abs(po.ee-ee_exact)/ee_exact << endl;
   REQUIRE( err/m <= 1e-14 );
   REQUIRE( abs(po.ee-ee_exact)/ee_exact <= 1e-14 );
 
   // check nu
-  double nu_exact = 0.0993588362775873*charge/mass;
+  double nu_exact = abs(charge)*0.0993588362775873*charge/mass;
   double nu = po.compute_anomcoll(n_e, n_i, hy_e, hy_i);
   double err_nu = abs(nu - nu_exact)/abs(nu_exact); 
   cout << "ERROR nu: " << err_nu << endl;
