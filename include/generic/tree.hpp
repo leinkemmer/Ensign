@@ -11,7 +11,9 @@
 #include <lr/coefficients.hpp>
 #include <lr/lr.hpp>
 
+#ifdef __NETCDF__
 #include <netcdf.h>
+#endif
 
 namespace Ensign {
 
