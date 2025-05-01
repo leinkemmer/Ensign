@@ -211,6 +211,7 @@ else()
       -DZLIB_INCLUDE_DIR=${zlib_HDR_DIR}
       -DZLIB_LIBRARY=${zlib_LIBRARIES}
       -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+      -DCMAKE_INSTALL_LIBDIR=lib
     UPDATE_COMMAND ""
     DEPENDS hdf5
     DEPENDS zlib
@@ -285,6 +286,8 @@ else()
         -DBUILD_SHARED_LIBS=OFF
         -DBUILD_LAPACK_DEPRECATED=OFF
         -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+        -DUSE_OPENMP=${OPENMP}
+        -DCMAKE_INSTALL_LIBDIR=lib
       UPDATE_COMMAND ""
     )
     ExternalProject_Get_Property(openblas INSTALL_DIR)
@@ -315,7 +318,7 @@ add_library(Ensign
 add_library(Ensign::Ensign ALIAS Ensign)
 add_dependencies(Ensign fftw eigen)
 if(NOT ${NETCDF_FOUND})
-  add_dependencies(Ensign netcdf)
+    add_dependencies(Ensign netcdf)
 endif()
 if(NOT ${MKL_ENABLED})
   add_dependencies(Ensign openblas)
@@ -389,7 +392,7 @@ else()
   endif()
 endif()
 
-target_link_libraries(Ensign PUBLIC ${NETCDF_LIBRARIES})
+target_link_libraries(Ensign PUBLIC ${NETCDF_LIBRARIES} ${CMAKE_DL_LIBS} ${hdf5_LIBRARIES})
 target_include_directories(Ensign 
   PUBLIC
   "$<BUILD_INTERFACE:${NETCDF_INCLUDE_DIR}>"
