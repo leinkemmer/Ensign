@@ -13,7 +13,6 @@ To build the software the following are needed
 - C++11 compatible C++ compiler
 - Fortran compiler (if the included OpenBLAS is used)
 - CUDA (if GPU support is desired)
-- NetCDF (optional, required for writing snapshots to disk)
 
 To build the example programs and tests execute
 

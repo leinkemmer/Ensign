@@ -22,7 +22,7 @@ if(NOT CMAKE_BUILD_TYPE)
     "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel."
     FORCE
   )
-endif(NOT CMAKE_BUILD_TYPE)
+endif()
 
 
 ################################################################################
@@ -32,7 +32,6 @@ endif(NOT CMAKE_BUILD_TYPE)
 option("Sanitizer" "Enable address sanitizer" OFF)
 option("OPENMP" "Enable OpenMP" ON)
 option("CUDA_ENABLED" "Enable CUDA" OFF)
-option("INSTALL_THIRD_PARTY_LIBS" "Install FFTW3 and OpenBLAS" OFF)
 option("MKL_ENABLED" "Enable Intel MKL" OFF)
 set("MKL_INCLUDEDIR" "" CACHE PATH "Path to include directory for MKL")
 set("MKL_LIBDIR" "" CACHE PATH "Path to lib directory for MKL")
@@ -42,9 +41,11 @@ set("MKL_LIBDIR" "" CACHE PATH "Path to lib directory for MKL")
 # Compiler options
 ################################################################################
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 if(CMAKE_CXX_COMPILER_ID MATCHES Intel)
     set(CMAKE_CXX_FLAGS         
-      "${CMAKE_CXX_FLAGS} -Warn all -fpic"
+      "${CMAKE_CXX_FLAGS} -Warn all"
     )
     set(CMAKE_CXX_FLAGS_DEBUG
       "-g -check all -traceback"
@@ -55,7 +56,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES Intel)
 
 elseif(CMAKE_CXX_COMPILER_ID MATCHES GNU)
     set(CMAKE_CXX_FLAGS
-      "${CMAKE_CXX_FLAGS} -Wall -fPIC -Wno-maybe-uninitialized"
+      "${CMAKE_CXX_FLAGS} -Wall -Wno-maybe-uninitialized"
     )
     set(CMAKE_CXX_FLAGS_DEBUG
       "-O0 -g3 -ggdb3 -Wall -D_GLIBCXX_DEBUG -fno-omit-frame-pointer -ftrapv"
@@ -71,7 +72,7 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES GNU)
 
 elseif(CMAKE_CXX_COMPILER_ID MATCHES Clang)
     set(CMAKE_CXX_FLAGS
-      "${CMAKE_CXX_FLAGS} -Wall -fPIC -Wno-uninitialized"
+      "${CMAKE_CXX_FLAGS} -Wall -Wno-uninitialized"
     )
 endif()
 
@@ -152,9 +153,72 @@ endif()
 # NetCDF
 
 find_package(NetCDF QUIET)
-if(NOT ${NETCDF_FOUND})
-  message("NetCDF has _not_ been found. If you want to write snapshots to disk please set the path in CMake appropriately.")
-  set(NETCDF_LIBRARIES "")
+if(${NETCDF_FOUND})
+  message("NetCDF was found.")
+else()
+  message("NetCDF was NOT found, we will build it from scratch.")
+  ExternalProject_Add(zlib
+    GIT_REPOSITORY "https://github.com/madler/zlib"
+    GIT_TAG "v1.3.1"
+    CMAKE_ARGS
+      -DZLIB_BUILD_EXAMPLES=OFF
+      -DBUILD_SHARED_LIBS=OFF
+      -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+    UPDATE_COMMAND ""
+  )
+  ExternalProject_Get_Property(zlib SOURCE_DIR)
+  ExternalProject_Get_Property(zlib BINARY_DIR)
+  set(zlib_HDR_DIR ${SOURCE_DIR})
+  set(zlib_LIBRARIES "${BINARY_DIR}/libz.a")
+
+  ExternalProject_Add(hdf5
+    GIT_REPOSITORY "https://github.com/HDFGroup/hdf5"
+    GIT_TAG "hdf5_1.14.6"
+    CMAKE_ARGS
+      -DBUILD_TESTING=OFF
+      -DBUILD_SHARED_LIBS=OFF
+      -DHDF5_ENABLE_Z_LIB_SUPPORT=ON
+      -DHDF5_ENABLE_SZIP_ENCODING=OFF
+      -DHDF5_ENABLE_SZIP_SUPPORT=OFF
+      -DHDF5_USE_ZLIB_STATIC=ON
+      -DZLIB_USE_EXTERNAL=OFF
+      -DZLIB_INCLUDE_DIR=${zlib_HDR_DIR}
+      -DZLIB_LIBRARY_RELEASE=${zlib_LIBRARIES}
+      -DZLIB_LIBRARY_DEBUG=${zlib_LIBRARIES}
+      -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+    UPDATE_COMMAND ""
+    DEPENDS zlib
+  )
+  ExternalProject_Get_Property(hdf5 INSTALL_DIR)
+  ExternalProject_Get_Property(hdf5 SOURCE_DIR)
+  ExternalProject_Get_Property(hdf5 BINARY_DIR)
+  set(hdf5_CMAKE_DIR "${INSTALL_DIR}/cmake")
+  set(hdf5_HDR_DIR "${SOURCE_DIR}/src")
+  set(hdf5_LIBRARIES "${BINARY_DIR}/bin/libhdf5.a" "${BINARY_DIR}/bin/libhdf5_hl.a")
+
+  ExternalProject_Add(netcdf
+    GIT_REPOSITORY "https://github.com/Unidata/netcdf-c"
+    GIT_TAG "v4.9.3"
+    CMAKE_ARGS
+      -DCMAKE_BUILD_TYPE=Release
+      -DNETCDF_ENABLE_TESTS=OFF
+      -DNETCDF_ENABLE_DAP=OFF
+      -DNETCDF_ENABLE_SZIP=OFF
+      -DNETCDF_ENABLE_ZSTD=OFF
+      -DNETCDF_BUILD_UTILITIES=OFF
+      -DBUILD_SHARED_LIBS=OFF
+      -DHDF5_DIR=${hdf5_CMAKE_DIR}
+      -DZLIB_INCLUDE_DIR=${zlib_HDR_DIR}
+      -DZLIB_LIBRARY=${zlib_LIBRARIES}
+      -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+    UPDATE_COMMAND ""
+    DEPENDS hdf5
+    DEPENDS zlib
+  )
+
+  ExternalProject_Get_Property(netcdf INSTALL_DIR)
+  set(NETCDF_INCLUDE_DIR "${INSTALL_DIR}/include")
+  set(NETCDF_LIBRARIES "${INSTALL_DIR}/lib/libnetcdf.a")
 endif()
 
 
@@ -169,34 +233,18 @@ find_package(Threads REQUIRED)
 
 find_package(FFTW3 QUIET)
 if(NOT fftw3_FOUND)
-  if(${INSTALL_THIRD_PARTY_LIBS})
-    ExternalProject_Add(fftw
-      URL "http://fftw.org/fftw-3.3.10.tar.gz"
-      URL_HASH MD5=8ccbf6a5ea78a16dbc3e1306e234cc5c
-      CMAKE_ARGS
-        -Wno-dev
-        -DBUILD_TESTS=OFF
-        -DENABLE_THREADS=ON
-        -DENABLE_OPENMP=${OPENMP}
-        -DBUILD_SHARED_LIBS=OFF
-        -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
-      UPDATE_COMMAND ""
-    )
-  else()
-    ExternalProject_Add(fftw
-      URL "http://fftw.org/fftw-3.3.10.tar.gz"
-      URL_HASH MD5=8ccbf6a5ea78a16dbc3e1306e234cc5c
-      CMAKE_ARGS
-        -Wno-dev
-        -DBUILD_TESTS=OFF
-        -DENABLE_THREADS=ON
-        -DENABLE_OPENMP=${OPENMP}
-        -DBUILD_SHARED_LIBS=OFF
-        -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
-      UPDATE_COMMAND ""
-      INSTALL_COMMAND ""
-    )
-  endif()
+  ExternalProject_Add(fftw
+    URL "http://fftw.org/fftw-3.3.10.tar.gz"
+    URL_HASH MD5=8ccbf6a5ea78a16dbc3e1306e234cc5c
+    CMAKE_ARGS
+      -Wno-dev
+      -DBUILD_TESTS=OFF
+      -DENABLE_THREADS=ON
+      -DENABLE_OPENMP=${OPENMP}
+      -DBUILD_SHARED_LIBS=OFF
+      -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+    UPDATE_COMMAND ""
+  )
   ExternalProject_Get_Property(fftw SOURCE_DIR)
   ExternalProject_Get_Property(fftw BINARY_DIR)
   set(fftw3_HDR_DIR ${SOURCE_DIR}/api)
@@ -223,14 +271,9 @@ if(${MKL_ENABLED})
     message("MKL found automatically.")
   endif()
 else()
-  message("OpenBLAS is used by default. MKL support is available by setting MKL_ENABLED to ON (set MKLROOT environment variable appropriately).")
+  message("OpenBLAS is used by default. MKL support is available by setting MKL_ENABLED to ON (set MKL_INCLUDEDIR and MKL_LIBDIR environment variables appropriately).")
   find_package(OpenBLAS QUIET)
   if(NOT openblas_FOUND)
-    if(${INSTALL_THIRD_PARTY_LIBS})
-      set(openblas_INSTALLED_DIR ${CMAKE_INSTALL_PREFIX})
-    else()
-      set(openblas_INSTALLED_DIR ${CMAKE_BINARY_DIR}/installed-openblas)
-    endif()
     ExternalProject_Add(openblas
       GIT_REPOSITORY "https://github.com/OpenMathLib/OpenBLAS.git"
       GIT_TAG "v0.3.29"
@@ -241,12 +284,13 @@ else()
         -DBUILD_TESTING=OFF
         -DBUILD_SHARED_LIBS=OFF
         -DBUILD_LAPACK_DEPRECATED=OFF
-        -DCMAKE_INSTALL_PREFIX=${openblas_INSTALLED_DIR}
+        -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
       UPDATE_COMMAND ""
     )
-    set(openblas_HDR_DIRS ${openblas_INSTALLED_DIR}/include/openblas)
-    set(openblas_LIB_DIRS ${openblas_INSTALLED_DIR}/lib)
-    set(openblas_LIBRARY ${openblas_INSTALLED_DIR}/lib/libopenblas.a)
+    ExternalProject_Get_Property(openblas INSTALL_DIR)
+    set(openblas_HDR_DIRS ${INSTALL_DIR}/include/openblas)
+    set(openblas_LIB_DIRS ${INSTALL_DIR}/lib)
+    set(openblas_LIBRARY ${INSTALL_DIR}/lib/libopenblas.a)
   endif()
 endif()
 
@@ -270,6 +314,9 @@ add_library(Ensign
 
 add_library(Ensign::Ensign ALIAS Ensign)
 add_dependencies(Ensign fftw eigen)
+if(NOT ${NETCDF_FOUND})
+  add_dependencies(Ensign netcdf)
+endif()
 if(NOT ${MKL_ENABLED})
   add_dependencies(Ensign openblas)
 endif()
@@ -318,7 +365,7 @@ if(${MKL_ENABLED})
       PUBLIC 
       "$<BUILD_INTERFACE:${MKL_LIBDIR}/libblas.so>"
       "$<INSTALL_INTERFACE:lib>"
-      )
+    )
   endif()
 else()
   if(openblas_FOUND)
@@ -338,14 +385,22 @@ else()
       PUBLIC 
       "$<BUILD_INTERFACE:${openblas_LIBRARY}>"
       "$<INSTALL_INTERFACE:libopenblas.a>"
-      )
+    )
   endif()
 endif()
 
-if(${NETCDF_FOUND})
-  target_link_libraries(Ensign PRIVATE ${NETCDF_LIBRARIES})
-  target_include_directories(Ensign PRIVATE ${NETCDF_INCLUDE_DIR})
-  target_compile_definitions(Ensign PRIVATE "__NETCDF__")
+target_link_libraries(Ensign PUBLIC ${NETCDF_LIBRARIES})
+target_include_directories(Ensign 
+  PUBLIC
+  "$<BUILD_INTERFACE:${NETCDF_INCLUDE_DIR}>"
+)
+if(NOT ${NETCDF_FOUND})
+  target_link_libraries(Ensign PUBLIC ${zlib_LIBRARIES})
+  target_include_directories(Ensign 
+    PUBLIC 
+    "$<BUILD_INTERFACE:${hdf5_HDR_DIR}>"
+  )
+  target_link_libraries(Ensign PUBLIC ${hdf5_LIBRARIES})
 endif()
 
 target_link_libraries(Ensign PRIVATE Threads::Threads)
