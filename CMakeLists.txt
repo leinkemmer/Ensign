@@ -24,6 +24,7 @@ if(NOT CMAKE_BUILD_TYPE)
   )
 endif()
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 ################################################################################
 # Configuration options
@@ -35,55 +36,6 @@ option("CUDA_ENABLED" "Enable CUDA" OFF)
 option("MKL_ENABLED" "Enable Intel MKL" OFF)
 set("MKL_INCLUDEDIR" "" CACHE PATH "Path to include directory for MKL")
 set("MKL_LIBDIR" "" CACHE PATH "Path to lib directory for MKL")
-
-
-################################################################################
-# Compiler options
-################################################################################
-
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-if(CMAKE_CXX_COMPILER_ID MATCHES Intel)
-    set(CMAKE_CXX_FLAGS         
-      "${CMAKE_CXX_FLAGS} -Warn all"
-    )
-    set(CMAKE_CXX_FLAGS_DEBUG
-      "-g -check all -traceback"
-    )
-    set(CMAKE_CXX_FLAGS_RELEASE
-      "-O3 -ip -xHOST"
-    )
-
-elseif(CMAKE_CXX_COMPILER_ID MATCHES GNU)
-    set(CMAKE_CXX_FLAGS
-      "${CMAKE_CXX_FLAGS} -Wall -Wno-maybe-uninitialized"
-    )
-    set(CMAKE_CXX_FLAGS_DEBUG
-      "-O0 -g3 -ggdb3 -Wall -D_GLIBCXX_DEBUG -fno-omit-frame-pointer -ftrapv"
-    )
-    set(CMAKE_CXX_FLAGS_RELEASE
-      "-O3 -DNDEBUG"
-    )
-
-    CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
-    if(COMPILER_SUPPORTS_MARCH_NATIVE)
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
-    endif()
-
-elseif(CMAKE_CXX_COMPILER_ID MATCHES Clang)
-    set(CMAKE_CXX_FLAGS
-      "${CMAKE_CXX_FLAGS} -Wall -Wno-uninitialized"
-    )
-endif()
-
-
-################################################################################
-# Address sanitizer
-
-if(${Sanitizer})
-  add_compile_options(-fno-omit-frame-pointer -fsanitize=address)
-  add_link_options(-fsanitize=address)
-endif()
 
 
 ################################################################################
@@ -161,20 +113,21 @@ else()
     GIT_REPOSITORY "https://github.com/madler/zlib"
     GIT_TAG "v1.3.1"
     CMAKE_ARGS
+      -Wno-dev
       -DZLIB_BUILD_EXAMPLES=OFF
       -DBUILD_SHARED_LIBS=OFF
       -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
     UPDATE_COMMAND ""
   )
-  ExternalProject_Get_Property(zlib SOURCE_DIR)
-  ExternalProject_Get_Property(zlib BINARY_DIR)
-  set(zlib_HDR_DIR ${SOURCE_DIR})
-  set(zlib_LIBRARIES "${BINARY_DIR}/libz.a")
+  ExternalProject_Get_Property(zlib INSTALL_DIR)
+  set(zlib_HDR_DIR "${INSTALL_DIR}/include")
+  set(zlib_LIBRARIES "${INSTALL_DIR}/lib/libz.a")
 
   ExternalProject_Add(hdf5
     GIT_REPOSITORY "https://github.com/HDFGroup/hdf5"
     GIT_TAG "hdf5_1.14.6"
     CMAKE_ARGS
+      -Wno-dev
       -DBUILD_TESTING=OFF
       -DBUILD_SHARED_LIBS=OFF
       -DHDF5_ENABLE_Z_LIB_SUPPORT=ON
@@ -183,23 +136,22 @@ else()
       -DHDF5_USE_ZLIB_STATIC=ON
       -DZLIB_USE_EXTERNAL=OFF
       -DZLIB_INCLUDE_DIR=${zlib_HDR_DIR}
-      -DZLIB_LIBRARY_RELEASE=${zlib_LIBRARIES}
-      -DZLIB_LIBRARY_DEBUG=${zlib_LIBRARIES}
+      -DZLIB_LIBRARY=${zlib_LIBRARIES}
       -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
     UPDATE_COMMAND ""
     DEPENDS zlib
   )
   ExternalProject_Get_Property(hdf5 INSTALL_DIR)
-  ExternalProject_Get_Property(hdf5 SOURCE_DIR)
-  ExternalProject_Get_Property(hdf5 BINARY_DIR)
-  set(hdf5_CMAKE_DIR "${INSTALL_DIR}/cmake")
-  set(hdf5_HDR_DIR "${SOURCE_DIR}/src")
-  set(hdf5_LIBRARIES "${BINARY_DIR}/bin/libhdf5.a" "${BINARY_DIR}/bin/libhdf5_hl.a")
+  set(hdf5_INSTALL_DIR "${INSTALL_DIR}")
+  set(hdf5_HDR_DIR "${INSTALL_DIR}/include")
+  set(hdf5_LIBRARY "${INSTALL_DIR}/lib/libhdf5.a")
+  set(hdf5_HL_LIBRARY "${INSTALL_DIR}/lib/libhdf5_hl.a")
 
   ExternalProject_Add(netcdf
     GIT_REPOSITORY "https://github.com/Unidata/netcdf-c"
     GIT_TAG "v4.9.3"
     CMAKE_ARGS
+      -Wno-dev
       -DCMAKE_BUILD_TYPE=Release
       -DNETCDF_ENABLE_TESTS=OFF
       -DNETCDF_ENABLE_DAP=OFF
@@ -207,7 +159,10 @@ else()
       -DNETCDF_ENABLE_ZSTD=OFF
       -DNETCDF_BUILD_UTILITIES=OFF
       -DBUILD_SHARED_LIBS=OFF
-      -DHDF5_DIR=${hdf5_CMAKE_DIR}
+      -DHDF5_ROOT=${hdf5_INSTALL_DIR}
+      -DHDF5_INCLUDE_DIR=${hdf5_HDR_DIR}
+      -DHDF5_C_LIBRARIES=${hdf5_LIBRARY}
+      -DHDF5_HL_LIBRARIES=${hdf5_HL_LIBRARY}
       -DZLIB_INCLUDE_DIR=${zlib_HDR_DIR}
       -DZLIB_LIBRARY=${zlib_LIBRARIES}
       -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
@@ -295,6 +250,40 @@ else()
     set(openblas_LIB_DIRS ${INSTALL_DIR}/lib)
     set(openblas_LIBRARY ${INSTALL_DIR}/lib/libopenblas.a)
   endif()
+
+endif()
+
+
+################################################################################
+# Compiler options
+################################################################################
+
+if(${Sanitizer})
+  add_compile_options(-fno-omit-frame-pointer -fsanitize=address)
+  add_link_options(-fsanitize=address)
+endif()
+
+if(CMAKE_CXX_COMPILER_ID MATCHES Intel)
+  add_compile_options(-Warn all)
+  add_compile_options(
+    "$<$<CONFIG:RELEASE>:-O3 -ip -xHOST>"
+    "$<$<CONFIG:DEBUG>:-g -check all -traceback>"
+  )
+
+elseif(CMAKE_CXX_COMPILER_ID MATCHES GNU)
+  add_compile_options(-Wall -Wno-maybe-uninitialized)
+  add_compile_options(
+    "$<$<CONFIG:RELEASE>:-O0 -g3 -ggdb3 -Wall -D_GLIBCXX_DEBUG -fno-omit-frame-pointer -ftrapv>"
+    "$<$<CONFIG:DEBUG>:-O3 -DNDEBUG>"
+  )
+
+  CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
+  if(COMPILER_SUPPORTS_MARCH_NATIVE)
+    add_compile_options("$<$<CONFIG:RELEASE>:-march=native>")
+  endif()
+
+elseif(CMAKE_CXX_COMPILER_ID MATCHES Clang)
+  add_compile_options(-Wall -Wno-uninitialized)
 endif()
 
 
@@ -392,19 +381,20 @@ else()
   endif()
 endif()
 
-target_link_libraries(Ensign PUBLIC ${NETCDF_LIBRARIES} ${CMAKE_DL_LIBS} ${hdf5_LIBRARIES})
-target_include_directories(Ensign 
-  PUBLIC
-  "$<BUILD_INTERFACE:${NETCDF_INCLUDE_DIR}>"
-)
 if(NOT ${NETCDF_FOUND})
-  target_link_libraries(Ensign PUBLIC ${zlib_LIBRARIES})
   target_include_directories(Ensign 
     PUBLIC 
     "$<BUILD_INTERFACE:${hdf5_HDR_DIR}>"
   )
-  target_link_libraries(Ensign PUBLIC ${hdf5_LIBRARIES})
+  target_link_libraries(Ensign PUBLIC ${NETCDF_LIBRARIES})
+  target_link_libraries(Ensign PRIVATE ${CMAKE_DL_LIBS} ${hdf5_HL_LIBRARY} ${hdf5_LIBRARY} ${zlib_LIBRARIES})
+else()
+  target_link_libraries(Ensign PUBLIC ${NETCDF_LIBRARIES})
 endif()
+target_include_directories(Ensign 
+  PUBLIC
+  "$<BUILD_INTERFACE:${NETCDF_INCLUDE_DIR}>"
+)
 
 target_link_libraries(Ensign PRIVATE Threads::Threads)
 
