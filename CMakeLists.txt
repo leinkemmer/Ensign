@@ -259,22 +259,22 @@ endif()
 ################################################################################
 
 if(${Sanitizer})
-  add_compile_options(-fno-omit-frame-pointer -fsanitize=address)
-  add_link_options(-fsanitize=address)
+  add_compile_options("-fno-omit-frame-pointer;-fsanitize=address")
+  add_link_options("-fsanitize=address")
 endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES Intel)
-  add_compile_options(-Warn all)
+  add_compile_options("-Warn all")
   add_compile_options(
-    "$<$<CONFIG:RELEASE>:-O3 -ip -xHOST>"
-    "$<$<CONFIG:DEBUG>:-g -check all -traceback>"
+    "$<$<CONFIG:RELEASE>:-O3;-ip;-xHOST>"
+    "$<$<CONFIG:DEBUG>:-g;-check all;-traceback>"
   )
 
 elseif(CMAKE_CXX_COMPILER_ID MATCHES GNU)
   add_compile_options(-Wall -Wno-maybe-uninitialized)
   add_compile_options(
-    "$<$<CONFIG:RELEASE>:-O0 -g3 -ggdb3 -Wall -D_GLIBCXX_DEBUG -fno-omit-frame-pointer -ftrapv>"
-    "$<$<CONFIG:DEBUG>:-O3 -DNDEBUG>"
+    "$<$<CONFIG:RELEASE>:-O3;-DNDEBUG>"
+    "$<$<CONFIG:DEBUG>:-O0;-g3;-ggdb3;-Wall;-D_GLIBCXX_DEBUG;-fno-omit-frame-pointer;-ftrapv>"
   )
 
   CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
@@ -283,7 +283,7 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES GNU)
   endif()
 
 elseif(CMAKE_CXX_COMPILER_ID MATCHES Clang)
-  add_compile_options(-Wall -Wno-uninitialized)
+  add_compile_options("-Wall;-Wno-uninitialized")
 endif()
 
 
