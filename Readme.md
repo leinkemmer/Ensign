@@ -32,11 +32,7 @@ If you prefer to use Intel MKL as the BLAS and LAPACK backend set
 ## MacOS
 
 ### OpenBLAS
-If OpenBLAS is used as a BLAS backend, a Fortran compiler has to be installed. Since Apple Clang, the native compiler collection of MacOS, does not ship a Fortran compiler, one has to install a Fortran compiler manually. This can be done via brew:
-
-    brew install flang
-
-Besides Flang, Ensign is also compatible with the `gfortran` compiler of GCC (see next section).
+If OpenBLAS is used as a BLAS backend, a Fortran compiler has to be installed. Since Apple Clang, the native compiler collection of MacOS, does not ship a Fortran compiler, one has to install a Fortran compiler manually. To obtain `gfortran-14`, the Fortran compiler of GCC, install `gcc-14` via brew (see also next section).
 
 If CMake does not find the Fortran compiler automatically, you have to set the `FC` environment variable accordingly:
 
@@ -45,7 +41,7 @@ If CMake does not find the Fortran compiler automatically, you have to set the `
 Additionally, you might also have to set the CMake cache entry `CMAKE_Fortran_COMPILER` to the full path of the Fortran compiler.
 
 #### OpenMP
-Moreover, Apple clang does not officially support OpenMP. Therefore, you have to use instead different compiler, for example GCC. Install `gcc-14` again via brew:
+Moreover, Apple Clang does not officially support OpenMP. Therefore, you have to use instead a different compiler collection, for example GCC. Install `gcc-14` again via brew:
 
     brew install gcc@14
 
@@ -53,7 +49,7 @@ Invoke the brew command
 
     brew info gcc@14
 
-to find the installation path of the C, C++ and Fortran compilers of `gcc-14`. With this installation path, set the `CC`, `CXX` and `FC` (when OpenBLAS is used) environment variables to use the Homebrew `gcc-14` when building Ensign:
+to find the installation path of the C, C++ and Fortran compilers of `gcc-14`. With this installation path, set the `CC`, `CXX` and `FC` (use `gfortran-14`, when OpenBLAS is used) environment variables to use the Homebrew `gcc-14` when building Ensign:
 
     export CC=/path/to/gcc-14
     export CXX=/path/to/g++-14
