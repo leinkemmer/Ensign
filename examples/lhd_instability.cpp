@@ -10,6 +10,7 @@ int main(int argc, char** argv) {
   cxxopts::Options options("lhd-instability", "1+2 dimensional dynamical low-rank solver for acceleration-driven lower hybrid drift instability");
   options.add_options()
   ("problem", "Initial value that is used in the simulation", cxxopts::value<string>()->default_value("default"))
+  ("method", "Numerical method used for the integration of the K and L step (rk4_cd2, upwind_euler, rk4_upwind or rk4_upwind3)", cxxopts::value<string>()->default_value("rk4_cd2"))
   ("final_time", "Time to which the simulation is run", cxxopts::value<double>()->default_value("400.0"))
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("8e-4"))
   ("r_i,rank_ions", "Rank of the ions", cxxopts::value<int>()->default_value("10"))
@@ -26,6 +27,7 @@ int main(int argc, char** argv) {
   }
 
   // parse the command line parameters
+  string method = result["method"].as<string>();
   Index r_e = result["r_e"].as<int>();
   Index r_i = result["r_i"].as<int>();
   mind<3> N = parse<3>(result["n"].as<string>());
@@ -85,9 +87,9 @@ int main(int argc, char** argv) {
   V_i.push_back(vv1_i.begin());
 
 
-  // runt the simulation
-  vlasov vlasov_e(gi_e, X_e, V_e);
-  vlasov vlasov_i(gi_i, X_i, V_i);
+  // run the simulation
+  vlasov vlasov_e(gi_e, X_e, V_e, method);
+  vlasov vlasov_i(gi_i, X_i, V_i, method);
   poisson poi(gi_e, gi_i);
   vec n_e({gi_e.n_x}), hx_e({gi_e.n_x}), hy_e({gi_e.n_x});
   vec n_i({gi_i.n_x}), hx_i({gi_i.n_x}), hy_i({gi_i.n_x});

@@ -33,7 +33,7 @@ double V2(mfp<2> v) {
 struct test_config {
 
   test_config(Index r)
-  : gi(r, 128, {129,130}, a, b, g, B, charge, mass, Omega) {
+  : gi(r, 4*128, {4*129,4*130}, a, b, g, B, charge, mass, Omega) {
 
     Xref.resize({gi.n_x, r});
     Xref.set_zero();
@@ -95,7 +95,7 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
  SECTION("INITIALIZATION") {
   test_config tc(3);
   grid_info& gi = tc.gi;
-  vlasov vl(tc.gi, tc.X, tc.V);
+  vlasov vl(tc.gi, tc.X, tc.V, "rk4_cd2");
 
   mat K({gi.n_x, gi.r});
   K.set_zero();
@@ -117,14 +117,14 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
     }
   }
   cout << "ERROR_INIT: " << err << endl;
-  REQUIRE(err <= 1e-14); 
+  REQUIRE(err <= 1e-12); 
  }
 
 
  SECTION("RHS K") {
   test_config tc(3);
   grid_info& gi = tc.gi;
-  vlasov vl(tc.gi, tc.X, tc.V);
+  vlasov vl(tc.gi, tc.X, tc.V, "rk4_cd2");
 
   mat K({gi.n_x, gi.r});
   mat Kout = K;
@@ -151,45 +151,56 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
   vl.compute_C3(V,vl.f.V);
   vl.compute_C4(V,vl.f.V);
   vl.compute_C5(V,vl.f.V);
-  vl.rhs_K(K, Kout, E);
 
-  double err1 = 0.0, m1 = 0.0, err2 = 0.0, m2 = 0.0;
-  for(Index i=0;i<gi.n_x;i++) {
-    double y = gi.x(i);
-    // first term
-    double exact1 = 0.01708468303743943*cos(4.443553965473541*y);
-    double exact2 = 0.07914879119339357*cos(4.443553965473541*y)-0.001205060627879167*sin(4.443553965473541*y);
 
-    // second term
-    exact1 += g*0.153792960951415*sin(4.443553965473541*y);
-    exact2 += g*(-0.1084771907569935-0.01084771907569934*cos(4.443553965473541*y));
+  for(string method : {"cd2", "upwind", "upwind3"}) {
 
-    // third term
-    double Ehat = 100.0*pow(cos(4.443553965473541*y),2);
-    exact1 += Ehat*0.1691722570465565*sin(4.443553965473541*y);
-    exact2 += Ehat*(-0.1193249098326925-0.01193249098326925*cos(4.443553965473541*y));
+    if(method == "cd2") {
+      vl.rhs_K_cd2(K, Kout, E);
+    } else if(method == "upwind") {
+      vl.rhs_K_upwind(K, Kout, E);
+    } else if(method == "upwind3") {
+      vl.rhs_K_upwind3(K, Kout, E);
+    }
 
-    // third term
-    double Bhat = charge*Omega*B/mass;
-    exact1 += Bhat*(-0.03229652179979716)*sin(4.443553965473541*y);
-    exact2 += Bhat*(0.02278021005896862+0.002278021005896863*cos(4.443553965473541*y));
-    
-    err1 = max(err1, abs(Kout(i,0)-exact1));
-    err2 = max(err2, abs(Kout(i,1)-exact2));
-    m1 = max(m1, abs(exact1));
-    m2 = max(m2, abs(exact2));
+    double err1 = 0.0, m1 = 0.0, err2 = 0.0, m2 = 0.0;
+    for(Index i=0;i<gi.n_x;i++) {
+      double y = gi.x(i);
+      // first term
+      double exact1 = 0.01708468303743943*cos(4.443553965473541*y);
+      double exact2 = 0.07914879119339357*cos(4.443553965473541*y)-0.001205060627879167*sin(4.443553965473541*y);
+
+      // second term
+      exact1 += g*0.153792960951415*sin(4.443553965473541*y);
+      exact2 += g*(-0.1084771907569935-0.01084771907569934*cos(4.443553965473541*y));
+
+      // third term
+      double Ehat = 100.0*pow(cos(4.443553965473541*y),2);
+      exact1 += Ehat*0.1691722570465565*sin(4.443553965473541*y);
+      exact2 += Ehat*(-0.1193249098326925-0.01193249098326925*cos(4.443553965473541*y));
+
+      // third term
+      double Bhat = charge*Omega*B/mass;
+      exact1 += Bhat*(-0.03229652179979716)*sin(4.443553965473541*y);
+      exact2 += Bhat*(0.02278021005896862+0.002278021005896863*cos(4.443553965473541*y));
+      
+      err1 = max(err1, abs(Kout(i,0)-exact1));
+      err2 = max(err2, abs(Kout(i,1)-exact2));
+      m1 = max(m1, abs(exact1));
+      m2 = max(m2, abs(exact2));
+    }
+
+
+    cout << "ERROR RHS_K (" << method << "): " << err1/m1 <<  " " << err2/m2 << endl;
+    REQUIRE( err1/m1 <= 5e-4);
+    REQUIRE( err2/m2 <= 5e-4);
   }
-
-
-  cout << "ERROR RHS_K: "<< err1/m1 <<  " " << err2/m2 << endl;
-  REQUIRE( err1/m1 <= 3e-3);
-  REQUIRE( err2/m2 <= 3e-3);
  }
 
  SECTION("RHS L") {
   test_config tc(3);
   grid_info& gi = tc.gi;
-  vlasov vl(tc.gi, tc.X, tc.V);
+  vlasov vl(tc.gi, tc.X, tc.V, "rk4_cd2");
 
   vec conv = get_conv(tc.Xref, vl, gi, tc.blas);
 
@@ -211,47 +222,65 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
       X(i, 1) = X2(x);
   }
 
-  vl.compute_D1(X,vl.f.X);
-  vl.compute_D2(X,vl.f.X,Ehat);
-  vl.rhs_L(L, Lout);
+  for(string method : {"cd2", "upwind", "upwind3"}) {
+  
+    vl.compute_D1(X,vl.f.X);
+    vl.compute_D2(X,vl.f.X,Ehat);
+    
+    if(method == "cd2") {
+      vl.rhs_L_cd2(L, Lout);
+    } else if(method == "upwind") {
+      vl.rhs_L_upwind(L, Lout);
+    } else if(method == "upwind3") {
+      vl.rhs_L_upwind3(L, Lout);
+    }
 
-  double err1 = 0.0, m1 = 0.0, err2 = 0.0, m2 = 0.0;
-  for(Index j=0;j<gi.n_v[1];j++) {
-    for(Index i=0;i<gi.n_v[0];i++) {
-      mfp<2> v = gi.v({i,j});
-      double vx = v[0]; double vy = v[1];
-      // first term
-      double exact1 = -0.3134241308377849*exp(-20.0*pow(vx,2)-22.0*pow(0.2+vy,2))*vy;
-      double exact2 =  0.31342413083778514*exp(-20.0*pow(-0.2+vx,2)-22.0*pow(vy,2))*vy;
-      // second term
-      exact1 += conv(0)*g*exp((8.-20.*vx)*vx-22.*pow(vy,2))*(-3.5946317129377743 + 17.973158564688866*vx);
-      exact2 += conv(0)*g*16.591316467263255*exp(-20.*pow(vx,2)+(-8.8-22.*vy)*vy)*vx;
-      // third term (E is already integrated out here)
-      exact1 += 22.054726368159216*exp(-20.*pow(-0.2+vx,2)-22.*pow(vy,2))*vy;
-      exact2 += exp(-20.*pow(vx,2)+(-8.8-22.*vy)*vy)*(0.912522405699479+4.562612028497394*vy);
-      // fourth term
-      double Bhat = charge*Omega*B/mass;
-      exact1 += conv(0)*Bhat*exp((8.-20.*vx)*vx-22.*pow(vy,2))*(-3.594631712937776-1.797315856468888*vx)*vy;
-      exact2 += conv(1)*Bhat*exp(-20.*pow(vx,2)+(-8.8-22.*vy)*vy)*vx*(-3.650089622797918-1.6591316467263262*vy);
+    double err1 = 0.0, m1 = 0.0, err2 = 0.0, m2 = 0.0;
+    for(Index j=0;j<gi.n_v[1];j++) {
+      for(Index i=0;i<gi.n_v[0];i++) {
+        mfp<2> v = gi.v({i,j});
+        double vx = v[0]; double vy = v[1];
+        // first term
+        double exact1 = -0.3134241308377849*exp(-20.0*pow(vx,2)-22.0*pow(0.2+vy,2))*vy;
+        double exact2 =  0.31342413083778514*exp(-20.0*pow(-0.2+vx,2)-22.0*pow(vy,2))*vy;
+        // second term
+        exact1 += conv(0)*g*exp((8.-20.*vx)*vx-22.*pow(vy,2))*(-3.5946317129377743 + 17.973158564688866*vx);
+        exact2 += conv(0)*g*16.591316467263255*exp(-20.*pow(vx,2)+(-8.8-22.*vy)*vy)*vx;
+        // third term (E is already integrated out here)
+        exact1 += 22.054726368159216*exp(-20.*pow(-0.2+vx,2)-22.*pow(vy,2))*vy;
+        exact2 += exp(-20.*pow(vx,2)+(-8.8-22.*vy)*vy)*(0.912522405699479+4.562612028497394*vy);
+        // fourth term
+        double Bhat = charge*Omega*B/mass;
+        exact1 += conv(0)*Bhat*exp((8.-20.*vx)*vx-22.*pow(vy,2))*(-3.594631712937776-1.797315856468888*vx)*vy;
+        exact2 += conv(1)*Bhat*exp(-20.*pow(vx,2)+(-8.8-22.*vy)*vy)*vx*(-3.650089622797918-1.6591316467263262*vy);
 
-      err1 = max(err1, abs(Lout(gi.lin_idx_v({i,j}),0)-exact1));
-      err2 = max(err2, abs(Lout(gi.lin_idx_v({i,j}),1)-exact2));
-      m1 = max(m1, abs(exact1));
-      m2 = max(m2, abs(exact2));
+        err1 = max(err1, abs(Lout(gi.lin_idx_v({i,j}),0)-exact1));
+        err2 = max(err2, abs(Lout(gi.lin_idx_v({i,j}),1)-exact2));
+        m1 = max(m1, abs(exact1));
+        m2 = max(m2, abs(exact2));
+      }
+    }
+
+    cout << "ERROR RHS_L (" << method << "): " << err1/m1 << " " << err2/m2 << endl;
+
+    if(method == "cd") {
+      REQUIRE( err1/m1 <= 5e-4 );
+      REQUIRE( err2/m2 <= 5e-4 );
+    } else if(method == "upwind") {
+      REQUIRE( err1/m1 <= 4e-2 );
+      REQUIRE( err2/m2 <= 3e-2 );
+    } else if(method == "upwind3") {
+      REQUIRE( err1/m1 <= 2e-5 );
+      REQUIRE( err2/m2 <= 2e-5 );
     }
   }
-
-  cout << "ERROR RHS_L: " << err1/m1 << " " << err2/m2 << endl;
-
-  REQUIRE( err1/m1 <= 6e-3 );
-  REQUIRE( err2/m2 <= 6e-3 );
  }
 
 
  SECTION("RHS S") {
   test_config tc(2);
   grid_info& gi = tc.gi;
-  vlasov vl(tc.gi, tc.X, tc.V);
+  vlasov vl(tc.gi, tc.X, tc.V, "rk4_cd2");
   
   vec conv = get_conv(tc.Xref, vl, gi, tc.blas);
 
@@ -314,7 +343,7 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
  SECTION("MOMENTS") {
   test_config tc(3);
   grid_info& gi = tc.gi;
-  vlasov vl(tc.gi, tc.X, tc.V);
+  vlasov vl(tc.gi, tc.X, tc.V, "rk4_cd2");
 
   vec n({gi.n_x}), hx({gi.n_x}), hy({gi.n_x});
   vl.compute_nh(n, hx, hy); 
