@@ -109,6 +109,7 @@ if(${NETCDF_FOUND})
   message("NetCDF was found.")
 else()
   message("NetCDF was NOT found, we will build it from scratch.")
+  set("NETCDF_ADD_DEPENDENCY" "TRUE")
   ExternalProject_Add(zlib
     GIT_REPOSITORY "https://github.com/madler/zlib"
     GIT_TAG "v1.3.1"
@@ -306,7 +307,7 @@ add_library(Ensign
 
 add_library(Ensign::Ensign ALIAS Ensign)
 add_dependencies(Ensign fftw eigen)
-if(NOT ${NETCDF_FOUND})
+if(${NETCDF_ADD_DEPENDENCY})
     add_dependencies(Ensign netcdf)
 endif()
 if(NOT ${MKL_ENABLED})
@@ -381,15 +382,15 @@ else()
   endif()
 endif()
 
-if(NOT ${NETCDF_FOUND})
+if(${NETCDF_FOUND})
+  target_link_libraries(Ensign PUBLIC ${NETCDF_LIBRARIES})
+else()
   target_include_directories(Ensign 
     PUBLIC 
     "$<BUILD_INTERFACE:${hdf5_HDR_DIR}>"
   )
   target_link_libraries(Ensign PUBLIC ${NETCDF_LIBRARIES})
   target_link_libraries(Ensign PRIVATE ${CMAKE_DL_LIBS} ${hdf5_HL_LIBRARY} ${hdf5_LIBRARY} ${zlib_LIBRARIES})
-else()
-  target_link_libraries(Ensign PUBLIC ${NETCDF_LIBRARIES})
 endif()
 target_include_directories(Ensign 
   PUBLIC
