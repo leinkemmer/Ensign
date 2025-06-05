@@ -59,10 +59,13 @@ if(${CUDA_ENABLED})
 else()
   add_executable(vlasov_poisson vlasov_poisson.cpp)
   add_dependencies(vlasov_poisson Ensign)
+
+  add_executable(vlasov_poisson_adapt vlasov_poisson_adapt.cpp)
+  add_dependencies(vlasov_poisson_adapt Ensign)
 endif()
 
-
 target_link_libraries(vlasov_poisson Ensign::Ensign cxxopts)
+target_link_libraries(vlasov_poisson_adapt Ensign::Ensign cxxopts)
 
 
 # Alfven waves example
