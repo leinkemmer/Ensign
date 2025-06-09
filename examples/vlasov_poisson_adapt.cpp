@@ -837,6 +837,41 @@ struct coeff_C {
         #endif
       }
   }
+  
+  void operator()(mat& V, array<mat,3>& C1, array<mat,3>& C2, const blas_ops& blas) {
+
+      // C1
+      coeff(V, V, we[0], C1[0], blas);
+      coeff(V, V, we[1], C1[1], blas);
+      coeff(V, V, we[2], C1[2], blas);
+
+      // C2
+      if(fft == nullptr)
+        fft = make_unique_ptr<fft3d<2>>(gi.N_xx, V, tmpVhat);
+
+      // TODO: relies on V not being overwritten
+      fft->forward(V, tmpVhat);
+
+      if(V.sl == stloc::host) {
+        ptw_mult_row(tmpVhat,h_lambda_n[0],dVhat[0]);
+        ptw_mult_row(tmpVhat,h_lambda_n[1],dVhat[1]);
+        ptw_mult_row(tmpVhat,h_lambda_n[2],dVhat[2]);
+      } else {
+        #ifdef __CUDACC__
+        double ncvv = 1.0 / (gi.dvv_mult);
+        ptw_mult_row_cplx_fourier_3d<<<(gi.dvvh_mult*gi.r+n_threads-1)/n_threads,n_threads>>>(gi.dvvh_mult*gi.r, gi.N_vv[0]/2+1, gi.N_vv[1], gi.N_vv[2], (cuDoubleComplex*)tmpVhat.begin(), d_lim_vv->data(), ncvv, (cuDoubleComplex*)dVhat[0].begin(), (cuDoubleComplex*)dVhat[1].begin(), (cuDoubleComplex*)dVhat[2].begin());
+        #endif
+      }
+
+      fft->backward(dVhat[0], dV[0]);
+      fft->backward(dVhat[1], dV[1]);
+      fft->backward(dVhat[2], dV[2]);
+
+      coeff(V, dV[0], gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2], C2[0], blas);
+      coeff(V, dV[1], gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2], C2[1], blas);
+      coeff(V, dV[2], gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2], C2[2], blas);
+
+  }
 
 private:
   grid_info<3> gi;
@@ -1187,6 +1222,42 @@ void integration_first_order(double final_time, double tau, int nsteps_split, in
   }*/
 }
 
+void addsub_rhs(mat& A, mat& B, mat& C){
+  Index n = A.shape()[0];
+  #ifdef __OPENMP__
+  #pragma omp parallel for
+  #endif
+  for(Index i = 0; i < A.num_elements(); i++){
+      Index r = i%n;
+      Index c = i/n;
+      A(r,c) += (B(r,c) - C(r,c));
+  }
+}
+
+void setmultadd_rk4(mat& A, mat& B, double alpha, mat& C){
+  Index n = A.shape()[0];
+  #ifdef __OPENMP__
+  #pragma omp parallel for
+  #endif
+  for(Index i = 0; i < A.num_elements(); i++){
+      Index r = i%n;
+      Index c = i/n;
+      A(r,c) = B(r,c) + alpha*C(r,c);
+  }
+}
+
+void finstage_rk4(mat& A, mat& B, mat& C, mat& D, mat& E, double tau){
+  Index n = A.shape()[0];
+  #ifdef __OPENMP__
+  #pragma omp parallel for
+  #endif
+  for(Index i = 0; i < A.num_elements(); i++){
+      Index r = i%n;
+      Index c = i/n;
+      A(r,c) = A(r,c) + (tau/6.0)*(B(r,c)+2.0*(C(r,c)+D(r,c))+E(r,c));
+  }
+}
+
 struct PS_K_step_adapt {
 
   PS_K_step_adapt(stloc _sl, grid_info<3> _gi, const blas_ops* _blas)
@@ -1201,9 +1272,10 @@ struct PS_K_step_adapt {
       tmpX2.resize({gi.dxx_mult,gi.r});
     }
 
+
   void rk4_K_rhs(mat& U, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2, mat& out){
 
-    // Do needed derivatives in Fourier space
+    // Perform needed derivatives in Fourier space
     fft->forward(U,Uhat);
     double ncxx = 1.0 / double(gi.dxx_mult);
     componentwise_mat_fourier_omp(gi.r, gi.N_xx, [this, ncxx](Index idx, mind<3> i, Index rr) {
@@ -1235,35 +1307,21 @@ struct PS_K_step_adapt {
     UU[1] += UU[2];
     ptw_mult_row(U,ef[2],UU[0]);
     blas->matmul_transb(UU[0],C2[2],out);
-    out += UU[1];
-    out -= tmpX2;
+    addsub_rhs(out,UU[1],tmpX2); //out += UU[1]; //out -= tmpX2;
   }
-
 
 
   void rk4_K(mat& U0, Index n, double tau, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2, mat& U){
     U = U0;
     for(Index i = 0; i < n; i++){
       rk4_K_rhs(U, ef, C1, C2, KK[0]);
-      tmpX = KK[0];
-      tmpX *= (tau/2.0);
-      tmpX += U;
+      setmultadd_rk4(tmpX,U,tau/2.0,KK[0]); //tmpX = KK[0]; //tmpX *= (tau/2.0); //tmpX += U;
       rk4_K_rhs(tmpX, ef, C1, C2, KK[1]);
-      tmpX = KK[1];
-      tmpX *= (tau/2.0);
-      tmpX += U;
+      setmultadd_rk4(tmpX,U,tau/2.0,KK[1]); //tmpX = KK[1]; //tmpX *= (tau/2.0); //tmpX += U;
       rk4_K_rhs(tmpX, ef, C1, C2, KK[2]);
-      tmpX = KK[2];
-      tmpX *= tau;
-      tmpX += U;
+      setmultadd_rk4(tmpX,U,tau,KK[2]); //tmpX = KK[2]; //tmpX *= tau; //tmpX += U;
       rk4_K_rhs(tmpX, ef, C1, C2, KK[3]);
-      KK[1] *= 2.0;
-      KK[2] *= 2.0;
-      KK[0] += KK[1];
-      KK[0] += KK[2];
-      KK[0] += KK[3];
-      KK[0] *= (tau/6.0);
-      U += KK[0];
+      finstage_rk4(U,KK[0],KK[1],KK[2],KK[3],tau);
     }
   }
 
@@ -1272,7 +1330,7 @@ struct PS_K_step_adapt {
     if(fft == nullptr)
       fft = make_unique_ptr<fft3d<2>>(gi.N_xx, K, Uhat);
     mat tmp({K.shape()[0],K.shape()[1]});
-    rk4_K(K, nsteps_int, tau, ef, C1, C2, tmp);
+    rk4_K(K, nsteps_int, tau/nsteps_int, ef, C1, C2, tmp);
     K = tmp;
   }
 
@@ -1288,6 +1346,170 @@ private:
   array<mat,3> UU;
   array<mat,4> KK;
   mat tmpX, tmpX2;
+};
+
+struct PS_S_step_adapt {
+
+  PS_S_step_adapt(stloc _sl, grid_info<3> _gi, const blas_ops* _blas)
+    : sl(_sl), gi(_gi), blas(_blas) {
+
+      tmpSS.resize({gi.r,gi.r});
+      SS = create_rk4_array({gi.r,gi.r}, sl);
+  }
+
+  void rk4_S_rhs(mat& U, const array<mat,3>& C1, const array<mat,3>& C2, const array<mat,3>& D1, const array<mat,3>& D2, mat& out){
+
+    mat tmpS({gi.r,gi.r}, sl);
+    mat tmpS2({gi.r,gi.r}, sl);
+ 
+    blas->matmul(D2[0],U,tmpS);
+    blas->matmul_transb(tmpS,C1[0],out);
+    blas->matmul(D2[1],U,tmpS);
+    blas->matmul_transb(tmpS,C1[1],tmpS2);
+    out += tmpS2;
+    blas->matmul(D2[2],U,tmpS);
+    blas->matmul_transb(tmpS,C1[2],tmpS2);
+    out += tmpS2;
+    blas->matmul(D1[0],U,tmpS);
+    blas->matmul_transb(tmpS,C2[0],tmpS2);
+    out -= tmpS2;
+    blas->matmul(D1[1],U,tmpS);
+    blas->matmul_transb(tmpS,C2[1],tmpS2);
+    out -= tmpS2;
+    blas->matmul(D1[2],U,tmpS);
+    blas->matmul_transb(tmpS,C2[2],tmpS2);
+    out -= tmpS2;
+  }
+
+  void rk4_S(mat& U0, Index n, double tau, const array<mat,3>& C1, const array<mat,3>& C2, const array<mat,3>& D1,const array<mat,3>& D2, mat& U){
+    U = U0;
+    for(Index i = 0; i < n; i++){
+      rk4_S_rhs(U, C1, C2, D1, D2, SS[0]);
+      setmultadd_rk4(tmpSS,U,tau/2.0, SS[0]);
+      rk4_S_rhs(tmpSS, C1, C2, D1, D2, SS[1]);
+      setmultadd_rk4(tmpSS,U,tau/2.0,SS[1]);
+      rk4_S_rhs(tmpSS, C1, C2, D1, D2, SS[2]);
+      setmultadd_rk4(tmpSS,U,tau,SS[2]);
+      rk4_S_rhs(tmpSS, C1, C2, D1, D2, SS[3]);
+      finstage_rk4(U,SS[0],SS[1],SS[2],SS[3],tau);
+    }
+  }
+
+  void operator()(double tau, mat& S, const array<mat,3>& C1, const array<mat,3>& C2, const array<mat,3>& D1, const array<mat,3>& D2, const blas_ops& blas, Index nsteps_int=1) {
+
+    mat tmp({S.shape()[0],S.shape()[1]});
+    rk4_S(S, nsteps_int, tau/nsteps_int, C1, C2, D1, D2, tmp);
+    S = tmp;
+  }
+
+private:
+  grid_info<3> gi;
+  stloc sl;
+  const blas_ops* blas;
+
+  mat tmpSS;
+  array<mat,4> SS;
+
+};
+
+struct PS_L_step_adapt {
+
+  PS_L_step_adapt(stloc _sl, grid_info<3> _gi, const blas_ops* _blas)
+    : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Vhat(_sl), tmpV(_sl) {
+
+      Vhat.resize({gi.dvvh_mult,gi.r});
+      VVhat = create_cmat_array({gi.dvvh_mult,gi.r}, sl);
+      VV = create_mat_array({gi.dvv_mult,gi.r}, sl);
+      LL = create_rk4_array({gi.dvv_mult,gi.r}, sl);
+
+      tmpV.resize({gi.dvv_mult,gi.r});
+      tmpV2.resize({gi.dvv_mult,gi.r});
+
+      array<vec,3> h_v = create_vec_array(gi.dvv_mult, stloc::host);
+      componentwise_vec_omp(gi.N_vv, [this, &h_v](Index idx, mind<3> i) {
+        h_v[0](idx) = gi.v(0, i[0]);
+        h_v[1](idx) = gi.v(1, i[1]);
+        h_v[2](idx) = gi.v(2, i[2]);
+      });
+      v = h_v;
+    }
+
+
+  void rk4_L_rhs(mat& V, array<vec,3>& v, const array<mat,3>& D1, const array<mat,3>& D2, mat& out){
+
+    // Perform needed derivatives in Fourier space
+    fft->forward(V,Vhat);
+    double ncvv = 1.0 / double(gi.dvv_mult);
+    componentwise_mat_fourier_omp(gi.r, gi.N_vv, [this, ncvv](Index idx, mind<3> i, Index rr) {
+    Index mult_j = freq(i[1], gi.N_vv[1]);
+    Index mult_k = freq(i[2], gi.N_vv[2]);
+    complex<double> lambdav = complex<double>(0.0,2.0*M_PI/(gi.lim_vv[1]-gi.lim_vv[0])*i[0]);
+    complex<double> lambdaw = complex<double>(0.0,2.0*M_PI/(gi.lim_vv[3]-gi.lim_vv[2])*mult_j);
+    complex<double> lambdau = complex<double>(0.0,2.0*M_PI/(gi.lim_vv[5]-gi.lim_vv[4])*mult_k);
+
+    VVhat[0](idx,rr) = Vhat(idx,rr) * lambdav * ncvv;
+    VVhat[1](idx,rr) = Vhat(idx,rr) * lambdaw * ncvv ;
+    VVhat[2](idx,rr) = Vhat(idx,rr) * lambdau * ncvv ;
+    });
+    fft->backward(VVhat[0],VV[0]);
+    fft->backward(VVhat[1],VV[1]);
+    fft->backward(VVhat[2],VV[2]);
+
+
+    blas->matmul_transb(VV[0],D1[0],out);
+    blas->matmul_transb(VV[1],D1[1],VV[0]);
+    out += VV[0];
+    blas->matmul_transb(VV[2],D1[2],VV[0]);
+    out += VV[0];
+
+    ptw_mult_row(V,v[0],VV[0]);
+    blas->matmul_transb(VV[0],D2[0],VV[1]);
+    out -= VV[1];
+    ptw_mult_row(V,v[1],VV[0]);
+    blas->matmul_transb(VV[0],D2[1],VV[2]);
+    out -= VV[2];
+    ptw_mult_row(V,v[2],VV[0]);
+    blas->matmul_transb(VV[0],D2[2],tmpV2);
+    out -= tmpV2;
+  }
+
+
+  void rk4_L(mat& V0, Index n, double tau, array<vec,3>& v, const array<mat,3>& D1, const array<mat,3>& D2, mat& V){
+    V = V0;
+    for(Index i = 0; i < n; i++){
+      rk4_L_rhs(V, v, D1, D2, LL[0]);
+      setmultadd_rk4(tmpV,V,tau/2.0,LL[0]);
+      rk4_L_rhs(tmpV, v, D1, D2, LL[1]);
+      setmultadd_rk4(tmpV,V,tau/2.0,LL[1]);
+      rk4_L_rhs(tmpV, v, D1, D2, LL[2]);
+      setmultadd_rk4(tmpV,V,tau,LL[2]);
+      rk4_L_rhs(tmpV, v, D1, D2, LL[3]);
+      finstage_rk4(V,LL[0],LL[1],LL[2],LL[3],tau);
+    }
+  }
+
+  void operator()(double tau, mat& L, const array<mat,3>& D1, const array<mat,3>& D2, Index nsteps_int=1) {
+
+    if(fft == nullptr)
+      fft = make_unique_ptr<fft3d<2>>(gi.N_vv, L, Vhat);
+    mat tmp({L.shape()[0],L.shape()[1]});
+    rk4_L(L, nsteps_int, tau/nsteps_int, v, D1, D2, tmp);
+    L = tmp;
+  }
+
+
+private:
+  grid_info<3> gi;
+  stloc sl;
+  const blas_ops* blas;
+
+  std::unique_ptr<fft3d<2>> fft;
+  cmat Vhat;
+  array<cmat,3> VVhat;
+  array<mat,3> VV;
+  array<mat,4> LL;
+  mat tmpV, tmpV2;
+  array<vec,3> v;
 };
 
 void integration_first_order_adapt(double final_time, double tau, int nsteps_int, grid_info<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol1, double tol2, Index min_r, Index max_r, Index snapshots, const blas_ops& blas){
@@ -1316,6 +1538,8 @@ void integration_first_order_adapt(double final_time, double tau, int nsteps_int
   array<vec,3> E = create_vec_array(gi.dxx_mult, sl);
 
   PS_K_step_adapt K_step_rk4(sl, gi, &blas);
+  PS_S_step_adapt S_step_rk4(sl, gi, &blas);
+  PS_L_step_adapt L_step_rk4(sl, gi, &blas);
 
   cout.precision(8);
   while(kk<n_steps){
@@ -1346,17 +1570,38 @@ void integration_first_order_adapt(double final_time, double tau, int nsteps_int
 
     array<mat, 3> C1 = create_mat_array({gi.r,gi.r}, sl);
     array<mat, 3> C2 = create_mat_array({gi.r,gi.r}, sl);
-    array<cmat, 3> C2c = create_cmat_array({gi.r,gi.r}, sl);
-
-    compute_C(lr_sol.V, C1, C2, C2c, blas);
+    compute_C(lr_sol.V, C1, C2, blas);
 
     K_step_rk4(tau, K, E, C1, C2, nsteps_int);
 
     gs(K, lr_sol.S, ip_xx);
     mat Xn({gi.dxx_mult,gi.r}, sl);
     Xn = K;
+    mat Sn({gi.r,gi.r}, sl);
+    Sn = lr_sol.S;
 
-    print(Xn);
+   // ---- S step ----
+   // Compute D coefficients
+   coeff_D compute_D(sl, gi);
+
+   array<mat, 3> D1   = create_mat_array({gi.r,gi.r}, sl);
+   array<mat, 3> D2   = create_mat_array({gi.r,gi.r}, sl);
+
+   compute_D(Xn, E, D1, D2, blas);
+    
+   S_step_rk4(tau, Sn, C1, C2, D1, D2, nsteps_int);
+    
+    // ---- L step ----
+    // Compute L
+    mat L({gi.dvv_mult,gi.r}, sl);
+    blas.matmul_transb(lr_sol.V,Sn,L);
+
+    L_step_rk4(tau, L, D1, D2, nsteps_int);
+
+    gs(L, Sn, ip_vv);
+    transpose_inplace(Sn);
+
+    print(Sn);
 
     kk = kk + 1;
   }
