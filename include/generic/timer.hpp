@@ -3,9 +3,10 @@
 #include <string>
 #include <time.h>
 
-#ifdef __OPENMP__
-#include <omp.h>
-#endif
+#include <generic/common.hpp>
+
+
+namespace Ensign {
 
 /// This timer class measures the elapsed time between two events. Timers can be
 /// started and stopped repeatedly. The total time as well as the average time
@@ -44,3 +45,5 @@ namespace gt {
     double deviation(std::string name);
 
 }
+
+} // namespace Ensign

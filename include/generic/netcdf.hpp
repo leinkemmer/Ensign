@@ -2,10 +2,12 @@
 
 #include <generic/common.hpp>
 #include <map>
+#include <cstdlib>
 
 #define ERRCODE 2
 #define ERR(e) {printf("Error: %s\n", nc_strerror(e)); exit(ERRCODE);}
 
+namespace Ensign {
 
 struct nc_writer {
 
@@ -22,3 +24,15 @@ private:
     std::map<string,int> dim_ids;
     std::map<string,int> var_ids;
 };
+
+#define NETCDF_CHECK(e)                                                                \
+    {                                                                                  \
+        int res = e;                                                                   \
+        if (res != NC_NOERR) {                                                         \
+            std::cout << "NetCDF Error " << __FILE__ << ":" << __LINE__ << ": "        \
+                      << nc_strerror(res) << std::endl;                                \
+            exit(EXIT_FAILURE);                                                        \
+        }                                                                              \
+    }
+
+} // namespace Ensign

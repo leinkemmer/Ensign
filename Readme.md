@@ -1,4 +1,4 @@
-# Readme #
+# Readme
 
 The **Ensign** software framework facilitates the efficient implementation of dynamical low-rank algorithms both on multi-core CPU and GPUs. It provides many primitives to make the implementation of such schemes easier and can work easily with both methods based on the projector splitting and the unconventional integrator. For more details on the dynamical low-rank method and in particular the problems implemented in the examples folder see
 
@@ -13,7 +13,6 @@ To build the software the following are needed
 - C++11 compatible C++ compiler
 - Fortran compiler (if the included OpenBLAS is used)
 - CUDA (if GPU support is desired)
-- NetCDF (optinal, required for writing snapshots to disk)
 
 To build the example programs and tests execute
 
@@ -30,16 +29,28 @@ If you prefer to use Intel MKL as the BLAS and LAPACK backend set
     cmake -DMKL_ENABLED=ON -DCUDA_ENABLED=ON ..
     make
 
-## Build instructions on MacOS
+## MacOS
 
-If you are on a Mac, you may have to use a different compiler than the system C++ compiler,
-since the `clang` that comes installed on OS X does not support OpenMP.
-To resolve this, you can install `gcc` via brew:
+### OpenBLAS
+If OpenBLAS is used as a BLAS backend, a Fortran compiler has to be installed. Since Apple Clang, the native compiler collection of MacOS, does not ship a Fortran compiler, one has to install a Fortran compiler manually. To obtain `gfortran-14`, the Fortran compiler of GCC, install `gcc-14` via brew (see also next section).
 
-    brew install gcc
+If CMake does not find the Fortran compiler automatically, you have to set the `FC` environment variable accordingly:
 
-Then, when building Ensign, use the Homebrew `gcc`:
+    export FC=/path/to/fortran/compiler
 
-    export CC=/opt/homebrew/opt/gcc/bin/gcc-13
+Additionally, you might also have to set the CMake cache entry `CMAKE_Fortran_COMPILER` to the full path of the Fortran compiler.
 
-You may have to change the version from 13 to whichever version of gcc Homebrew installed.
+#### OpenMP
+Moreover, Apple Clang does not officially support OpenMP. Therefore, you have to use instead a different compiler collection, for example GCC. Install `gcc-14` again via brew:
+
+    brew install gcc@14
+
+Invoke the brew command
+
+    brew info gcc@14
+
+to find the installation path of the C, C++ and Fortran compilers of `gcc-14`. With this installation path, set the `CC`, `CXX` and `FC` (use `gfortran-14`, when OpenBLAS is used) environment variables to use the Homebrew `gcc-14` when building Ensign:
+
+    export CC=/path/to/gcc-14
+    export CXX=/path/to/g++-14
+    export FC=/path/to/gfortran-14

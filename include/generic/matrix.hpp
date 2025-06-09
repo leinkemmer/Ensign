@@ -3,6 +3,12 @@
 #include <generic/common.hpp>
 #include <generic/storage.hpp>
 #include <generic/kernels.hpp>
+#include <generic/index.hpp>
+#include <generic/utility.hpp>
+
+namespace Ensign {
+
+namespace Matrix {
 
 /* Set matrix to zero
 */
@@ -73,6 +79,7 @@ struct blas_ops {
   #ifdef __CUDACC__
   cublasHandle_t  handle;
   cublasHandle_t  handle_devres; // cuBLAS routines return scalar results on device
+  cusolverDnHandle_t handle_cusolver;
   #endif
 };
 
@@ -97,3 +104,7 @@ private:
 */
 template<class T>
 void svd(const multi_array<T,2>& input, multi_array<T,2>& U, multi_array<T,2>& V, multi_array<T,1>& sigma_diag, const blas_ops& blas);
+
+} // namespace Matrix
+
+} // namespace Ensign

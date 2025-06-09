@@ -2,6 +2,8 @@
 
 #ifdef __CUDACC__
 
+namespace Ensign {
+
 template<class T>
 __global__ void fill_gpu(int n, T* v, T alpha);
 
@@ -91,5 +93,13 @@ __global__ void exact_sol_exp_3d_d(int N, int nx, int ny, int nz, cuDoubleComple
 __global__ void exp_euler_fourier_3d(int N, int nx, int ny, int nz, cuDoubleComplex* A, double* dc_r, double ts, double* lims, cuDoubleComplex* T);
 
 __global__ void second_ord_stage_fourier_3d(int N, int nx, int ny, int nz, cuDoubleComplex* A, double* dc_r, double ts, double* lims, cuDoubleComplex* T, cuDoubleComplex* U);
+
+template<class T>
+__global__ void copy_R(int m, int n, T* Q, T* R, T w);
+
+template<class T>
+__global__ void div_Q(int m, int n, T* Q, T w);
+
+} // namespace Ensign
 
 #endif

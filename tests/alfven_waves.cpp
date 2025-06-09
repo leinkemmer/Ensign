@@ -1,7 +1,7 @@
-#include "alfven_waves.hpp"
+#include "../examples/alfven_waves.hpp"
 
 #define CATCH_CONFIG_MAIN
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 
 const vector<string> methods = {"lie", "unconventional", "augmented", "strang", "bug_midpoint"};
 
@@ -298,7 +298,15 @@ void test_advection_z(string method, discretization discr) {
 
     double t_final = 0.1;
 
-    integrator integrate(method, t_final, 1e-3, false, 0, gi, config.X, config.V);
+
+    mat Kphi({gi.dxx_mult, gi.r});
+    mat Vphi({gi.N_zv[0], gi.r});
+    lr2<double> dtA(gi.r, {gi.dxx_mult, gi.N_zv[0]});
+    Kphi.set_zero();
+    Vphi.set_zero();
+    dtA.set_zero();
+
+    integrator integrate(method, t_final, 1e-3, false, 0, gi, config.X, config.V, &Kphi, &Vphi, &dtA);
     lr2<double> f_final = integrate.run();
     mat f_full = f_final.full(config.blas);
     
@@ -345,10 +353,13 @@ void test_advection_v(string method, discretization discr) {
         Vphi(i, k) = (k==0) ? sin(z)/sqrt(M_PI)/sqrt(2.0*M_PI) : 0.0;
       }
     }
-    
+
+    lr2<double> dtA(gi.r, {gi.dxx_mult, gi.N_zv[0]});
+    dtA.set_zero();
+
     double t_final = 0.2;
 
-    integrator integrate(method, t_final, 1e-2, false, 0, gi, config.X, config.V, &Kphi, &Vphi);
+    integrator integrate(method, t_final, 1e-2, false, 0, gi, config.X, config.V, &Kphi, &Vphi, &dtA);
     lr2<double> f_final = integrate.run();
     mat f_full = f_final.full(config.blas);
 
@@ -430,7 +441,7 @@ void test_advection_v_dtA(string method, discretization discr) {
 
 TEST_CASE( "Alfven waves", "[alfven_waves]" ) {
 
-  #ifdef __OPENMP
+  #ifdef __OPENMP__
   omp_set_num_threads(1);
   #endif
 

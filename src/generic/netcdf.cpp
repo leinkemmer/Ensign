@@ -1,14 +1,13 @@
 #include <generic/netcdf.hpp>
 
-#ifdef __NETCDF__
+namespace Ensign {
+
 #include <netcdf.h>
 
 #define ERRCODE 2
 #define ERR(e) {printf("Error: %s\n", nc_strerror(e)); exit(ERRCODE);}
-#endif
 
 nc_writer::nc_writer(string filename, vector<long> extensions, vector<string> d_names) {
-  #ifdef __NETCDF__
   int retval;
    
    if ((retval = nc_create(filename.c_str(), NC_CLOBBER, &ncid)))
@@ -20,20 +19,16 @@ nc_writer::nc_writer(string filename, vector<long> extensions, vector<string> d_
       ERR(retval);
     dim_ids[d_names[i]] = dim_id;
   }
-  #endif
 }
 
 nc_writer::~nc_writer() {
-  #ifdef __NETCDF__
   int retval;
 
   if ((retval = nc_close(ncid)))
     ERR(retval);
-  #endif
 }
 
 void nc_writer::add_var(string name, vector<string> dims) {
-  #ifdef __NETCDF__
   int retval;
 
   vector<int> ids;
@@ -45,23 +40,20 @@ void nc_writer::add_var(string name, vector<string> dims) {
     ERR(retval);
 
   var_ids[name] = varid;
-  #endif
 }
 
 void nc_writer::start_write_mode() {
-  #ifdef __NETCDF__
   int retval;
 
   if ((retval = nc_enddef(ncid)))
   ERR(retval);
-  #endif
 }
 
 void nc_writer::write(string name, double* data) {
-  #ifdef __NETCDF__
   int retval;
   
   if ((retval = nc_put_var_double(ncid, var_ids[name], data)))
     ERR(retval);
-  #endif
 }
+
+} // namespace Ensign

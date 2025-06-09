@@ -8,6 +8,9 @@
 
 #include <cxxopts.hpp>
 
+using namespace Ensign;
+using namespace Ensign::Matrix;
+
 bool CPU;
 
 lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int r,double tstar, Index nsteps, int nsteps_split, int nsteps_ee, int nsteps_rk4, array<double,6> lim_xx, array<double,6> lim_vv, lr2<double> lr_sol, array<fftw_plan,2> plans_e, array<fftw_plan,2> plans_xx, array<fftw_plan,2> plans_vv, const blas_ops& blas){
@@ -51,7 +54,7 @@ lr2<double> integration_first_order(array<Index,3> N_xx,array<Index,3> N_vv, int
     }
   }
 
-  gram_schmidt gs(&blas);
+  orthogonalize gs(&blas);
 
   // For Electric field
 
@@ -2090,7 +2093,7 @@ lr2<double> integration_second_order(array<Index,3> N_xx,array<Index,3> N_vv, in
     }
   }
 
-  gram_schmidt gs(&blas);
+  orthogonalize gs(&blas);
 
   // For Electric field
 

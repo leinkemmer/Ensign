@@ -2,6 +2,8 @@
 
 #include <generic/common.hpp>
 
+namespace Ensign {
+
 // product of an array of numbers
 template<class T, size_t d>
 T prod(array<T,d> a) {
@@ -83,3 +85,12 @@ double max_err(T err, T diff) {
   else
     return max(err, diff);
 }
+
+template <class InputIt, class OutputIt>
+void remove_element(InputIt first, InputIt last, OutputIt d_first, const Index idx)
+{
+    std::copy(first, first + idx, d_first);
+    std::copy(first + idx + 1, last, d_first + idx);
+}
+
+} // namespace Ensign
