@@ -1512,6 +1512,7 @@ private:
   array<vec,3> v;
 };
 
+
 void integration_first_order_adapt(double final_time, double tau, int nsteps_int, grid_info<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol1, double tol2, Index min_r, Index max_r, Index snapshots, const blas_ops& blas){
 
   stloc sl = (CPU) ? stloc::host : stloc::device;
@@ -1580,17 +1581,17 @@ void integration_first_order_adapt(double final_time, double tau, int nsteps_int
     mat Sn({gi.r,gi.r}, sl);
     Sn = lr_sol.S;
 
-   // ---- S step ----
-   // Compute D coefficients
-   coeff_D compute_D(sl, gi);
+    // ---- S step ----
+    // Compute D coefficients
+    coeff_D compute_D(sl, gi);
 
-   array<mat, 3> D1   = create_mat_array({gi.r,gi.r}, sl);
-   array<mat, 3> D2   = create_mat_array({gi.r,gi.r}, sl);
+    array<mat, 3> D1   = create_mat_array({gi.r,gi.r}, sl);
+    array<mat, 3> D2   = create_mat_array({gi.r,gi.r}, sl);
 
-   compute_D(Xn, E, D1, D2, blas);
-    
-   S_step_rk4(tau, Sn, C1, C2, D1, D2, nsteps_int);
-    
+    compute_D(Xn, E, D1, D2, blas);
+
+    S_step_rk4(tau, Sn, C1, C2, D1, D2, nsteps_int);
+
     // ---- L step ----
     // Compute L
     mat L({gi.dvv_mult,gi.r}, sl);
@@ -1601,9 +1602,38 @@ void integration_first_order_adapt(double final_time, double tau, int nsteps_int
     gs(L, Sn, ip_vv);
     transpose_inplace(Sn);
 
-    print(Sn);
+    mat UU({gi.r,gi.r}, stloc::host);
+    mat VV({gi.r,gi.r}, stloc::host);
+    vec sigma({gi.r}, stloc::host);
 
-    kk = kk + 1;
+    svd_diag(Sn, sigma, blas);
+
+    if (sigma(gi.r) >= tol1){
+      if (gi.r == max_r){
+        cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
+        kk = kk + 1;
+      } else {
+        cout << "Rejected step, increasing rank by one." << endl;
+        // Do something
+      }
+    } else if (sigma(gi.r) <= tol2){
+        if (gi.r == min_r){
+          cout << "Accepted step, should decrease rank but min rank reached. Proceeding keeping min rank." << endl;
+          // Do something
+        } else {
+          cout << "Accepted step, decreasing rank by one." << endl;
+          // Do something
+        }
+        kk = kk + 1;
+    } else{
+      cout << "Accepted step, keeping same rank." << endl;
+      // TODO: avoid copies
+      lr_sol.X = Xn;
+      lr_sol.S = Sn;
+      lr_sol.V = Vn;
+
+      kk = kk + 1;
+    }
   }
  
     //ofstream h_rank_f("h_rank.bin", std::ios::binary);

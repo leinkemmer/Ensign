@@ -744,6 +744,34 @@ void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_arr
   transpose_inplace(V);
 }
 
+template<>
+void svd_diag(const multi_array<double,2>& input, multi_array<double,1>& sigma_diag, const blas_ops& blas) {
+  #ifdef __MKL__
+  MKL_INT work_query = -1;
+  MKL_INT info;
+  MKL_INT size;
+  char mode = 'N';
+  MKL_INT m = input.shape()[0];
+  MKL_INT n = input.shape()[1];
+  #else
+  int work_query = -1;
+  int info;
+  int size;
+  char mode = 'N';
+  int m = input.shape()[0];
+  int n = input.shape()[1];
+  #endif
+
+  multi_array<double,2> input_copy = input; // Lapack overwrites the input data
+
+  vector<double> work({1});
+  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), nullptr, &m, nullptr, &n, work.data(), &work_query, &info);
+
+  size = work[0];
+  work.resize({(size_t)size});
+  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), nullptr, &m, nullptr, &n, work.data(), &size, &info);
+}
+
 } // namespace Matrix
 
 } // namespace Ensign

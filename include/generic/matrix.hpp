@@ -104,6 +104,8 @@ private:
 */
 template<class T>
 void svd(const multi_array<T,2>& input, multi_array<T,2>& U, multi_array<T,2>& V, multi_array<T,1>& sigma_diag, const blas_ops& blas);
+template<class T>
+void svd_diag(const multi_array<T,2>& input, multi_array<T,1>& sigma_diag, const blas_ops& blas);
 
 } // namespace Matrix
 
