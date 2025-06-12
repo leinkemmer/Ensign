@@ -116,7 +116,6 @@ array<cmat,3> create_cmat_array(mind<2> dim, stloc sl) {
 array<vec,3> create_vec_array(Index dim, stloc sl) {
   array<vec,3> out = {vec({dim}, sl), vec({dim}, sl), vec({dim}, sl)};
   return out;
-  //return {vec({dim}, sl), vec({dim}, sl), vec({dim}, sl)};
 }
 
 array<cvec,3> create_cvec_array(Index dim, stloc sl) {
@@ -171,48 +170,6 @@ void componentwise_mat_fourier_omp(Index r, const mind<3>& N,  func F) {
     }
   }
 }
-
-
-
-void diagonalize_coeff(const array<mat,3>& C1, array<cmat,3>& Tc, array<vec,3>& dc_r, const grid_info<3>& gi, diagonalization& schur) {
-
-  array<mat,3> T = create_mat_array({gi.r, gi.r}, stloc::host);
-
-  if(C1[0].sl == stloc::host) {
-    schur(C1[0], T[0], dc_r[0]);
-    schur(C1[1], T[1], dc_r[1]);
-    schur(C1[2], T[2], dc_r[2]);
-
-    T[0].to_cplx(Tc[0]);
-    T[1].to_cplx(Tc[1]);
-    T[2].to_cplx(Tc[2]);
-  } else {
-    array<mat,3> h_C1 = create_mat_array({gi.r,gi.r}, stloc::host);
-    array<vec,3> h_dc_r = create_vec_array(gi.r, stloc::host);
-
-    h_C1[0] = C1[0];
-    h_C1[1] = C1[1];
-    h_C1[2] = C1[2];
-
-    schur(h_C1[0], T[0], h_dc_r[0]);
-    schur(h_C1[1], T[1], h_dc_r[1]);
-    schur(h_C1[2], T[2], h_dc_r[2]);
-
-    dc_r[0] = h_dc_r[0];
-    dc_r[1] = h_dc_r[1];
-    dc_r[2] = h_dc_r[2];
-
-    array<cmat,3> h_Tc = create_cmat_array({gi.r,gi.r}, stloc::host);
-    T[0].to_cplx(h_Tc[0]);
-    T[1].to_cplx(h_Tc[1]);
-    T[2].to_cplx(h_Tc[2]);
-
-    Tc[0] = h_Tc[0];
-    Tc[1] = h_Tc[1];
-    Tc[2] = h_Tc[2];
-  }
-}
-
 
 struct coeff_C {
 
@@ -369,9 +326,6 @@ struct coeff_D {
       ptw_mult_row(tmpXhat,lambda_n[0],dXhat[0]);
       ptw_mult_row(tmpXhat,lambda_n[1],dXhat[1]);
       ptw_mult_row(tmpXhat,lambda_n[2],dXhat[2]);
-      /* TODO: direct multiplicaiton on the GPU is probably faster
-      ptw_mult_row_cplx_fourier_3d<<<(dxxh_mult*r+n_threads-1)/n_threads,n_threads>>>(dxxh_mult*r, N_xx[0]/2+1, N_xx[1], N_xx[2], d_tmpXhat.begin(), d_lim_xx, ncxx, d_dXhat_x.begin(), d_dXhat_y.begin(), d_dXhat_z.begin());
-      */
 
       fft->backward(dXhat[0], dX[0]);
       fft->backward(dXhat[1], dX[1]);
@@ -830,6 +784,17 @@ void mgs_orthcol_cpu(multi_array<double,2>& X, std::function<double(double*,doub
       cblas_dscal(dims[0],1.0/sqrt(ip),X.extract({rk-1}),1);
 }
 
+double electric_energy(array<vec,3>& E, grid_info<3>& gi){
+  double ee = 0.0;
+  #ifdef __OPENMP__
+  #pragma omp parallel for reduction(+:ee)
+  #endif
+  for(Index ii = 0; ii < gi.dxx_mult; ii++){
+    ee += 0.5*(pow(E[0](ii),2)+pow(E[1](ii),2)+pow(E[2](ii),2))*gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2];
+  }
+
+  return ee;
+}
 
 void integration_first_order_adapt(double final_time, double tau, int nsteps_int, grid_info<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol1, double tol2, Index min_r, Index max_r, string ec, Index snapshots, const blas_ops& blas){
 
@@ -855,9 +820,8 @@ void integration_first_order_adapt(double final_time, double tau, int nsteps_int
   array<vec,3> E = create_vec_array(gi.dxx_mult, sl);
   array<vec,3> Etmp = create_vec_array(gi.dxx_mult, sl);
 
-
-  //n_steps = 2;
   while(kk<n_steps){
+
     PS_K_step_adapt K_step_rk4(sl, gi, &blas);
     PS_S_step_adapt S_step_rk4(sl, gi, &blas);
     PS_L_step_adapt L_step_rk4(sl, gi, &blas);
@@ -874,13 +838,19 @@ void integration_first_order_adapt(double final_time, double tau, int nsteps_int
     electric_field efield(sl, gi);
     efield(K, lr_sol.V, E, blas);
 
-    double el_energy = 0.0;
-    #ifdef __OPENMP__
-    #pragma omp parallel for reduction(+:el_energy)
-    #endif
-    for(Index ii = 0; ii < gi.dxx_mult; ii++){
-      el_energy += 0.5*(pow(E[0](ii),2)+pow(E[1](ii),2)+pow(E[2](ii),2))*gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2];
-    }
+    //double el_energy = 0.0;
+    //#ifdef __OPENMP__
+    //#pragma omp parallel for reduction(+:el_energy)
+    //#endif
+    //for(Index ii = 0; ii < gi.dxx_mult; ii++){
+    //  el_energy += 0.5*(pow(E[0](ii),2)+pow(E[1](ii),2)+pow(E[2](ii),2))*gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2];
+    //}
+    //cout.precision(16);
+    double el_energy = electric_energy(E, gi);
+    //cout << el_energy << endl;
+    //cout << ee2 << endl;
+    //exit(1);
+
 
     // ---- K step ----
     // Compute C coefficients
@@ -890,19 +860,12 @@ void integration_first_order_adapt(double final_time, double tau, int nsteps_int
     array<mat, 3> C2 = create_mat_array({gi.r,gi.r}, sl);
     compute_C(lr_sol.V, C1, C2, blas);
 
-    //if (kk == 1){
-    //print(C2[0]);
-    //exit(1);
-    //}
-
-
     K_step_rk4(tau, K, E, C1, C2, nsteps_int);
 
     mat Sn({gi.r,gi.r}, sl);
     gs(K, Sn, ip_xx);
     mat Xn({gi.dxx_mult,gi.r}, sl);
     Xn = K;
-
 
     // ---- S step ----
     // Compute D coefficients
@@ -928,8 +891,6 @@ void integration_first_order_adapt(double final_time, double tau, int nsteps_int
     transpose_inplace(Sn);
 
     if (ec == "f"){
-    //mat UU({gi.r,gi.r}, stloc::host);
-    //mat VV({gi.r,gi.r}, stloc::host);
       vec sigma({gi.r}, stloc::host);
       svd_diag(Sn, sigma, blas);
     if (sigma(gi.r-1) >= tol1){
@@ -1015,13 +976,14 @@ void integration_first_order_adapt(double final_time, double tau, int nsteps_int
       blas.matmul(Xn,Sn,K);
       efield(K, Vn, Etmp, blas);
 
-      double el_energy_new = 0.0;
-      #ifdef __OPENMP__
-      #pragma omp parallel for reduction(+:el_energy_new)
-      #endif
-      for(Index ii = 0; ii < gi.dxx_mult; ii++){
-        el_energy_new += 0.5*(pow(Etmp[0](ii),2)+pow(Etmp[1](ii),2)+pow(Etmp[2](ii),2))*gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2];
-      }
+      //double el_energy_new = 0.0;
+      //#ifdef __OPENMP__
+      //#pragma omp parallel for reduction(+:el_energy_new)
+      //#endif
+      //for(Index ii = 0; ii < gi.dxx_mult; ii++){
+      //  el_energy_new += 0.5*(pow(Etmp[0](ii),2)+pow(Etmp[1](ii),2)+pow(Etmp[2](ii),2))*gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2];
+      //}
+      double el_energy_new = electric_energy(Etmp, gi);
 
       mat UUs({gi.r,gi.r}, stloc::host);
       mat VVs({gi.r,gi.r}, stloc::host);
@@ -1038,13 +1000,14 @@ void integration_first_order_adapt(double final_time, double tau, int nsteps_int
       blas.matmul(Xn,VVs,K);
       efield(K, Vn, Etmp, blas);
 
-      double el_energy_cut = 0.0;
-      #ifdef __OPENMP__
-      #pragma omp parallel for reduction(+:el_energy_cut)
-      #endif
-      for(Index ii = 0; ii < gi.dxx_mult; ii++){
-        el_energy_cut += 0.5*(pow(Etmp[0](ii),2)+pow(Etmp[1](ii),2)+pow(Etmp[2](ii),2))*gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2];
-      }
+      //double el_energy_cut = 0.0;
+      //#ifdef __OPENMP__
+      //#pragma omp parallel for reduction(+:el_energy_cut)
+      //#endif
+      //for(Index ii = 0; ii < gi.dxx_mult; ii++){
+      //  el_energy_cut += 0.5*(pow(Etmp[0](ii),2)+pow(Etmp[1](ii),2)+pow(Etmp[2](ii),2))*gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2];
+      //}
+      double el_energy_cut = electric_energy(Etmp, gi);
 
       double err_el_energy = abs(el_energy_new-el_energy_cut);
       double fact = 1.0/10.0;
@@ -1145,7 +1108,7 @@ int main(int argc, char** argv){
   options.add_options()
   ("device", "Device the simulation is run on (can be either cpu or gpu)", cxxopts::value<string>()->default_value("cpu"))
   ("problem", "Initial value that is used in the simulation (either ll or ts)", cxxopts::value<string>()->default_value("ts"))
-  ("nx", "Number of grid points in space (as a whitespace separated list)", cxxopts::value<string>()->default_value("16 16 16"))
+  ("nx", "Number of grid points in space (as a whitespace separated list)", cxxopts::value<string>()->default_value("32 32 32"))
   ("nv", "Number of grid points in velocity (as a whitespace separated list)", cxxopts::value<string>()->default_value("32 32 32"))
   ("final_time", "Time to which the simulation is run", cxxopts::value<double>()->default_value("40.0"))
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("0.01"))
