@@ -274,7 +274,7 @@ struct coeff_C {
 
       // C2
       if(fft == nullptr)
-        fft = make_unique_ptr<fft3d<2>>(gi.N_xx, V, tmpVhat);
+        fft = make_unique_ptr<fft3d<2>>(gi.N_vv, V, tmpVhat);
 
       // TODO: relies on V not being overwritten
       fft->forward(V, tmpVhat);
@@ -1145,7 +1145,7 @@ int main(int argc, char** argv){
   options.add_options()
   ("device", "Device the simulation is run on (can be either cpu or gpu)", cxxopts::value<string>()->default_value("cpu"))
   ("problem", "Initial value that is used in the simulation (either ll or ts)", cxxopts::value<string>()->default_value("ts"))
-  ("nx", "Number of grid points in space (as a whitespace separated list)", cxxopts::value<string>()->default_value("32 32 32"))
+  ("nx", "Number of grid points in space (as a whitespace separated list)", cxxopts::value<string>()->default_value("16 16 16"))
   ("nv", "Number of grid points in velocity (as a whitespace separated list)", cxxopts::value<string>()->default_value("32 32 32"))
   ("final_time", "Time to which the simulation is run", cxxopts::value<double>()->default_value("40.0"))
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("0.01"))
