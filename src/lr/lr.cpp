@@ -391,29 +391,29 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, IP inner_pro
 
   for(Index k=0;k<r;k++) {
     if(k < n_b){
-      //#ifdef __OPENMP__
-      //#pragma omp parallel for
-      //#endif
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
       for(Index i=0;i<lr.size_X();i++) {
         lr.X(i, k) = X[k][i];
       }
-      //#ifdef __OPENMP__
-      //#pragma omp parallel for
-      //#endif
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
       for(Index i=0;i<lr.size_V();i++) {
         lr.V(i, k) = V[k][i];
       }
     }
     else{
-      //#ifdef __OPENMP__
-      //#pragma omp parallel for
-      //#endif
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
       for(Index i=0;i<lr.size_X();i++) {
         lr.X(i, k) = distribution(generator);
       }
-      //#ifdef __OPENMP__
-      //#pragma omp parallel for
-      //#endif
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
       for(Index i=0;i<lr.size_V();i++) {
         lr.V(i, k) = distribution(generator);
       }
