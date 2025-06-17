@@ -62,10 +62,14 @@ else()
 
   add_executable(vlasov_poisson_adapt vlasov_poisson_adapt.cpp)
   add_dependencies(vlasov_poisson_adapt Ensign)
+
+  add_executable(vlasov_poisson_adapt_reserve vlasov_poisson_adapt_reserve.cpp)
+  add_dependencies(vlasov_poisson_adapt_reserve Ensign)
 endif()
 
 target_link_libraries(vlasov_poisson Ensign::Ensign cxxopts)
 target_link_libraries(vlasov_poisson_adapt Ensign::Ensign cxxopts)
+target_link_libraries(vlasov_poisson_adapt_reserve Ensign::Ensign cxxopts)
 
 
 # Alfven waves example

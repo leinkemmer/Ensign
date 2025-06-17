@@ -65,6 +65,16 @@ array<fftw_plan,2> create_plans_3d(array<Index,3> dims_, multi_array<double,1>& 
   return out;
 }
 
+// Plan needed in adapt, no many routine known a priori
+array<fftw_plan,2> create_plans_3d_adapt(array<Index,3> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq){
+  array<fftw_plan,2> out;
+
+  out[0] = fftw_plan_dft_r2c_3d(int(dims_[2]), int(dims_[1]), int(dims_[0]), real.begin(), (fftw_complex*)freq.begin(), FFTW_ESTIMATE);
+  out[1] = fftw_plan_dft_c2r_3d(int(dims_[2]), int(dims_[1]), int(dims_[0]), (fftw_complex*)freq.begin(), real.begin(), FFTW_ESTIMATE);
+
+  return out;
+}
+
 void destroy_plans(array<fftw_plan,2>& plans){
   fftw_destroy_plan(plans[0]);
   fftw_destroy_plan(plans[1]);
@@ -115,6 +125,22 @@ fft<2, 3>::fft(array<Index,3> dims_, multi_array<double,2>& real, multi_array<co
   set_null();
   if(real.sl == stloc::host) {
     plans = create_plans_3d(dims_, real, freq);
+  } else {
+    #ifdef __CUDACC__
+    cuda_plans = create_plans_3d(dims_, real.shape()[1]);
+    #endif
+  }
+}
+
+template<>
+fft<2, 3>::fft(array<Index,3> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq, bool adapt) {
+  set_null();
+  if(real.sl == stloc::host) {
+    if (adapt == true){
+      plans = create_plans_3d_adapt(dims_, real, freq);
+    } else {
+      plans = create_plans_3d(dims_, real, freq);
+    }
   } else {
     #ifdef __CUDACC__
     cuda_plans = create_plans_3d(dims_, real.shape()[1]);
@@ -225,6 +251,18 @@ template void fft<2, 3>::forward(multi_array<double,2>& real, multi_array<comple
 
 
 template<size_t d, size_t dim>
+void fft<d, dim>::forward(double* real, complex<double>* freq, stloc sl) {
+  if(sl == stloc::host) {
+    fftw_execute_dft_r2c(plans[0],real,(fftw_complex*)freq);
+  } else {
+    #ifdef __CUDACC__
+    // TODO
+    #endif
+  }
+}
+template void fft<2, 3>::forward(double* real, complex<double>* freq, stloc sl);
+
+template<size_t d, size_t dim>
 void fft<d, dim>::backward(multi_array<complex<double>,d>& freq, multi_array<double,d>& real) {
   if(real.sl == stloc::host) {
     fftw_execute_dft_c2r(plans[1],(fftw_complex*)freq.data(),real.data());
@@ -241,4 +279,15 @@ template void fft<2, 2>::backward(multi_array<complex<double>,2>& freq, multi_ar
 template void fft<1, 3>::backward(multi_array<complex<double>,1>& freq, multi_array<double,1>& real);
 template void fft<2, 3>::backward(multi_array<complex<double>,2>& freq, multi_array<double,2>& real);
 
+template<size_t d, size_t dim>
+void fft<d, dim>::backward(complex<double>* freq, double* real, stloc sl) {
+  if(sl == stloc::host) {
+    fftw_execute_dft_c2r(plans[1],(fftw_complex*)freq,real);
+  } else {
+    #ifdef __CUDACC__
+    // TODO
+    #endif
+  }
+}
+template void fft<2, 3>::backward(complex<double>* real, double* freq, stloc sl);
 } // namespace Ensign

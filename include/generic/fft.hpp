@@ -12,10 +12,13 @@ template<size_t d, size_t dim>
 struct fft {
 
     fft(array<Index,dim> dims_, multi_array<double,d>& real, multi_array<complex<double>,d>& freq);
+    fft(array<Index,dim> dims_, multi_array<double,d>& real, multi_array<complex<double>,d>& freq,bool adapt);
     ~fft();
 
     void forward(multi_array<double,d>& real, multi_array<complex<double>,d>& freq); 
+    void forward(double* real, complex<double>* freq, stloc sl); 
     void backward(multi_array<complex<double>,d>& freq, multi_array<double,d>& real);
+    void backward(complex<double>* freq, double* real, stloc sl); 
 
 private:
     array<fftw_plan,2> plans;
@@ -57,6 +60,7 @@ array<fftw_plan,2> create_plans_2d(array<Index,2> dims_, multi_array<double,2>& 
 */
 array<fftw_plan,2> create_plans_3d(array<Index,3> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq);
 array<fftw_plan,2> create_plans_3d(array<Index,3> dims_, multi_array<double,1>& real, multi_array<complex<double>,1>& freq);
+array<fftw_plan,2> create_plans_3d_adapt(array<Index,3> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq);
 
 /* Helper function to destroy FFTW plans
 */

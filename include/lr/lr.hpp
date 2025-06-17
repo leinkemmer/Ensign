@@ -53,6 +53,40 @@ struct lr2 {
   }
 };
 
+template<class T>
+struct lr2_reserve {
+  multi_array<T, 2> S;
+  multi_array<T, 2> X;
+  multi_array<T, 2> V;
+  Index rk;
+/*
+  lr2_reserve(Index r, Index r_max, array<Index,2> N, stloc sl=stloc::host) : rk(r) {
+    //S.reserve({r_max,r_max},{r,r});
+    S.resize({r,r});
+    X.reserve({N[0],r_max},{N[0],r});
+    V.reserve({N[1],r_max},{N[1],r});
+  }
+*/
+  lr2_reserve(Index r, Index r_max, array<Index,2> N, stloc sl=stloc::host) : S({r,r},sl), X({N[0],r_max},{N[0],r},sl), V({N[1],r_max},{N[1],r},sl) {}
+
+  void resize(Index r, array<Index,2> N) {
+    S.resize({r,r});
+    X.resize({N[0],r});
+    V.resize({N[1],r});
+  }
+
+  Index size_X() const {
+    return X.shape()[0];
+  }
+  Index size_V() const {
+    return V.shape()[0];
+  }
+  Index rank() const {
+    return S.shape()[0];
+  }
+
+};
+
 
 /*  Add two low-rank representations together.
 *
@@ -127,6 +161,11 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V,
                 IP inner_product_V,
                 const Ensign::Matrix::blas_ops& blas);
 
+template<class T, class IP>
+void initialize(lr2_reserve<T>& lr, vector<const T*> X, vector<const T*> V,
+                IP inner_product_X,
+                IP inner_product_V,
+                const Ensign::Matrix::blas_ops& blas);
 
 /* Return an inner product function object for use in, e.g., in gram_schmidt.
 */

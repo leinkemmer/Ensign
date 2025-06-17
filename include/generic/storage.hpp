@@ -10,15 +10,21 @@ namespace Ensign {
 template<class T, size_t d>
 struct multi_array {
   array<Index,d> e;
+  array<Index,d> emax;
   T* v;
   stloc sl;
 
   multi_array(stloc _sl=stloc::host) : v(nullptr), sl(_sl) {
     fill(e.begin(), e.end(), 0);
+    fill(emax.begin(), emax.end(), 0);
   }
 
   multi_array(array<Index,d> _e, stloc _sl=stloc::host) : sl(_sl) {
     resize(_e);
+  }
+  
+  multi_array(array<Index,d> _emax, array<Index,d> _e, stloc _sl=stloc::host) : sl(_sl) {
+    reserve(_emax,_e);
   }
 
   // copy constructor
@@ -74,7 +80,26 @@ struct multi_array {
 
   void resize(array<Index,d> _e) {
     e = _e;
+    emax = _e;
     Index num_elements = prod(e);
+    if(sl == stloc::host) {
+      v = (T*)malloc(sizeof(T)*num_elements);
+    } else {
+      #ifdef __CUDACC__
+      v = (T*)gpu_malloc(sizeof(T)*num_elements);
+      #else
+      cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
+      << __LINE__ << endl;
+      exit(1);
+      #endif
+    }
+  }
+
+  void reserve(array<Index,d> _emax, array<Index,d> _e) {
+    // Reserve memory for emax for a multiarray of actual size e
+    e = _e;
+    emax = _emax;
+    Index num_elements = prod(emax);
     if(sl == stloc::host) {
       v = (T*)malloc(sizeof(T)*num_elements);
     } else {
@@ -176,6 +201,10 @@ struct multi_array {
 
   array<Index,d> shape() const {
     return e;
+  }
+
+  array<Index,d> shape_alloc() const {
+    return emax;
   }
 
   T* data() const {
