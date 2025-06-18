@@ -122,7 +122,19 @@ array<vec,3> create_vec_array(Index dim, stloc sl) {
 array<cvec,3> create_cvec_array(Index dim, stloc sl) {
   return {cvec({dim}, sl), cvec({dim}, sl), cvec({dim}, sl)};
 }
+/*
+array<mat,4> create_rk4_array_reserve(mind<2> maxdim, mind<2> dim, stloc sl) {
+  return {mat(maxdim,dim,sl), mat(maxdim,dim,sl), mat(maxdim,dim,sl), mat(maxdim,dim,sl)};
+}
 
+array<mat,3> create_mat_array_reserve(mind<2> maxdim, mind<2> dim, stloc sl) {
+  return {mat(maxdim,dim,sl), mat(maxdim,dim,sl), mat(maxdim,dim,sl)};
+}
+
+array<cmat,3> create_cmat_array_reserve(mind<2> maxdim,mind<2> dim, stloc sl) {
+  return {cmat(maxdim,dim,sl), cmat(maxdim,dim,sl), cmat(maxdim,dim,sl)};
+}
+*/
 // Note that using a std::function object has a non-negligible performance overhead
 template<class func>
 void componentwise_vec_omp(const mind<3>& N, func F) {
@@ -176,11 +188,15 @@ struct coeff_C {
 
   coeff_C(stloc sl, grid_info_reserve<3> _gi) : gi(_gi), tmpVhat(sl) {
 
-    tmpVhat.resize({gi.dvvh_mult,gi.r});
+    tmpVhat.reserve({gi.dvvh_mult,gi.rmax},{gi.dvvh_mult,gi.r});
 
     we       = create_vec_array(gi.dvv_mult, sl);
-    dVhat    = create_cmat_array({gi.dvvh_mult,gi.r}, sl);
-    dV       = create_mat_array({gi.dvv_mult,gi.r}, sl);
+    //dVhat    = create_cmat_array_reserve({gi.dvvh_mult,gi.rmax},{gi.dvvh_mult,gi.r}, sl);
+    //dV       = create_mat_array_reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r}, sl);
+    for(int i = 0; i < 3; i++){
+      dVhat[i].reserve({gi.dvvh_mult,gi.rmax},{gi.dvvh_mult,gi.r});
+      dV[i].reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r});
+    }
     h_lambda_n = create_cvec_array(gi.dvvh_mult, stloc::host);
 
     // Initialize we
@@ -232,10 +248,11 @@ struct coeff_C {
 
       // C2
       if(fft == nullptr)
-        fft = make_unique_ptr<fft3d<2>>(gi.N_vv, V, tmpVhat);
+        fft = make_unique_ptr<fft3d<2>>(gi.N_vv, V, tmpVhat,true);
 
-      // TODO: relies on V not being overwritten
-      fft->forward(V, tmpVhat);
+      for(Index kk = 0; kk < gi.r; kk ++){
+        fft->forward(V.begin()+kk*gi.dvv_mult, tmpVhat.begin()+kk*gi.dvvh_mult,V.sl);
+      }
 
       if(V.sl == stloc::host) {
         ptw_mult_row(tmpVhat,h_lambda_n[0],dVhat[0]);
@@ -248,13 +265,25 @@ struct coeff_C {
         #endif
       }
 
-      fft->backward(dVhat[0], dV[0]);
-      fft->backward(dVhat[1], dV[1]);
-      fft->backward(dVhat[2], dV[2]);
+      for(Index kk = 0; kk < gi.r; kk ++){
+        fft->backward(dVhat[0].begin()+kk*gi.dvvh_mult, dV[0].begin()+kk*gi.dvv_mult,dV[0].sl);
+        fft->backward(dVhat[1].begin()+kk*gi.dvvh_mult, dV[1].begin()+kk*gi.dvv_mult,dV[1].sl);
+        fft->backward(dVhat[2].begin()+kk*gi.dvvh_mult, dV[2].begin()+kk*gi.dvv_mult,dV[2].sl);
+      }
 
       coeff(V, dV[0], gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2], C2[0], blas);
       coeff(V, dV[1], gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2], C2[1], blas);
       coeff(V, dV[2], gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2], C2[2], blas);
+
+  }
+
+  void update_info(Index nr){
+    gi.update_rank(nr);
+    tmpVhat.update_shape({gi.dvvh_mult,gi.r});
+    for(int i=0; i<3; i++){
+      dVhat[i].update_shape({gi.dvvh_mult,gi.r});
+      dV[i].update_shape({gi.dvv_mult,gi.r});
+    }
 
   }
 
@@ -273,11 +302,16 @@ struct coeff_D {
 
   coeff_D(stloc sl, grid_info_reserve<3> _gi) : gi(_gi), tmpXhat(sl) {
 
-    tmpXhat.resize({gi.dxxh_mult,gi.r});
+    tmpXhat.reserve({gi.dxxh_mult,gi.rmax},{gi.dxxh_mult,gi.r});
 
-    dX = create_mat_array({gi.dxx_mult,gi.r}, sl);
+    //dXhat = create_cmat_array_reserve({gi.dxxh_mult,gi.rmax},{gi.dxxh_mult,gi.r}, sl);
+    //dX = create_mat_array_reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
+    for(int i = 0; i < 3; i++){
+      dXhat[i].reserve({gi.dxxh_mult,gi.rmax},{gi.dxxh_mult,gi.r});
+      dX[i].reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r});
+    }
+
     we = create_vec_array(gi.dxx_mult, sl);
-    dXhat = create_cmat_array({gi.dxxh_mult,gi.r}, sl);
     lambda_n = create_cvec_array(gi.dxxh_mult, sl);
 
     array<cvec,3> h_lambda_n = create_cvec_array(gi.dxxh_mult, stloc::host);
@@ -320,21 +354,35 @@ struct coeff_D {
       coeff(X, X, we[2], D1[2], blas);
 
       if(fft == nullptr)
-        fft = make_unique_ptr<fft3d<2>>(gi.N_xx, X, tmpXhat);
+        fft = make_unique_ptr<fft3d<2>>(gi.N_xx, X, tmpXhat,true);
 
-      fft->forward(X, tmpXhat);
+      for(Index kk = 0; kk < gi.r; kk ++){
+        fft->forward(X.begin()+kk*gi.dxx_mult, tmpXhat.begin()+kk*gi.dxxh_mult,X.sl);
+      }
 
       ptw_mult_row(tmpXhat,lambda_n[0],dXhat[0]);
       ptw_mult_row(tmpXhat,lambda_n[1],dXhat[1]);
       ptw_mult_row(tmpXhat,lambda_n[2],dXhat[2]);
 
-      fft->backward(dXhat[0], dX[0]);
-      fft->backward(dXhat[1], dX[1]);
-      fft->backward(dXhat[2], dX[2]);
+      for(Index kk = 0; kk < gi.r; kk ++){
+        fft->backward(dXhat[0].begin()+kk*gi.dxxh_mult, dX[0].begin()+kk*gi.dxx_mult,dX[0].sl);
+        fft->backward(dXhat[1].begin()+kk*gi.dxxh_mult, dX[1].begin()+kk*gi.dxx_mult,dX[1].sl);
+        fft->backward(dXhat[2].begin()+kk*gi.dxxh_mult, dX[2].begin()+kk*gi.dxx_mult,dX[2].sl);
+      }
 
       coeff(X, dX[0], gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2], D2[0], blas);
       coeff(X, dX[1], gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2], D2[1], blas);
       coeff(X, dX[2], gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2], D2[2], blas);
+  }
+  
+  void update_info(Index nr){
+    gi.update_rank(nr);
+    tmpXhat.update_shape({gi.dxxh_mult,gi.r});
+    for(int i=0; i<3; i++){
+      dXhat[i].update_shape({gi.dxxh_mult,gi.r});
+      dX[i].update_shape({gi.dxx_mult,gi.r});
+    }
+
   }
 
 private:
@@ -368,8 +416,8 @@ struct electric_field {
     #endif
   }
 
-  void update_info(grid_info_reserve<3> _gi){
-    gi = _gi;
+  void update_info(Index nr){
+    gi.update_rank(nr);
     int_V.resize({gi.r});
   }
 
@@ -517,15 +565,21 @@ void finstage_rk4(mat& A, mat& B, mat& C, mat& D, mat& E, double tau){
 struct PS_K_step_adapt {
 
   PS_K_step_adapt(stloc _sl, grid_info_reserve<3> _gi, const blas_ops* _blas)
-    : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Uhat(_sl), tmpX(_sl) {
+    : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Uhat(_sl), tmpX(_sl), tmpX2(_sl){
 
-      Uhat.resize({gi.dxxh_mult,gi.r});
-      UUhat = create_cmat_array({gi.dxxh_mult,gi.r}, sl);
-      UU = create_mat_array({gi.dxx_mult,gi.r}, sl);
-      KK = create_rk4_array({gi.dxx_mult,gi.r}, sl);
+      Uhat.reserve({gi.dxxh_mult,gi.rmax},{gi.dxxh_mult,gi.r});
+      //UUhat = create_cmat_array_reserve({gi.dxxh_mult,gi.rmax},{gi.dxxh_mult,gi.r}, sl);
+      //UU = create_mat_array_reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
+      //KK = create_rk4_array_reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
+      for(int i = 0; i < 3; i++){
+        UUhat[i].reserve({gi.dxxh_mult,gi.rmax},{gi.dxxh_mult,gi.r});
+        UU[i].reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r});
+        KK[i].reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r});
+      }
+      KK[3].reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r});
 
-      tmpX.resize({gi.dxx_mult,gi.r});
-      tmpX2.resize({gi.dxx_mult,gi.r});
+      tmpX.reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r});
+      tmpX2.reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r});
     }
 
 
@@ -592,6 +646,22 @@ struct PS_K_step_adapt {
       fft = make_unique_ptr<fft3d<2>>(gi.N_xx, K, Uhat, true);
     rk4_K(K, nsteps_int, tau/nsteps_int, ef, C1, C2);
   }
+      
+  void update_info(Index nr){
+    gi.update_rank(nr);
+    Uhat.update_shape({gi.dxxh_mult,gi.r});
+    for(int i=0; i<3; i++){
+      UUhat[i].update_shape({gi.dxxh_mult,gi.r});
+      UU[i].update_shape({gi.dxx_mult,gi.r});
+      KK[i].update_shape({gi.dxx_mult,gi.r});
+    }
+    KK[3].update_shape({gi.dxx_mult,gi.r});
+    
+    tmpX.update_shape({gi.dxx_mult,gi.r});
+    tmpX2.update_shape({gi.dxx_mult,gi.r});
+    tmpX3.update_shape({gi.dxx_mult,gi.r});
+
+  }
 
 
 private:
@@ -604,7 +674,7 @@ private:
   array<cmat,3> UUhat;
   array<mat,3> UU;
   array<mat,4> KK;
-  mat tmpX, tmpX2;
+  mat tmpX, tmpX2, tmpX3;
 };
 
 struct PS_S_step_adapt {
@@ -613,14 +683,13 @@ struct PS_S_step_adapt {
     : sl(_sl), gi(_gi), blas(_blas) {
 
       tmpSS.resize({gi.r,gi.r});
+      tmpS.resize({gi.r,gi.r});
+      tmpS2.resize({gi.r,gi.r});
       SS = create_rk4_array({gi.r,gi.r}, sl);
   }
 
   void rk4_S_rhs(mat& U, const array<mat,3>& C1, const array<mat,3>& C2, const array<mat,3>& D1, const array<mat,3>& D2, mat& out){
 
-    mat tmpS({gi.r,gi.r}, sl);
-    mat tmpS2({gi.r,gi.r}, sl);
- 
     blas->matmul(D2[0],U,tmpS);
     blas->matmul_transb(tmpS,C1[0],out);
     blas->matmul(D2[1],U,tmpS);
@@ -659,12 +728,23 @@ struct PS_S_step_adapt {
     rk4_S(S, nsteps_int, tau/nsteps_int, C1, C2, D1, D2);
   }
 
+  void update_info(Index nr){
+    gi.update_rank(nr);
+    tmpSS.resize({gi.r,gi.r});
+    tmpS.resize({gi.r,gi.r});
+    tmpS2.resize({gi.r,gi.r});
+    for(int i=0; i<4; i++){
+      SS[i].resize({gi.r,gi.r});
+    }
+
+  }
+
 private:
   grid_info_reserve<3> gi;
   stloc sl;
   const blas_ops* blas;
 
-  mat tmpSS;
+  mat tmpSS, tmpS, tmpS2;
   array<mat,4> SS;
 
 };
@@ -672,15 +752,22 @@ private:
 struct PS_L_step_adapt {
 
   PS_L_step_adapt(stloc _sl, grid_info_reserve<3> _gi, const blas_ops* _blas)
-    : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Vhat(_sl), tmpV(_sl) {
+    : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Vhat(_sl), tmpV(_sl), tmpV2(_sl) {
 
-      Vhat.resize({gi.dvvh_mult,gi.r});
-      VVhat = create_cmat_array({gi.dvvh_mult,gi.r}, sl);
-      VV = create_mat_array({gi.dvv_mult,gi.r}, sl);
-      LL = create_rk4_array({gi.dvv_mult,gi.r}, sl);
+      Vhat.reserve({gi.dvvh_mult,gi.rmax},{gi.dvvh_mult,gi.r});
+      //VVhat = create_cmat_array_reserve({gi.dvvh_mult,gi.rmax},{gi.dvvh_mult,gi.r}, sl);
+      //VV = create_mat_array_reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r}, sl);
+      //LL = create_rk4_array_reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r}, sl);
+      
+      for(int i = 0; i < 3; i++){
+        VVhat[i].reserve({gi.dvvh_mult,gi.rmax},{gi.dvvh_mult,gi.r});
+        VV[i].reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r});
+        LL[i].reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r});
+      }
+      LL[3].reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r});
 
-      tmpV.resize({gi.dvv_mult,gi.r});
-      tmpV2.resize({gi.dvv_mult,gi.r});
+      tmpV.reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r});
+      tmpV2.reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r});
 
       array<vec,3> h_v = create_vec_array(gi.dvv_mult, stloc::host);
       componentwise_vec_omp(gi.N_vv, [this, &h_v](Index idx, mind<3> i) {
@@ -755,6 +842,21 @@ struct PS_L_step_adapt {
       fft = make_unique_ptr<fft3d<2>>(gi.N_vv, L, Vhat, true);
     rk4_L(L, nsteps_int, tau/nsteps_int, v, D1, D2);
   }
+  
+  void update_info(Index nr){
+    gi.update_rank(nr);
+    Vhat.update_shape({gi.dvvh_mult,gi.r});
+    for(int i=0; i<3; i++){
+      VVhat[i].update_shape({gi.dvvh_mult,gi.r});
+      VV[i].update_shape({gi.dvv_mult,gi.r});
+      LL[i].update_shape({gi.dvv_mult,gi.r});
+    }
+    LL[3].update_shape({gi.dvv_mult,gi.r});
+    
+    tmpV.update_shape({gi.dvv_mult,gi.r});
+    tmpV2.update_shape({gi.dvv_mult,gi.r});
+
+  }
 
 
 private:
@@ -814,7 +916,6 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
   std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2], gi.dxx_mult);
   std::function<double(double*,double*)> ip_vv = inner_product_from_const_weight(gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2], gi.dvv_mult);
 
-
   // Initialization
   lr2_reserve<double> lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, sl);
   initialize(lr_sol, X0, V0, ip_xx, ip_vv, blas);
@@ -841,16 +942,23 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
 
   electric_field efield(sl, gi);
 
+  coeff_C compute_C(sl, gi);
+  coeff_D compute_D(sl, gi);
+
   array<mat, 3> C1 = create_mat_array({gi.r,gi.r}, sl);
   array<mat, 3> C2 = create_mat_array({gi.r,gi.r}, sl);
 
   array<mat, 3> D1   = create_mat_array({gi.r,gi.r}, sl);
   array<mat, 3> D2   = create_mat_array({gi.r,gi.r}, sl);
 
-  //n_steps = 1;
+  mat Kad({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
+
+  mat UUs({gi.r,gi.r}, stloc::host);
+  mat VVs({gi.r,gi.r}, stloc::host);
+  vec sigma({gi.r}, stloc::host);
+  mat tmps({gi.r,gi.r}, stloc::host);
 
   while(kk<n_steps){
-
 
     cout << "Step " << kk << " of " << n_steps << endl;
 
@@ -866,17 +974,16 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
 
     // ---- K step ----
     // Compute C coefficients
-    coeff_C compute_C(sl, gi);
 
     compute_C(lr_sol.V, C1, C2, blas);
 
     K_step_rk4(tau, Xn, E, C1, C2, nsteps_int);
 
     gs(Xn, Sn, ip_xx); // Xn the new X
+ 
 
     // ---- S step ----
     // Compute D coefficients
-    coeff_D compute_D(sl, gi);
 
 
     compute_D(Xn, E, D1, D2, blas);
@@ -891,8 +998,9 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
 
     gs(Vn, Sn, ip_vv);
     transpose_inplace(Sn);
-/*
+
     if (ec == "f"){
+/*
       vec sigma({gi.r}, stloc::host);
       svd_diag(Sn, sigma, blas);
     if (sigma(gi.r-1) >= tol1){
@@ -974,100 +1082,58 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
       t += tau;
       kk = kk + 1;
     }
-  }else if (ec == "ee"){
-      blas.matmul(Xn,Sn,K);
-      efield(K, Vn, Etmp, blas);
+ */
+    }else if (ec == "ee"){
+      blas.matmul(Xn,Sn,Kad);
+      efield(Kad, Vn, Etmp, blas);
 
-      //double el_energy_new = 0.0;
-      //#ifdef __OPENMP__
-      //#pragma omp parallel for reduction(+:el_energy_new)
-      //#endif
-      //for(Index ii = 0; ii < gi.dxx_mult; ii++){
-      //  el_energy_new += 0.5*(pow(Etmp[0](ii),2)+pow(Etmp[1](ii),2)+pow(Etmp[2](ii),2))*gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2];
-      //}
       double el_energy_new = electric_energy(Etmp, gi);
-
-      mat UUs({gi.r,gi.r}, stloc::host);
-      mat VVs({gi.r,gi.r}, stloc::host);
-      vec sigma({gi.r}, stloc::host);
       svd(Sn, UUs, VVs, sigma, blas);
       double svr = sigma(gi.r-1);
       sigma(gi.r-1) = 0.0;
-      //TODO: optimize
-      mat tmps({gi.r,gi.r}, stloc::host);
+
+      //TODO: can be optimized, but it's r times r
       transpose_inplace(VVs);
       ptw_mult_row(VVs,sigma,tmps);
-      blas.matmul(UUs,tmps,VVs); // VVs contains the new S
+      blas.matmul(UUs,tmps,VVs);
 
-      blas.matmul(Xn,VVs,K);
-      efield(K, Vn, Etmp, blas);
+      blas.matmul(Xn,VVs,Kad);
+      efield(Kad, Vn, Etmp, blas);
 
-      //double el_energy_cut = 0.0;
-      //#ifdef __OPENMP__
-      //#pragma omp parallel for reduction(+:el_energy_cut)
-      //#endif
-      //for(Index ii = 0; ii < gi.dxx_mult; ii++){
-      //  el_energy_cut += 0.5*(pow(Etmp[0](ii),2)+pow(Etmp[1](ii),2)+pow(Etmp[2](ii),2))*gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2];
-      //}
       double el_energy_cut = electric_energy(Etmp, gi);
 
       double err_el_energy = abs(el_energy_new-el_energy_cut);
       double fact = 1.0/10.0;
-    if (err_el_energy >= (tol1+abs(el_energy_new)*tol1*fact)){
-      if (gi.r == max_r){
-        cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
+
+      if (err_el_energy >= (tol1+abs(el_energy_new)*tol1*fact)){
+        if (gi.r == max_r){
+          cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
+
+          lr_sol.X.swap(Xn);
+          lr_sol.V.swap(Vn);
+          lr_sol.S.swap(Sn);
  
-        el_energyf << t << " " << el_energy << endl;
-        t += tau;
+          el_energyf << t << " " << el_energy << endl;
+          t += tau;
 
-        kk = kk + 1;
-      } else {
-        cout << "Rejected step, increasing rank by one." << endl;
-
-        gi.update_rank(gi.r+1);
-
-        mat ttmpX(lr_sol.X.shape());
-        ttmpX = lr_sol.X;
-        mat ttmpV(lr_sol.V.shape());
-        ttmpV = lr_sol.V;
-        mat ttmpS(lr_sol.S.shape());
-        ttmpS = lr_sol.S;
-
-        lr_sol.resize(gi.r,{gi.dxx_mult,gi.dvv_mult});
-
-        std::copy(ttmpX.data(), ttmpX.data()+ttmpX.num_elements(), lr_sol.X.data());
-        std::copy(ttmpV.data(), ttmpV.data()+ttmpV.num_elements(), lr_sol.V.data());
-
-        mgs_orthcol_cpu(lr_sol.X,ip_xx);
-        mgs_orthcol_cpu(lr_sol.V,ip_vv);
-        #ifdef __OPENMP__
-        #pragma omp parallel for
-        #endif
-        for(Index i=0; i < lr_sol.S.num_elements(); i++){
-            Index idx_r = i%gi.r;
-            Index idx_c = i/gi.r;
-            if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
-              lr_sol.S(idx_r,idx_c) = 0.0;
-            } else {
-              lr_sol.S(idx_r,idx_c) = ttmpS(idx_r,idx_c);
-            }
-        }
-      }
-    } else if (svr <= tol2){
-        if (gi.r == min_r){
-          cout << "Accepted step, should decrease rank but min rank reached. Proceeding keeping min rank." << endl;
-          lr_sol.X = Xn;
-          lr_sol.V = Vn;
-          lr_sol.S = Sn;
-
+          kk = kk + 1;
         } else {
-          cout << "Accepted step, decreasing rank by one." << endl;
-          gi.update_rank(gi.r-1);
+          cout << "Rejected step, increasing rank by one." << endl;
 
-          lr_sol.resize(gi.r,{gi.dxx_mult,gi.dvv_mult});
+          // Do all the updates
+          gi.update_rank(gi.r+1);
+          lr_sol.update_info(gi.r);
+          K_step_rk4.update_info(gi.r);
+          S_step_rk4.update_info(gi.r);
+          L_step_rk4.update_info(gi.r);
 
-          std::copy(Xn.data(), Xn.data()+lr_sol.X.num_elements(), lr_sol.X.data());
-          std::copy(Vn.data(), Vn.data()+lr_sol.V.num_elements(), lr_sol.V.data());
+          Xn.update_shape({gi.dxx_mult,gi.r});
+          Vn.update_shape({gi.dvv_mult,gi.r});
+          lr_sol.X.swap(Xn);
+          lr_sol.V.swap(Vn);
+
+          mgs_orthcol_cpu(lr_sol.X,ip_xx);
+          mgs_orthcol_cpu(lr_sol.V,ip_vv);
 
           #ifdef __OPENMP__
           #pragma omp parallel for
@@ -1075,43 +1141,105 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
           for(Index i=0; i < lr_sol.S.num_elements(); i++){
               Index idx_r = i%gi.r;
               Index idx_c = i/gi.r;
-              lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+              if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
+                lr_sol.S(idx_r,idx_c) = 0.0;
+              } else {
+                lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+              }
           }
+          Sn.resize({gi.r,gi.r});
+
+          for(int ii = 0; ii < 3; ii++){
+            C1[ii].resize({gi.r,gi.r});
+            C2[ii].resize({gi.r,gi.r});
+            D1[ii].resize({gi.r,gi.r});
+            D2[ii].resize({gi.r,gi.r});
+          }
+          UUs.resize({gi.r,gi.r});
+          VVs.resize({gi.r,gi.r});
+          tmps.resize({gi.r,gi.r});
+          sigma.resize({gi.r});
+
+          Kad.update_shape({gi.dxx_mult,gi.r});
+          efield.update_info(gi.r);
+          compute_C.update_info(gi.r);
+          compute_D.update_info(gi.r);
         }
+      } else if (svr <= tol2){
+          if (gi.r == min_r){
+            cout << "Accepted step, should decrease rank but min rank reached. Proceeding keeping min rank." << endl;
+
+            lr_sol.X.swap(Xn);
+            lr_sol.V.swap(Vn);
+            lr_sol.S.swap(Sn);
+
+          } else {
+            cout << "Accepted step, decreasing rank by one." << endl;
+
+            // Do all the updates
+            gi.update_rank(gi.r-1);
+            lr_sol.update_info(gi.r);
+            K_step_rk4.update_info(gi.r);
+            S_step_rk4.update_info(gi.r);
+            L_step_rk4.update_info(gi.r);
+
+            Xn.update_shape({gi.dxx_mult,gi.r});
+            Vn.update_shape({gi.dvv_mult,gi.r});
+            lr_sol.X.swap(Xn);
+            lr_sol.V.swap(Vn);
+
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+                Index idx_r = i%gi.r;
+                Index idx_c = i/gi.r;
+                lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+            }
+            Sn.resize({gi.r,gi.r});
+
+            for(int ii = 0; ii < 3; ii++){
+              C1[ii].resize({gi.r,gi.r});
+              C2[ii].resize({gi.r,gi.r});
+              D1[ii].resize({gi.r,gi.r});
+              D2[ii].resize({gi.r,gi.r});
+            }
+            UUs.resize({gi.r,gi.r});
+            VVs.resize({gi.r,gi.r});
+            tmps.resize({gi.r,gi.r});
+            sigma.resize({gi.r});
+
+            Kad.update_shape({gi.dxx_mult,gi.r});
+            efield.update_info(gi.r);
+            compute_C.update_info(gi.r);
+            compute_D.update_info(gi.r);
+
+          }
+          el_energyf << t << " " << el_energy << endl;
+          t += tau;
+          kk = kk + 1;
+      } else{
+        cout << "Accepted step, keeping same rank." << endl;
+        lr_sol.X.swap(Xn);
+        lr_sol.V.swap(Vn);
+        lr_sol.S.swap(Sn);
+
         el_energyf << t << " " << el_energy << endl;
         t += tau;
         kk = kk + 1;
-    } else{
-      cout << "Accepted step, keeping same rank." << endl;
-      // TODO: avoid copies
-      lr_sol.X = Xn;
-      lr_sol.S = Sn;
-      lr_sol.V = Vn;
-      
-      el_energyf << t << " " << el_energy << endl;
-      t += tau;
-      kk = kk + 1;
-    }
+      }
 
-  } else{
-    cout << "Error control not known" << endl;
-    exit(1);
+    } else{
+      cout << "Error control not known" << endl;
+      exit(1);
+    }
   }
-*/
-  // REMOVE THIS //
-  lr_sol.X = Xn;
-  lr_sol.S = Sn;
-  lr_sol.V = Vn;
-  kk = kk + 1;
-  el_energyf << t << " " << el_energy << endl;
-  t += tau;
-  }
-/*
+
     ofstream h_rank_f("h_rank.data");
     for(Index i = 0; i < h_rank.size(); i++){
       h_rank_f << h_rank[i] << endl;
     }
-*/
+
 }
 
 int main(int argc, char** argv){
@@ -1126,7 +1254,7 @@ int main(int argc, char** argv){
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("0.01"))
   ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("20"))
   ("r_min", "Minimum rank of the simulation", cxxopts::value<int>()->default_value("10"))
-  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("300"))
+  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("100"))
   ("err", "Error control", cxxopts::value<string>()->default_value("ee"))
   ("tol_inc", "Tolerance for error control", cxxopts::value<double>()->default_value("0.00001"))
   ("tol_dec", "Tolerance for error control", cxxopts::value<double>()->default_value("0.0000001"))

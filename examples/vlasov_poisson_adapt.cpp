@@ -1114,7 +1114,7 @@ int main(int argc, char** argv){
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("0.01"))
   ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("20"))
   ("r_min", "Minimum rank of the simulation", cxxopts::value<int>()->default_value("10"))
-  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("300"))
+  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("100"))
   ("err", "Error control", cxxopts::value<string>()->default_value("ee"))
   ("tol_inc", "Tolerance for error control", cxxopts::value<double>()->default_value("0.00001"))
   ("tol_dec", "Tolerance for error control", cxxopts::value<double>()->default_value("0.0000001"))

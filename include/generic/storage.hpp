@@ -113,6 +113,21 @@ struct multi_array {
     }
   }
 
+  void swap(multi_array& ma) {
+    if (sl != ma.sl) {
+      cout << "ERROR: can't swap DEVICE and HOST multi_arrays" << __FILE__ << ":"
+      << __LINE__ << endl;
+      exit(1);
+    }
+    std::swap(ma.e,e);
+    std::swap(ma.emax,emax);
+    std::swap(ma.v,v);
+  }
+
+  void update_shape(array<Index,d> _e){
+    e = _e;
+  }
+
   ~multi_array() {
     if(v != nullptr) {
       if(sl == stloc::host) {
