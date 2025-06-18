@@ -61,13 +61,6 @@ struct lr2_reserve {
 
   lr2_reserve(Index r, Index r_max, array<Index,2> N, stloc sl=stloc::host) : S({r,r},sl), X({N[0],r_max},{N[0],r},sl), V({N[1],r_max},{N[1],r},sl) {}
 
-
-  void resize(Index r, array<Index,2> N) {
-    X.resize({N[0],r});
-    S.resize({r,r});
-    V.resize({N[1],r});
-  }
-
   void update_info(Index r) {
     X.update_shape({X.shape()[0],r});
     S.resize({r,r});

@@ -122,19 +122,7 @@ array<vec,3> create_vec_array(Index dim, stloc sl) {
 array<cvec,3> create_cvec_array(Index dim, stloc sl) {
   return {cvec({dim}, sl), cvec({dim}, sl), cvec({dim}, sl)};
 }
-/*
-array<mat,4> create_rk4_array_reserve(mind<2> maxdim, mind<2> dim, stloc sl) {
-  return {mat(maxdim,dim,sl), mat(maxdim,dim,sl), mat(maxdim,dim,sl), mat(maxdim,dim,sl)};
-}
 
-array<mat,3> create_mat_array_reserve(mind<2> maxdim, mind<2> dim, stloc sl) {
-  return {mat(maxdim,dim,sl), mat(maxdim,dim,sl), mat(maxdim,dim,sl)};
-}
-
-array<cmat,3> create_cmat_array_reserve(mind<2> maxdim,mind<2> dim, stloc sl) {
-  return {cmat(maxdim,dim,sl), cmat(maxdim,dim,sl), cmat(maxdim,dim,sl)};
-}
-*/
 // Note that using a std::function object has a non-negligible performance overhead
 template<class func>
 void componentwise_vec_omp(const mind<3>& N, func F) {
@@ -191,8 +179,6 @@ struct coeff_C {
     tmpVhat.reserve({gi.dvvh_mult,gi.rmax},{gi.dvvh_mult,gi.r});
 
     we       = create_vec_array(gi.dvv_mult, sl);
-    //dVhat    = create_cmat_array_reserve({gi.dvvh_mult,gi.rmax},{gi.dvvh_mult,gi.r}, sl);
-    //dV       = create_mat_array_reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r}, sl);
     for(int i = 0; i < 3; i++){
       dVhat[i].reserve({gi.dvvh_mult,gi.rmax},{gi.dvvh_mult,gi.r});
       dV[i].reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r});
@@ -304,8 +290,6 @@ struct coeff_D {
 
     tmpXhat.reserve({gi.dxxh_mult,gi.rmax},{gi.dxxh_mult,gi.r});
 
-    //dXhat = create_cmat_array_reserve({gi.dxxh_mult,gi.rmax},{gi.dxxh_mult,gi.r}, sl);
-    //dX = create_mat_array_reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
     for(int i = 0; i < 3; i++){
       dXhat[i].reserve({gi.dxxh_mult,gi.rmax},{gi.dxxh_mult,gi.r});
       dX[i].reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r});
@@ -568,9 +552,6 @@ struct PS_K_step_adapt {
     : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Uhat(_sl), tmpX(_sl), tmpX2(_sl){
 
       Uhat.reserve({gi.dxxh_mult,gi.rmax},{gi.dxxh_mult,gi.r});
-      //UUhat = create_cmat_array_reserve({gi.dxxh_mult,gi.rmax},{gi.dxxh_mult,gi.r}, sl);
-      //UU = create_mat_array_reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
-      //KK = create_rk4_array_reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
       for(int i = 0; i < 3; i++){
         UUhat[i].reserve({gi.dxxh_mult,gi.rmax},{gi.dxxh_mult,gi.r});
         UU[i].reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r});
@@ -755,9 +736,6 @@ struct PS_L_step_adapt {
     : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Vhat(_sl), tmpV(_sl), tmpV2(_sl) {
 
       Vhat.reserve({gi.dvvh_mult,gi.rmax},{gi.dvvh_mult,gi.r});
-      //VVhat = create_cmat_array_reserve({gi.dvvh_mult,gi.rmax},{gi.dvvh_mult,gi.r}, sl);
-      //VV = create_mat_array_reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r}, sl);
-      //LL = create_rk4_array_reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r}, sl);
       
       for(int i = 0; i < 3; i++){
         VVhat[i].reserve({gi.dvvh_mult,gi.rmax},{gi.dvvh_mult,gi.r});
@@ -921,6 +899,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
   initialize(lr_sol, X0, V0, ip_xx, ip_vv, blas);
 
   ofstream el_energyf("evolution.data");
+  ofstream contf("control.data");
   double t = 0.0;
   Index n_steps = ceil(final_time/tau);
 
@@ -951,8 +930,8 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
   array<mat, 3> D1   = create_mat_array({gi.r,gi.r}, sl);
   array<mat, 3> D2   = create_mat_array({gi.r,gi.r}, sl);
 
+  // needed for error control
   mat Kad({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
-
   mat UUs({gi.r,gi.r}, stloc::host);
   mat VVs({gi.r,gi.r}, stloc::host);
   vec sigma({gi.r}, stloc::host);
@@ -969,144 +948,29 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
 
     // Electric field
     efield(Xn, lr_sol.V, E, blas);
-
     double el_energy = electric_energy(E, gi);
 
     // ---- K step ----
-    // Compute C coefficients
-
     compute_C(lr_sol.V, C1, C2, blas);
-
     K_step_rk4(tau, Xn, E, C1, C2, nsteps_int);
-
     gs(Xn, Sn, ip_xx); // Xn the new X
  
-
     // ---- S step ----
-    // Compute D coefficients
-
-
     compute_D(Xn, E, D1, D2, blas);
-
     S_step_rk4(tau, Sn, C1, C2, D1, D2, nsteps_int);
 
     // ---- L step ----
-    // Compute L
     blas.matmul_transb(lr_sol.V,Sn,Vn); // Vn is L
-
     L_step_rk4(tau, Vn, D1, D2, nsteps_int);
-
     gs(Vn, Sn, ip_vv);
     transpose_inplace(Sn);
 
     if (ec == "f"){
-/*
-      vec sigma({gi.r}, stloc::host);
       svd_diag(Sn, sigma, blas);
-    if (sigma(gi.r-1) >= tol1){
-      if (gi.r == max_r){
-        cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
- 
-        el_energyf << t << " " << el_energy << endl;
-        t += tau;
-
-        kk = kk + 1;
-      } else {
-        cout << "Rejected step, increasing rank by one." << endl;
-
-        gi.update_rank(gi.r+1);
-
-        mat ttmpX(lr_sol.X.shape());
-        ttmpX = lr_sol.X;
-        mat ttmpV(lr_sol.V.shape());
-        ttmpV = lr_sol.V;
-        mat ttmpS(lr_sol.S.shape());
-        ttmpS = lr_sol.S;
-
-        lr_sol.resize(gi.r,{gi.dxx_mult,gi.dvv_mult});
-
-        std::copy(ttmpX.data(), ttmpX.data()+ttmpX.num_elements(), lr_sol.X.data());
-        std::copy(ttmpV.data(), ttmpV.data()+ttmpV.num_elements(), lr_sol.V.data());
-
-        mgs_orthcol_cpu(lr_sol.X,ip_xx);
-        mgs_orthcol_cpu(lr_sol.V,ip_vv);
-        #ifdef __OPENMP__
-        #pragma omp parallel for
-        #endif
-        for(Index i=0; i < lr_sol.S.num_elements(); i++){
-            Index idx_r = i%gi.r;
-            Index idx_c = i/gi.r;
-            if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
-              lr_sol.S(idx_r,idx_c) = 0.0;
-            } else {
-              lr_sol.S(idx_r,idx_c) = ttmpS(idx_r,idx_c);
-            }
-        }
-      }
-    } else if (sigma(gi.r-1) <= tol2){
-        if (gi.r == min_r){
-          cout << "Accepted step, should decrease rank but min rank reached. Proceeding keeping min rank." << endl;
-          lr_sol.X = Xn;
-          lr_sol.V = Vn;
-          lr_sol.S = Sn;
-
-        } else {
-          cout << "Accepted step, decreasing rank by one." << endl;
-          gi.update_rank(gi.r-1);
-
-          lr_sol.resize(gi.r,{gi.dxx_mult,gi.dvv_mult});
-
-          std::copy(Xn.data(), Xn.data()+lr_sol.X.num_elements(), lr_sol.X.data());
-          std::copy(Vn.data(), Vn.data()+lr_sol.V.num_elements(), lr_sol.V.data());
-
-          #ifdef __OPENMP__
-          #pragma omp parallel for
-          #endif
-          for(Index i=0; i < lr_sol.S.num_elements(); i++){
-              Index idx_r = i%gi.r;
-              Index idx_c = i/gi.r;
-              lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
-          }
-        }
-        el_energyf << t << " " << el_energy << endl;
-        t += tau;
-        kk = kk + 1;
-    } else{
-      cout << "Accepted step, keeping same rank." << endl;
-      // TODO: avoid copies
-      lr_sol.X = Xn;
-      lr_sol.S = Sn;
-      lr_sol.V = Vn;
-      
-      el_energyf << t << " " << el_energy << endl;
-      t += tau;
-      kk = kk + 1;
-    }
- */
-    }else if (ec == "ee"){
-      blas.matmul(Xn,Sn,Kad);
-      efield(Kad, Vn, Etmp, blas);
-
-      double el_energy_new = electric_energy(Etmp, gi);
-      svd(Sn, UUs, VVs, sigma, blas);
       double svr = sigma(gi.r-1);
-      sigma(gi.r-1) = 0.0;
-
-      //TODO: can be optimized, but it's r times r
-      transpose_inplace(VVs);
-      ptw_mult_row(VVs,sigma,tmps);
-      blas.matmul(UUs,tmps,VVs);
-
-      blas.matmul(Xn,VVs,Kad);
-      efield(Kad, Vn, Etmp, blas);
-
-      double el_energy_cut = electric_energy(Etmp, gi);
-
-      double err_el_energy = abs(el_energy_new-el_energy_cut);
-      double fact = 1.0/10.0;
-
-      if (err_el_energy >= (tol1+abs(el_energy_new)*tol1*fact)){
+      if (svr >= tol1){
         if (gi.r == max_r){
+          contf << "j" << endl;
           cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
 
           lr_sol.X.swap(Xn);
@@ -1118,6 +982,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
 
           kk = kk + 1;
         } else {
+          contf << "r" << endl;
           cout << "Rejected step, increasing rank by one." << endl;
 
           // Do all the updates
@@ -1167,6 +1032,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
         }
       } else if (svr <= tol2){
           if (gi.r == min_r){
+            contf << "m" << endl;
             cout << "Accepted step, should decrease rank but min rank reached. Proceeding keeping min rank." << endl;
 
             lr_sol.X.swap(Xn);
@@ -1174,6 +1040,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
             lr_sol.S.swap(Sn);
 
           } else {
+            contf << "a" << endl;
             cout << "Accepted step, decreasing rank by one." << endl;
 
             // Do all the updates
@@ -1219,6 +1086,157 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
           t += tau;
           kk = kk + 1;
       } else{
+        contf << "s" << endl;
+        cout << "Accepted step, keeping same rank." << endl;
+        lr_sol.X.swap(Xn);
+        lr_sol.V.swap(Vn);
+        lr_sol.S.swap(Sn);
+
+        el_energyf << t << " " << el_energy << endl;
+        t += tau;
+        kk = kk + 1;
+      }
+    }else if (ec == "ee"){
+      blas.matmul(Xn,Sn,Kad);
+      efield(Kad, Vn, Etmp, blas);
+
+      double el_energy_new = electric_energy(Etmp, gi);
+      svd(Sn, UUs, VVs, sigma, blas);
+      double svr = sigma(gi.r-1);
+      sigma(gi.r-1) = 0.0;
+
+      //TODO: can be optimized, but it's r times r
+      transpose_inplace(VVs);
+      ptw_mult_row(VVs,sigma,tmps);
+      blas.matmul(UUs,tmps,VVs);
+
+      blas.matmul(Xn,VVs,Kad);
+      efield(Kad, Vn, Etmp, blas);
+
+      double el_energy_cut = electric_energy(Etmp, gi);
+
+      double err_el_energy = abs(el_energy_new-el_energy_cut);
+      double fact = 1.0/10.0;
+
+      if (err_el_energy >= (tol1+abs(el_energy_new)*tol1*fact)){
+        if (gi.r == max_r){
+          contf << "j" << endl;
+          cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
+
+          lr_sol.X.swap(Xn);
+          lr_sol.V.swap(Vn);
+          lr_sol.S.swap(Sn);
+ 
+          el_energyf << t << " " << el_energy << endl;
+          t += tau;
+
+          kk = kk + 1;
+        } else {
+          contf << "r" << endl;
+          cout << "Rejected step, increasing rank by one." << endl;
+
+          // Do all the updates
+          gi.update_rank(gi.r+1);
+          lr_sol.update_info(gi.r);
+          K_step_rk4.update_info(gi.r);
+          S_step_rk4.update_info(gi.r);
+          L_step_rk4.update_info(gi.r);
+
+          Xn.update_shape({gi.dxx_mult,gi.r});
+          Vn.update_shape({gi.dvv_mult,gi.r});
+          lr_sol.X.swap(Xn);
+          lr_sol.V.swap(Vn);
+
+          mgs_orthcol_cpu(lr_sol.X,ip_xx);
+          mgs_orthcol_cpu(lr_sol.V,ip_vv);
+
+          #ifdef __OPENMP__
+          #pragma omp parallel for
+          #endif
+          for(Index i=0; i < lr_sol.S.num_elements(); i++){
+              Index idx_r = i%gi.r;
+              Index idx_c = i/gi.r;
+              if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
+                lr_sol.S(idx_r,idx_c) = 0.0;
+              } else {
+                lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+              }
+          }
+          Sn.resize({gi.r,gi.r});
+
+          for(int ii = 0; ii < 3; ii++){
+            C1[ii].resize({gi.r,gi.r});
+            C2[ii].resize({gi.r,gi.r});
+            D1[ii].resize({gi.r,gi.r});
+            D2[ii].resize({gi.r,gi.r});
+          }
+          UUs.resize({gi.r,gi.r});
+          VVs.resize({gi.r,gi.r});
+          tmps.resize({gi.r,gi.r});
+          sigma.resize({gi.r});
+
+          Kad.update_shape({gi.dxx_mult,gi.r});
+          efield.update_info(gi.r);
+          compute_C.update_info(gi.r);
+          compute_D.update_info(gi.r);
+        }
+      } else if (svr <= tol2){
+          if (gi.r == min_r){
+            contf << "m" << endl;
+            cout << "Accepted step, should decrease rank but min rank reached. Proceeding keeping min rank." << endl;
+
+            lr_sol.X.swap(Xn);
+            lr_sol.V.swap(Vn);
+            lr_sol.S.swap(Sn);
+
+          } else {
+            contf << "a" << endl;
+            cout << "Accepted step, decreasing rank by one." << endl;
+
+            // Do all the updates
+            gi.update_rank(gi.r-1);
+            lr_sol.update_info(gi.r);
+            K_step_rk4.update_info(gi.r);
+            S_step_rk4.update_info(gi.r);
+            L_step_rk4.update_info(gi.r);
+
+            Xn.update_shape({gi.dxx_mult,gi.r});
+            Vn.update_shape({gi.dvv_mult,gi.r});
+            lr_sol.X.swap(Xn);
+            lr_sol.V.swap(Vn);
+
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+                Index idx_r = i%gi.r;
+                Index idx_c = i/gi.r;
+                lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+            }
+            Sn.resize({gi.r,gi.r});
+
+            for(int ii = 0; ii < 3; ii++){
+              C1[ii].resize({gi.r,gi.r});
+              C2[ii].resize({gi.r,gi.r});
+              D1[ii].resize({gi.r,gi.r});
+              D2[ii].resize({gi.r,gi.r});
+            }
+            UUs.resize({gi.r,gi.r});
+            VVs.resize({gi.r,gi.r});
+            tmps.resize({gi.r,gi.r});
+            sigma.resize({gi.r});
+
+            Kad.update_shape({gi.dxx_mult,gi.r});
+            efield.update_info(gi.r);
+            compute_C.update_info(gi.r);
+            compute_D.update_info(gi.r);
+
+          }
+          el_energyf << t << " " << el_energy << endl;
+          t += tau;
+          kk = kk + 1;
+      } else{
+        contf << "s" << endl;
         cout << "Accepted step, keeping same rank." << endl;
         lr_sol.X.swap(Xn);
         lr_sol.V.swap(Vn);
@@ -1254,8 +1272,8 @@ int main(int argc, char** argv){
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("0.01"))
   ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("20"))
   ("r_min", "Minimum rank of the simulation", cxxopts::value<int>()->default_value("10"))
-  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("100"))
-  ("err", "Error control", cxxopts::value<string>()->default_value("ee"))
+  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("300"))
+  ("err", "Error control", cxxopts::value<string>()->default_value("f"))
   ("tol_inc", "Tolerance for error control", cxxopts::value<double>()->default_value("0.00001"))
   ("tol_dec", "Tolerance for error control", cxxopts::value<double>()->default_value("0.0000001"))
   ("omp_threads", "Number of OpenMP threads used in CPU parallelization (by default half the number of processes reported by the operating system are used)", cxxopts::value<int>()->default_value("-1"))
