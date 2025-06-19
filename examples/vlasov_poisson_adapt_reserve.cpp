@@ -1273,7 +1273,7 @@ int main(int argc, char** argv){
   ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("20"))
   ("r_min", "Minimum rank of the simulation", cxxopts::value<int>()->default_value("10"))
   ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("300"))
-  ("err", "Error control", cxxopts::value<string>()->default_value("f"))
+  ("err", "Error control", cxxopts::value<string>()->default_value("ee"))
   ("tol_inc", "Tolerance for error control", cxxopts::value<double>()->default_value("0.00001"))
   ("tol_dec", "Tolerance for error control", cxxopts::value<double>()->default_value("0.0000001"))
   ("omp_threads", "Number of OpenMP threads used in CPU parallelization (by default half the number of processes reported by the operating system are used)", cxxopts::value<int>()->default_value("-1"))
@@ -1362,6 +1362,9 @@ int main(int argc, char** argv){
     X.push_back(xx.begin());
     V.push_back(vv.begin());
 
+    #ifdef __MKL__
+    cout << "MKL SIMULATION" << endl;
+    #endif
     integration_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
   } else {
     cout << "ERROR: problem with name " << problem << " is not supported" << endl;
