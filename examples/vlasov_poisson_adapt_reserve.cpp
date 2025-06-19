@@ -402,7 +402,7 @@ struct electric_field {
 
   void update_info(Index nr){
     gi.update_rank(nr);
-    int_V.resize({gi.r});
+    int_V.resize_ad({gi.r});
   }
 
   void operator()(const mat& K, const mat& V, array<vec,3>& E, const blas_ops& blas) {
@@ -711,11 +711,11 @@ struct PS_S_step_adapt {
 
   void update_info(Index nr){
     gi.update_rank(nr);
-    tmpSS.resize({gi.r,gi.r});
-    tmpS.resize({gi.r,gi.r});
-    tmpS2.resize({gi.r,gi.r});
+    tmpSS.resize_ad({gi.r,gi.r});
+    tmpS.resize_ad({gi.r,gi.r});
+    tmpS2.resize_ad({gi.r,gi.r});
     for(int i=0; i<4; i++){
-      SS[i].resize({gi.r,gi.r});
+      SS[i].resize_ad({gi.r,gi.r});
     }
 
   }
@@ -968,6 +968,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
     if (ec == "f"){
       svd_diag(Sn, sigma, blas);
       double svr = sigma(gi.r-1);
+
       if (svr >= tol1){
         if (gi.r == max_r){
           contf << "j" << endl;
@@ -1012,18 +1013,18 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
                 lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
               }
           }
-          Sn.resize({gi.r,gi.r});
+          Sn.resize_ad({gi.r,gi.r});
 
           for(int ii = 0; ii < 3; ii++){
-            C1[ii].resize({gi.r,gi.r});
-            C2[ii].resize({gi.r,gi.r});
-            D1[ii].resize({gi.r,gi.r});
-            D2[ii].resize({gi.r,gi.r});
+            C1[ii].resize_ad({gi.r,gi.r});
+            C2[ii].resize_ad({gi.r,gi.r});
+            D1[ii].resize_ad({gi.r,gi.r});
+            D2[ii].resize_ad({gi.r,gi.r});
           }
-          UUs.resize({gi.r,gi.r});
-          VVs.resize({gi.r,gi.r});
-          tmps.resize({gi.r,gi.r});
-          sigma.resize({gi.r});
+          UUs.resize_ad({gi.r,gi.r});
+          VVs.resize_ad({gi.r,gi.r});
+          tmps.resize_ad({gi.r,gi.r});
+          sigma.resize_ad({gi.r});
 
           Kad.update_shape({gi.dxx_mult,gi.r});
           efield.update_info(gi.r);
@@ -1063,18 +1064,18 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
                 Index idx_c = i/gi.r;
                 lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
             }
-            Sn.resize({gi.r,gi.r});
+            Sn.resize_ad({gi.r,gi.r});
 
             for(int ii = 0; ii < 3; ii++){
-              C1[ii].resize({gi.r,gi.r});
-              C2[ii].resize({gi.r,gi.r});
-              D1[ii].resize({gi.r,gi.r});
-              D2[ii].resize({gi.r,gi.r});
+              C1[ii].resize_ad({gi.r,gi.r});
+              C2[ii].resize_ad({gi.r,gi.r});
+              D1[ii].resize_ad({gi.r,gi.r});
+              D2[ii].resize_ad({gi.r,gi.r});
             }
-            UUs.resize({gi.r,gi.r});
-            VVs.resize({gi.r,gi.r});
-            tmps.resize({gi.r,gi.r});
-            sigma.resize({gi.r});
+            UUs.resize_ad({gi.r,gi.r});
+            VVs.resize_ad({gi.r,gi.r});
+            tmps.resize_ad({gi.r,gi.r});
+            sigma.resize_ad({gi.r});
 
             Kad.update_shape({gi.dxx_mult,gi.r});
             efield.update_info(gi.r);
@@ -1162,18 +1163,18 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
                 lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
               }
           }
-          Sn.resize({gi.r,gi.r});
+          Sn.resize_ad({gi.r,gi.r});
 
           for(int ii = 0; ii < 3; ii++){
-            C1[ii].resize({gi.r,gi.r});
-            C2[ii].resize({gi.r,gi.r});
-            D1[ii].resize({gi.r,gi.r});
-            D2[ii].resize({gi.r,gi.r});
+            C1[ii].resize_ad({gi.r,gi.r});
+            C2[ii].resize_ad({gi.r,gi.r});
+            D1[ii].resize_ad({gi.r,gi.r});
+            D2[ii].resize_ad({gi.r,gi.r});
           }
-          UUs.resize({gi.r,gi.r});
-          VVs.resize({gi.r,gi.r});
-          tmps.resize({gi.r,gi.r});
-          sigma.resize({gi.r});
+          UUs.resize_ad({gi.r,gi.r});
+          VVs.resize_ad({gi.r,gi.r});
+          tmps.resize_ad({gi.r,gi.r});
+          sigma.resize_ad({gi.r});
 
           Kad.update_shape({gi.dxx_mult,gi.r});
           efield.update_info(gi.r);
@@ -1213,18 +1214,18 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
                 Index idx_c = i/gi.r;
                 lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
             }
-            Sn.resize({gi.r,gi.r});
+            Sn.resize_ad({gi.r,gi.r});
 
             for(int ii = 0; ii < 3; ii++){
-              C1[ii].resize({gi.r,gi.r});
-              C2[ii].resize({gi.r,gi.r});
-              D1[ii].resize({gi.r,gi.r});
-              D2[ii].resize({gi.r,gi.r});
+              C1[ii].resize_ad({gi.r,gi.r});
+              C2[ii].resize_ad({gi.r,gi.r});
+              D1[ii].resize_ad({gi.r,gi.r});
+              D2[ii].resize_ad({gi.r,gi.r});
             }
-            UUs.resize({gi.r,gi.r});
-            VVs.resize({gi.r,gi.r});
-            tmps.resize({gi.r,gi.r});
-            sigma.resize({gi.r});
+            UUs.resize_ad({gi.r,gi.r});
+            VVs.resize_ad({gi.r,gi.r});
+            tmps.resize_ad({gi.r,gi.r});
+            sigma.resize_ad({gi.r});
 
             Kad.update_shape({gi.dxx_mult,gi.r});
             efield.update_info(gi.r);
@@ -1273,7 +1274,7 @@ int main(int argc, char** argv){
   ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("20"))
   ("r_min", "Minimum rank of the simulation", cxxopts::value<int>()->default_value("10"))
   ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("300"))
-  ("err", "Error control", cxxopts::value<string>()->default_value("ee"))
+  ("err", "Error control", cxxopts::value<string>()->default_value("f"))
   ("tol_inc", "Tolerance for error control", cxxopts::value<double>()->default_value("0.00001"))
   ("tol_dec", "Tolerance for error control", cxxopts::value<double>()->default_value("0.0000001"))
   ("omp_threads", "Number of OpenMP threads used in CPU parallelization (by default half the number of processes reported by the operating system are used)", cxxopts::value<int>()->default_value("-1"))
@@ -1281,6 +1282,7 @@ int main(int argc, char** argv){
   ("h,help", "Help message")
   ;
   auto result = options.parse(argc, argv);
+
 
   if(result.count("help")) {
     cout << options.help() << endl;

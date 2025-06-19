@@ -94,6 +94,24 @@ struct multi_array {
       #endif
     }
   }
+  
+  void resize_ad(array<Index,d> _e) {
+    e = _e;
+    emax = _e;
+    Index num_elements = prod(e);
+    if(sl == stloc::host) {
+      free(v);
+      v = (T*)malloc(sizeof(T)*num_elements);
+    } else {
+      #ifdef __CUDACC__
+      v = (T*)gpu_malloc(sizeof(T)*num_elements);
+      #else
+      cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
+      << __LINE__ << endl;
+      exit(1);
+      #endif
+    }
+  }
 
   void reserve(array<Index,d> _emax, array<Index,d> _e) {
     // Reserve memory for emax for a multiarray of actual size e
@@ -102,6 +120,14 @@ struct multi_array {
     Index num_elements = prod(emax);
     if(sl == stloc::host) {
       v = (T*)malloc(sizeof(T)*num_elements);
+      /*
+      // NEEDED FOR LAZY MANAGEMENT OF MEMORY (TO BE CHECKED)
+     
+     #pragma omp parallel for
+      for(Index iii = 0; iii < num_elements; iii++){
+        v[iii] = double(0.0);
+      }
+     */
     } else {
       #ifdef __CUDACC__
       v = (T*)gpu_malloc(sizeof(T)*num_elements);
