@@ -941,10 +941,12 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
   
   gt::stop("Initialization");
 
+  int ccc = 0;
   gt::start("Main loop");
   while(kk<n_steps){
 
     cout << "Step " << kk << " of " << n_steps << endl;
+    cout << gi.r << endl;
 
     h_rank[kk] = (int)gi.r;
 
@@ -967,7 +969,9 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
     gt::stop("C coeffs");
     gt::start("K step");
     K_step_rk4(tau, Xn, E, C1, C2, nsteps_int);
+    gt::start("gs K step");
     gs(Xn, Sn, ip_xx); // Xn the new X
+    gt::stop("gs K step");
     gt::stop("K step");
  
     // ---- S step ----
@@ -1147,8 +1151,6 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
       double fact = 1.0/10.0;
 
       err_el_energy = 100.0;
-      max_r = gi.r;
-      n_steps = 10;
 
       if (err_el_energy >= (tol1+abs(el_energy_new)*tol1*fact)){
         if (gi.r == max_r){
@@ -1169,6 +1171,10 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
           contf << "r" << endl;
           cout << "Rejected step, increasing rank by one." << endl;
 
+          mat tmp11 = lr_sol.X;
+          mat tmp22 = lr_sol.S;
+          mat tmp33 = lr_sol.V;
+          
           gt::start("Reject: increase rank");
           // Do all the updates
           gt::start("Reject: increase rank (updates)");
@@ -1221,6 +1227,54 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
           compute_D.update_info(gi.r);
           gt::stop("Reject: increase rank (some resizes rxr)");
           gt::stop("Reject: increase rank");
+
+          ccc+=1;
+
+          if (ccc==10){
+            kk = n_steps;
+            cout << el_energy << endl;
+          } else{
+            gi.update_rank(gi.r-1);
+            lr_sol.update_info(gi.r);
+            K_step_rk4.update_info(gi.r);
+            S_step_rk4.update_info(gi.r);
+            L_step_rk4.update_info(gi.r);
+
+            Xn.update_shape({gi.dxx_mult,gi.r});
+            Vn.update_shape({gi.dvv_mult,gi.r});
+            lr_sol.X.swap(Xn);
+            lr_sol.V.swap(Vn);
+
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+                Index idx_r = i%gi.r;
+                Index idx_c = i/gi.r;
+                lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+            }
+            Sn.resize_ad({gi.r,gi.r});
+
+            for(int ii = 0; ii < 3; ii++){
+              C1[ii].resize_ad({gi.r,gi.r});
+              C2[ii].resize_ad({gi.r,gi.r});
+              D1[ii].resize_ad({gi.r,gi.r});
+              D2[ii].resize_ad({gi.r,gi.r});
+            }
+            UUs.resize_ad({gi.r,gi.r});
+            VVs.resize_ad({gi.r,gi.r});
+            tmps.resize_ad({gi.r,gi.r});
+            sigma.resize_ad({gi.r});
+
+            Kad.update_shape({gi.dxx_mult,gi.r});
+            efield.update_info(gi.r);
+            compute_C.update_info(gi.r);
+            compute_D.update_info(gi.r);
+            lr_sol.X = tmp11;
+            lr_sol.S = tmp22;
+            lr_sol.V = tmp33;
+            
+          }
         }
       } else if (svr <= tol2){
           if (gi.r == min_r){
@@ -1320,7 +1374,7 @@ int main(int argc, char** argv){
   ("nv", "Number of grid points in velocity (as a whitespace separated list)", cxxopts::value<string>()->default_value("64 64 64"))
   ("final_time", "Time to which the simulation is run", cxxopts::value<double>()->default_value("40.0"))
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("0.01"))
-  ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("20"))
+  ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("100"))
   ("r_min", "Minimum rank of the simulation", cxxopts::value<int>()->default_value("10"))
   ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("300"))
   ("err", "Error control", cxxopts::value<string>()->default_value("ee"))
