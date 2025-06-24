@@ -7,7 +7,7 @@
 #include <cstring>
 #include <Eigen/Dense>
 
-#ifdef __CUDACC__
+#ifdef __CUDA__
 #include <curand.h>
 #endif
 
@@ -184,7 +184,7 @@ void orthogonalize_householder_vecw(multi_array<double,2>& Q, multi_array<double
 }
 
 
-#ifdef __CUDACC__
+#ifdef __CUDA__
 void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, curandGenerator_t gen, cublasHandle_t handle_devres) { //with constant weight for inner product
   Index n = Q.shape()[0];
   int r = Q.shape()[1];
@@ -304,7 +304,7 @@ void orthogonalize_householder_constw_gpu(multi_array<double,2>& Q, multi_array<
 orthogonalize::orthogonalize(const Ensign::Matrix::blas_ops* _blas) {
   blas = _blas;
 
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
   gen = 0;
   if(blas->gpu) {
     curandStatus_t status = curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
@@ -318,7 +318,7 @@ orthogonalize::orthogonalize(const Ensign::Matrix::blas_ops* _blas) {
 }
 
 orthogonalize::~orthogonalize() {
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
   if(gen)
       curandDestroyGenerator(gen);
   #endif
@@ -337,7 +337,7 @@ void orthogonalize::operator()(multi_array<double,2>& Q, multi_array<double,2>& 
   if(Q.sl == stloc::host) {
     orthogonalize_householder_constw(Q, R, w);
   } else {
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     //gram_schmidt_gpu(Q, R, w, gen, blas->handle_devres);
     orthogonalize_householder_constw_gpu(Q, R, w, blas->handle_cusolver);
     #else

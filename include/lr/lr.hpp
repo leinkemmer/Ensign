@@ -187,7 +187,7 @@ struct gram_schmidt {
   
 private:
   const Ensign::Matrix::blas_ops* blas;
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
   curandGenerator_t gen;
   #endif
 };
@@ -205,7 +205,7 @@ struct orthogonalize {
   
 private:
   const Ensign::Matrix::blas_ops* blas;
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
   curandGenerator_t gen;
   #endif
 };

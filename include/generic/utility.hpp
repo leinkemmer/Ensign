@@ -48,7 +48,7 @@ T phi2_im(T a) { // use it only for purely imaginary
   }
 }
 
-#ifdef __CUDACC__
+#ifdef __CUDA__
 /* Typesafe wrapper for cudaMalloc
 */
 void* gpu_malloc(size_t size);

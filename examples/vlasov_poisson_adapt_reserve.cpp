@@ -217,7 +217,7 @@ struct coeff_C {
       h_lambda_n[2](idx) = complex<double>(0.0,2.0*M_PI/(gi.lim_vv[5]-gi.lim_vv[4])*mult_k)*ncvv;
     });
 
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       if(sl == stloc::device) {
         d_lim_vv = make_unique_ptr<vec>(array<Index,1>({6}), stloc::device);
         cudaMemcpy(d_lim_vv->data(), gi.lim_vv.data(), 6*sizeof(double), cudaMemcpyHostToDevice);
@@ -245,7 +245,7 @@ struct coeff_C {
         ptw_mult_row(tmpVhat,h_lambda_n[1],dVhat[1]);
         ptw_mult_row(tmpVhat,h_lambda_n[2],dVhat[2]);
       } else {
-        #ifdef __CUDACC__
+        #ifdef __CUDA__
         double ncvv = 1.0 / (gi.dvv_mult);
         ptw_mult_row_cplx_fourier_3d<<<(gi.dvvh_mult*gi.r+n_threads-1)/n_threads,n_threads>>>(gi.dvvh_mult*gi.r, gi.N_vv[0]/2+1, gi.N_vv[1], gi.N_vv[2], (cuDoubleComplex*)tmpVhat.begin(), d_lim_vv->data(), ncvv, (cuDoubleComplex*)dVhat[0].begin(), (cuDoubleComplex*)dVhat[1].begin(), (cuDoubleComplex*)dVhat[2].begin());
         #endif
@@ -326,7 +326,7 @@ struct coeff_D {
           we[2](j) = E[2](j) * gi.h_xx[0] * gi.h_xx[1] * gi.h_xx[2];
         }
       } else {
-        #ifdef __CUDACC__
+        #ifdef __CUDA__
         ptw_mult_scal<<<(E[0].num_elements()+n_threads-1)/n_threads,n_threads>>>(E[0].num_elements(), E[0].begin(), gi.h_xx[0] * gi.h_xx[1] * gi.h_xx[2], we[0].begin());
         ptw_mult_scal<<<(E[1].num_elements()+n_threads-1)/n_threads,n_threads>>>(E[1].num_elements(), E[1].begin(), gi.h_xx[0] * gi.h_xx[1] * gi.h_xx[2], we[1].begin());
         ptw_mult_scal<<<(E[2].num_elements()+n_threads-1)/n_threads,n_threads>>>(E[2].num_elements(), E[2].begin(), gi.h_xx[0] * gi.h_xx[1] * gi.h_xx[2], we[2].begin());
@@ -392,7 +392,7 @@ struct electric_field {
     efhat.resize({gi.dxxh_mult});
     efhatx = create_cvec_array({gi.dxxh_mult}, sl);
 
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     if(sl == stloc::device) {
       d_lim_xx = make_unique_ptr<vec>(array<Index,1>({6}), stloc::device);
       cudaMemcpy(d_lim_xx->data(), gi.lim_xx.data(), 6*sizeof(double), cudaMemcpyHostToDevice);
@@ -442,7 +442,7 @@ struct electric_field {
           }
         }
       } else {
-        #ifdef __CUDACC__
+        #ifdef __CUDA__
         der_fourier_3d<<<(gi.dxxh_mult+n_threads-1)/n_threads,n_threads>>>(gi.dxxh_mult, gi.N_xx[0]/2+1, gi.N_xx[1], gi.N_xx[2], (cuDoubleComplex*)efhat.begin(), d_lim_xx->data(), ncxx, (cuDoubleComplex*)efhatx[0].begin(), (cuDoubleComplex*)efhatx[1].begin(), (cuDoubleComplex*)efhatx[2].begin());
         #endif
       }
@@ -1392,7 +1392,7 @@ int main(int argc, char** argv){
     exit(0);
   }
 
-  #ifndef __CUDACC__
+  #ifndef __CUDA__
   CPU = true;
   #else
   string dev = result["device"].as<string>();

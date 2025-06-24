@@ -22,14 +22,14 @@ struct fft {
 
 private:
     array<fftw_plan,2> plans;
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     array<cufftHandle,2> cuda_plans;
     #endif
 
     void set_null() {
       plans[0] = 0;
       plans[1] = 0;
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       cuda_plans[0] = 0;
       cuda_plans[1] = 0;
       #endif
@@ -67,7 +67,7 @@ array<fftw_plan,2> create_plans_3d_adapt(array<Index,3> dims_, multi_array<doubl
 void destroy_plans(array<fftw_plan,2>& plans);
 
 
-#ifdef __CUDACC__
+#ifdef __CUDA__
 /* Helper routines to create cuFFT plans for 1d transforms.
 */
 array<cufftHandle,2> create_plans_1d(Index dims_, int howmany);

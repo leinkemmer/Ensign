@@ -1,6 +1,6 @@
 #include <generic/common.hpp>
 
-#ifdef __CUDACC__
+#ifdef __CUDA__
 
 namespace Ensign {
 
@@ -59,7 +59,8 @@ __global__ void rk4(int n, double* A, double t, double* M1, double* M2, double* 
 
 __global__ void rk4_finalcomb(int n, double* A, double t, double* M1, double* M2, double* M3, double* M4, double* M5);
 
-__global__ void transpose_inplace(int n, double* A);
+template<class T>
+__global__ void transpose_inplace_k(int n, T* A);
 
 __global__ void der_fourier_2d(int N, int nx, int ny, cuDoubleComplex* A, double* lims, double nxx, cuDoubleComplex* B,cuDoubleComplex* C);
 

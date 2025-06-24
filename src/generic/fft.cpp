@@ -1,5 +1,5 @@
 #include <generic/fft.hpp>
-#ifdef __CUDACC__
+#ifdef __CUDA__
 #include <cufft.h>
 #endif
 
@@ -82,7 +82,7 @@ void destroy_plans(array<fftw_plan,2>& plans){
 
 
 
-#ifdef __CUDACC__
+#ifdef __CUDA__
 array<cufftHandle,2> create_plans_1d(Index dims_, int howmany){
   array<cufftHandle,2> out;
   int dims = int(dims_);
@@ -126,7 +126,7 @@ fft<2, 3>::fft(array<Index,3> dims_, multi_array<double,2>& real, multi_array<co
   if(real.sl == stloc::host) {
     plans = create_plans_3d(dims_, real, freq);
   } else {
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cuda_plans = create_plans_3d(dims_, real.shape()[1]);
     #endif
   }
@@ -142,7 +142,7 @@ fft<2, 3>::fft(array<Index,3> dims_, multi_array<double,2>& real, multi_array<co
       plans = create_plans_3d(dims_, real, freq);
     }
   } else {
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cuda_plans = create_plans_3d(dims_, real.shape()[1]);
     #endif
   }
@@ -154,7 +154,7 @@ fft<1, 3>::fft(array<Index,3> dims_, multi_array<double,1>& real, multi_array<co
   if(real.sl == stloc::host) {
     plans = create_plans_3d(dims_, real, freq);
   } else {
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cuda_plans = create_plans_3d(dims_, 1);
     #endif
   }
@@ -167,7 +167,7 @@ fft<2, 2>::fft(array<Index,2> dims_, multi_array<double,2>& real, multi_array<co
   if(real.sl == stloc::host) {
     plans = create_plans_2d(dims_, real, freq);
   } else {
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cuda_plans = create_plans_2d(dims_, real.shape()[1]);
     #endif
   }
@@ -179,7 +179,7 @@ fft<1, 2>::fft(array<Index,2> dims_, multi_array<double,1>& real, multi_array<co
   if(real.sl == stloc::host) {
     plans = create_plans_2d(dims_, real, freq);
   } else {
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cuda_plans = create_plans_2d(dims_, 1);
     #endif
   }
@@ -192,7 +192,7 @@ fft<2, 1>::fft(array<Index,1> dims_, multi_array<double,2>& real, multi_array<co
   if(real.sl == stloc::host) {
     plans = create_plans_1d(dims_[0], real, freq);
   } else {
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cuda_plans = create_plans_1d(dims_[0], real.shape()[1]);
     #endif
   }
@@ -204,7 +204,7 @@ fft<1, 1>::fft(array<Index,1> dims_, multi_array<double,1>& real, multi_array<co
   if(real.sl == stloc::host) {
     plans = create_plans_1d(dims_[0], real, freq);
   } else {
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cuda_plans = create_plans_1d(dims_[0], 1);
     #endif
   }
@@ -216,7 +216,7 @@ fft<d,dim>::~fft() {
     destroy_plans(plans);
   }
 
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
   if(cuda_plans[0] != 0) {
     destroy_plans(cuda_plans);
   }
@@ -237,7 +237,7 @@ void fft<d, dim>::forward(multi_array<double,d>& real, multi_array<complex<doubl
   if(real.sl == stloc::host) {
     fftw_execute_dft_r2c(plans[0],real.data(),(fftw_complex*)freq.data());
   } else {
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cufftExecD2Z(cuda_plans[0],real.data(),(cufftDoubleComplex*)freq.data());
     #endif
   }
@@ -255,7 +255,7 @@ void fft<d, dim>::forward(double* real, complex<double>* freq, stloc sl) {
   if(sl == stloc::host) {
     fftw_execute_dft_r2c(plans[0],real,(fftw_complex*)freq);
   } else {
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     // TODO
     #endif
   }
@@ -267,7 +267,7 @@ void fft<d, dim>::backward(multi_array<complex<double>,d>& freq, multi_array<dou
   if(real.sl == stloc::host) {
     fftw_execute_dft_c2r(plans[1],(fftw_complex*)freq.data(),real.data());
   } else {
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cufftExecZ2D(cuda_plans[1],(cufftDoubleComplex*)freq.data(),real.data());
     #endif
   }
@@ -284,7 +284,7 @@ void fft<d, dim>::backward(complex<double>* freq, double* real, stloc sl) {
   if(sl == stloc::host) {
     fftw_execute_dft_c2r(plans[1],(fftw_complex*)freq,real);
   } else {
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     // TODO
     #endif
   }

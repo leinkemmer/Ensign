@@ -217,7 +217,7 @@ struct PS_K_step {
         Mhat(idx,rr) *= exp(-tau*lambdax*dc_r[0](rr));
       });
     } else {
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       exact_sol_exp_3d_a<<<(Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(Mhat.num_elements(), gi.N_xx[0]/2 + 1, gi.N_xx[1], gi.N_xx[2], (cuDoubleComplex*)Mhat.begin(), dc_r[0].begin(), tau, d_lim_xx->data());
       #endif
     }
@@ -237,7 +237,7 @@ struct PS_K_step {
         Mhat(idx,rr) *= exp(-tau*lambday*dc_r[1](rr))*ncxx;
       });
     } else {
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       exact_sol_exp_3d_b<<<(Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(Mhat.num_elements(), gi.N_xx[0]/2 + 1, gi.N_xx[1], gi.N_xx[2], (cuDoubleComplex*)Mhat.begin(), dc_r[1].begin(), tau, d_lim_xx->data(), ncxx);
       #endif
     }
@@ -272,7 +272,7 @@ struct PS_K_step {
         Mhat(idx,rr) += tau*phi1_im(-tau*lambdaz*dc_r[2](rr))*tmpXhat(idx,rr);
       });
     } else {
-        #ifdef __CUDACC__
+        #ifdef __CUDA__
         exp_euler_fourier_3d<<<(Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(Mhat.num_elements(), gi.N_xx[0]/2 + 1, gi.N_xx[1], gi.N_xx[2], (cuDoubleComplex*)Mhat.begin(),dc_r[2].begin(),tau, d_lim_xx->data(), (cuDoubleComplex*)tmpXhat.begin());
         #endif
     }
@@ -284,7 +284,7 @@ struct PS_K_step {
     if(Khat.sl == stloc::host) { // TODO
       Khat *= ncxx;
     } else {
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       ptw_mult_cplx<<<(Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(Khat.num_elements(), (cuDoubleComplex*)Khat.begin(), ncxx);
       #endif
     }
@@ -322,7 +322,7 @@ struct PS_K_step {
         Mhat(idx,rr) += tau*phi2_im(-tau*lambdaz*dc_r[2](rr))*Khat(idx,rr);
       });
     } else {
-        #ifdef __CUDACC__
+        #ifdef __CUDA__
         second_ord_stage_fourier_3d<<<(Mhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(Mhat.num_elements(), gi.N_xx[0]/2 + 1, gi.N_xx[1], gi.N_xx[2], (cuDoubleComplex*)Mhat.begin(),dc_r[2].begin(),tau, d_lim_xx->data(), (cuDoubleComplex*)tmpXhat.begin(), (cuDoubleComplex*)Khat.begin());
         #endif
     }
@@ -333,7 +333,7 @@ struct PS_K_step {
     if(K.sl == stloc::host)
       Khat *= ncxx;
     else {
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       ptw_mult_cplx<<<(Khat.num_elements()+n_threads-1)/n_threads,n_threads>>>(Khat.num_elements(), (cuDoubleComplex*)Khat.begin(), ncxx);
       #endif
     }
@@ -377,7 +377,7 @@ struct PS_K_step {
       Tc = create_cmat_array({gi.r,gi.r}, sl);
       dc_r = create_vec_array(gi.r, sl);
 
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       if(sl == stloc::device) {
         d_lim_xx = make_unique_ptr<vec>(array<Index,1>({6}), stloc::device);
         cudaMemcpy(d_lim_xx->data(), gi.lim_xx.data(), 6*sizeof(double), cudaMemcpyHostToDevice);
@@ -413,7 +413,7 @@ struct PS_L_step {
           Nhat(idx,rr) *= exp(tau*lambdav*dd1_r[0](rr));
         });
       } else {
-        #ifdef __CUDACC__
+        #ifdef __CUDA__
         exact_sol_exp_3d_a<<<(Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(Nhat.num_elements(), gi.N_vv[0]/2 + 1, gi.N_vv[1], gi.N_vv[2], (cuDoubleComplex*)Nhat.begin(), dd1_r[0].begin(), -tau, d_lim_vv->data());
         #endif
       }
@@ -432,7 +432,7 @@ struct PS_L_step {
           Nhat(idx,rr) *= exp(tau*lambdaw*dd1_r[1](rr))*ncvv;
         });
       } else {
-        #ifdef __CUDACC__
+        #ifdef __CUDA__
         exact_sol_exp_3d_b<<<(Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(Nhat.num_elements(), gi.N_vv[0]/2 + 1, gi.N_vv[1], gi.N_vv[2], (cuDoubleComplex*)Nhat.begin(), dd1_r[1].begin(), -tau, d_lim_vv->data(), ncvv);
         #endif
       }
@@ -476,7 +476,7 @@ struct PS_L_step {
         Nhat(idx,rr) -= tau*phi1_im(tau*lambdau*dd1_r[2](rr))*tmpVhat(idx,rr);
       });
     } else {
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       exp_euler_fourier_3d<<<(Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(Nhat.num_elements(), gi.N_vv[0]/2 + 1, gi.N_vv[1], gi.N_vv[2], (cuDoubleComplex*)Nhat.begin(),dd1_r[2].begin(),-tau, d_lim_vv->data(), (cuDoubleComplex*)tmpVhat.begin());
       #endif
     }
@@ -519,7 +519,7 @@ struct PS_L_step {
         Nhat(idx,rr) -= tau*phi2_im(tau*lambdau*dd1_r[2](rr))*Lhat(idx,rr);
       });
     } else {
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       second_ord_stage_fourier_3d<<<(Nhat.num_elements()+n_threads-1)/n_threads,n_threads>>>(Nhat.num_elements(), gi.N_vv[0]/2 + 1, gi.N_vv[1], gi.N_vv[2], (cuDoubleComplex*)Nhat.begin(),dd1_r[2].begin(),-tau, d_lim_vv->data(), (cuDoubleComplex*)tmpVhat.begin(), (cuDoubleComplex*)Lhat.begin());
       #endif
     }
@@ -545,7 +545,7 @@ struct PS_L_step {
       D2[1].to_cplx(D2c[1]);
       D2[2].to_cplx(D2c[2]);
     } else {
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       cplx_conv<<<(D2[0].num_elements()+n_threads-1)/n_threads,n_threads>>>(D2[0].num_elements(), D2[0].begin(), (cuDoubleComplex*)D2c[0].begin());
       cplx_conv<<<(D2[1].num_elements()+n_threads-1)/n_threads,n_threads>>>(D2[1].num_elements(), D2[1].begin(), (cuDoubleComplex*)D2c[1].begin());
       cplx_conv<<<(D2[2].num_elements()+n_threads-1)/n_threads,n_threads>>>(D2[2].num_elements(), D2[2].begin(), (cuDoubleComplex*)D2c[2].begin());
@@ -588,7 +588,7 @@ struct PS_L_step {
       });
       v = h_v;
 
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       if(sl == stloc::device) {
         d_lim_vv = make_unique_ptr<vec>(array<Index,1>({6}), stloc::device);
         cudaMemcpy(d_lim_vv->data(), gi.lim_vv.data(), 6*sizeof(double), cudaMemcpyHostToDevice);
@@ -776,7 +776,7 @@ struct coeff_C {
       h_lambda_n[2](idx) = complex<double>(0.0,2.0*M_PI/(gi.lim_vv[5]-gi.lim_vv[4])*mult_k)*ncvv;
     });
 
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       if(sl == stloc::device) {
         d_lim_vv = make_unique_ptr<vec>(array<Index,1>({6}), stloc::device);
         cudaMemcpy(d_lim_vv->data(), gi.lim_vv.data(), 6*sizeof(double), cudaMemcpyHostToDevice);
@@ -803,7 +803,7 @@ struct coeff_C {
         ptw_mult_row(tmpVhat,h_lambda_n[1],dVhat[1]);
         ptw_mult_row(tmpVhat,h_lambda_n[2],dVhat[2]);
       } else {
-        #ifdef __CUDACC__
+        #ifdef __CUDA__
         double ncvv = 1.0 / (gi.dvv_mult);
         ptw_mult_row_cplx_fourier_3d<<<(gi.dvvh_mult*gi.r+n_threads-1)/n_threads,n_threads>>>(gi.dvvh_mult*gi.r, gi.N_vv[0]/2+1, gi.N_vv[1], gi.N_vv[2], (cuDoubleComplex*)tmpVhat.begin(), d_lim_vv->data(), ncvv, (cuDoubleComplex*)dVhat[0].begin(), (cuDoubleComplex*)dVhat[1].begin(), (cuDoubleComplex*)dVhat[2].begin());
         #endif
@@ -822,7 +822,7 @@ struct coeff_C {
         C2[1].to_cplx(C2c[1]);
         C2[2].to_cplx(C2c[2]);
       } else {
-        #ifdef __CUDACC__
+        #ifdef __CUDA__
         cplx_conv<<<(C2[0].num_elements()+n_threads-1)/n_threads,n_threads>>>(C2[0].num_elements(), C2[0].begin(), (cuDoubleComplex*)C2c[0].begin());
         cplx_conv<<<(C2[1].num_elements()+n_threads-1)/n_threads,n_threads>>>(C2[1].num_elements(), C2[1].begin(), (cuDoubleComplex*)C2c[1].begin());
         cplx_conv<<<(C2[2].num_elements()+n_threads-1)/n_threads,n_threads>>>(C2[2].num_elements(), C2[2].begin(), (cuDoubleComplex*)C2c[2].begin());
@@ -880,7 +880,7 @@ struct coeff_D {
           we[2](j) = E[2](j) * gi.h_xx[0] * gi.h_xx[1] * gi.h_xx[2];
         }
       } else {
-        #ifdef __CUDACC__
+        #ifdef __CUDA__
         ptw_mult_scal<<<(E[0].num_elements()+n_threads-1)/n_threads,n_threads>>>(E[0].num_elements(), E[0].begin(), gi.h_xx[0] * gi.h_xx[1] * gi.h_xx[2], we[0].begin());
         ptw_mult_scal<<<(E[1].num_elements()+n_threads-1)/n_threads,n_threads>>>(E[1].num_elements(), E[1].begin(), gi.h_xx[0] * gi.h_xx[1] * gi.h_xx[2], we[1].begin());
         ptw_mult_scal<<<(E[2].num_elements()+n_threads-1)/n_threads,n_threads>>>(E[2].num_elements(), E[2].begin(), gi.h_xx[0] * gi.h_xx[1] * gi.h_xx[2], we[2].begin());
@@ -935,7 +935,7 @@ struct electric_field {
     efhat.resize({gi.dxxh_mult});
     efhatx = create_cvec_array({gi.dxxh_mult}, sl);
 
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     if(sl == stloc::device) {
       d_lim_xx = make_unique_ptr<vec>(array<Index,1>({6}), stloc::device);
       cudaMemcpy(d_lim_xx->data(), gi.lim_xx.data(), 6*sizeof(double), cudaMemcpyHostToDevice);
@@ -980,7 +980,7 @@ struct electric_field {
           }
         }
       } else {
-        #ifdef __CUDACC__
+        #ifdef __CUDA__
         der_fourier_3d<<<(gi.dxxh_mult+n_threads-1)/n_threads,n_threads>>>(gi.dxxh_mult, gi.N_xx[0]/2+1, gi.N_xx[1], gi.N_xx[2], (cuDoubleComplex*)efhat.begin(), d_lim_xx->data(), ncxx, (cuDoubleComplex*)efhatx[0].begin(), (cuDoubleComplex*)efhatx[1].begin(), (cuDoubleComplex*)efhatx[2].begin());
         #endif
       }
@@ -999,7 +999,7 @@ private:
   std::unique_ptr<vec> d_lim_xx;
 };
 
-
+/*
 void save_lr(string fn, const lr2<double>& lr_sol, const grid_info<3>& gi) {
     nc_writer ncw(fn, {gi.N_xx[0], gi.N_xx[1], gi.N_xx[2], gi.N_vv[0], gi.N_vv[1], gi.N_vv[2], gi.r}, {"x", "y", "z", "v", "w", "u", "r"});
     ncw.add_var("r", {"r"});
@@ -1047,7 +1047,7 @@ void save_lr(string fn, const lr2<double>& lr_sol, const grid_info<3>& gi) {
     ncw.write("S", lr_sol.S.data());
     ncw.write("V", lr_sol.V.data());
 }
-
+*/
 void integration_first_order(double final_time, double tau, int nsteps_split, int nsteps_ei, int nsteps_rk4, const grid_info<3>& gi, vector<const double*> X0, vector<const double*> V0, Index snapshots, const blas_ops& blas){
 
   stloc sl = (CPU) ? stloc::host : stloc::device;
@@ -1150,7 +1150,7 @@ void integration_first_order(double final_time, double tau, int nsteps_split, in
       }
     } else {
       // TODO: can be improved and simplified
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       double* d_el_energy;
       cudaMalloc(&d_el_energy, sizeof(double)*3);
       cublasDdot (blas.handle_devres, E[0].num_elements(), E[0].begin(), 1, E[0].begin(), 1, d_el_energy);
@@ -1202,7 +1202,7 @@ int main(int argc, char** argv){
     exit(0);
   }
 
-  #ifndef __CUDACC__
+  #ifndef __CUDA__
   CPU = true;
   #else
   string dev = result["device"].as<string>();
@@ -1246,6 +1246,23 @@ int main(int argc, char** argv){
 
   // Setup the initial value
   string problem = result["problem"].as<string>();
+
+  #ifdef __CUDA__
+    cout << "HEY" << endl;
+    multi_array<double,2> A_d(stloc::device);
+    A_d.resize({10,10});
+    A_d.set_zero();
+
+    A_d += 3.0;
+    
+    multi_array<double,2> B(stloc::host);
+    B.resize({10,10});
+    B = A_d;
+
+    print(B);
+
+    exit(1);
+  #endif
   if(problem == "ll") {
     //
     // Landau damping
