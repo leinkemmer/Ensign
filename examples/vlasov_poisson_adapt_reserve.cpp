@@ -888,7 +888,7 @@ double electric_energy(array<vec,3>& E, grid_info_reserve<3>& gi){
 void integration_first_order_adapt_reserve(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol1, double tol2, Index min_r, Index max_r, string ec, Index snapshots, const blas_ops& blas){
 
 
-  gt::start("Initialization");
+  //gt::start("Initialization");
   stloc sl = (CPU) ? stloc::host : stloc::device;
 
   orthogonalize gs(&blas);
@@ -896,10 +896,18 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
   std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2], gi.dxx_mult);
   std::function<double(double*,double*)> ip_vv = inner_product_from_const_weight(gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2], gi.dvv_mult);
 
+
   // Initialization
   lr2_reserve<double> lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, sl);
-  initialize(lr_sol, X0, V0, ip_xx, ip_vv, blas);
-
+  
+  cout << "QUI SI" << endl;
+  if(sl == stloc::host) {
+    initialize(lr_sol, X0, V0, ip_xx, ip_vv, blas);
+  } else {
+    lr2_reserve<double> h_lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
+    initialize(h_lr_sol, X0, V0, ip_xx, ip_vv, blas);
+    lr_sol = h_lr_sol;
+  }
   ofstream el_energyf("evolution.data");
   ofstream contf("control.data");
   double t = 0.0;
@@ -939,10 +947,12 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
   vec sigma({gi.r}, stloc::host);
   mat tmps({gi.r,gi.r}, stloc::host);
   
-  gt::stop("Initialization");
+  //gt::stop("Initialization");
+  cout << "QUI ANCHE" << endl;
+  exit(1);
 
   int ccc = 0;
-  gt::start("Main loop");
+  //gt::start("Main loop");
   while(kk<n_steps){
 
     cout << "Step " << kk << " of " << n_steps << endl;
@@ -950,45 +960,45 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
 
     h_rank[kk] = (int)gi.r;
 
-    gt::start("K step");
+    //gt::start("K step");
     // Compute K
     blas.matmul(lr_sol.X,lr_sol.S,Xn); // Xn is K
-    gt::stop("K step");
+    //gt::stop("K step");
 
-    gt::start("Electric field");
+    //gt::start("Electric field");
     // Electric field
     efield(Xn, lr_sol.V, E, blas);
-    gt::stop("Electric field");
-    gt::start("Electric energy");
+    //gt::stop("Electric field");
+    //gt::start("Electric energy");
     double el_energy = electric_energy(E, gi);
-    gt::stop("Electric energy");
+    //gt::stop("Electric energy");
 
     // ---- K step ----
-    gt::start("C coeffs");
+    //gt::start("C coeffs");
     compute_C(lr_sol.V, C1, C2, blas);
-    gt::stop("C coeffs");
-    gt::start("K step");
+    //gt::stop("C coeffs");
+    //gt::start("K step");
     K_step_rk4(tau, Xn, E, C1, C2, nsteps_int);
-    gt::start("gs K step");
+    //gt::start("gs K step");
     gs(Xn, Sn, ip_xx); // Xn the new X
-    gt::stop("gs K step");
-    gt::stop("K step");
+    //gt::stop("gs K step");
+    //gt::stop("K step");
  
     // ---- S step ----
-    gt::start("D coeffs");
+    //gt::start("D coeffs");
     compute_D(Xn, E, D1, D2, blas);
-    gt::stop("D coeffs");
-    gt::start("S step");
+    //gt::stop("D coeffs");
+    //gt::start("S step");
     S_step_rk4(tau, Sn, C1, C2, D1, D2, nsteps_int);
-    gt::stop("S step");
+    //gt::stop("S step");
 
-    gt::start("L step");
+    //gt::start("L step");
     // ---- L step ----
     blas.matmul_transb(lr_sol.V,Sn,Vn); // Vn is L
     L_step_rk4(tau, Vn, D1, D2, nsteps_int);
     gs(Vn, Sn, ip_vv);
     transpose_inplace(Sn);
-    gt::stop("L step");
+    //gt::stop("L step");
 
     if (ec == "f"){
       svd_diag(Sn, sigma, blas);
@@ -1123,19 +1133,19 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
         kk = kk + 1;
       }
     }else if (ec == "ee"){
-      gt::start("NEW el en (matmul, efield, ee)");
+      //gt::start("NEW el en (matmul, efield, ee)");
       blas.matmul(Xn,Sn,Kad);
       efield(Kad, Vn, Etmp, blas);
 
       double el_energy_new = electric_energy(Etmp, gi);
-      gt::stop("NEW el en (matmul, efield, ee)");
-      gt::start("SVD decomposition");
+      //gt::stop("NEW el en (matmul, efield, ee)");
+      //gt::start("SVD decomposition");
       svd(Sn, UUs, VVs, sigma, blas);
-      gt::stop("SVD decomposition");
+      //gt::stop("SVD decomposition");
       double svr = sigma(gi.r-1);
       sigma(gi.r-1) = 0.0;
 
-      gt::start("CUT el en (pmr, matmul, efield, ee)");
+      //gt::start("CUT el en (pmr, matmul, efield, ee)");
       //TODO: can be optimized, but it's r times r
       transpose_inplace(VVs);
       ptw_mult_row(VVs,sigma,tmps);
@@ -1145,7 +1155,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
       efield(Kad, Vn, Etmp, blas);
 
       double el_energy_cut = electric_energy(Etmp, gi);
-      gt::stop("CUT el en (pmr, matmul, efield, ee)");
+      //gt::stop("CUT el en (pmr, matmul, efield, ee)");
 
       double err_el_energy = abs(el_energy_new-el_energy_cut);
       double fact = 1.0/10.0;
@@ -1157,11 +1167,11 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
           contf << "j" << endl;
           cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
 
-          gt::start("Reject but max rank: swap");
+          //gt::start("Reject but max rank: swap");
           lr_sol.X.swap(Xn);
           lr_sol.V.swap(Vn);
           lr_sol.S.swap(Sn);
-          gt::stop("Reject but max rank: swap");
+          //gt::stop("Reject but max rank: swap");
  
           el_energyf << t << " " << el_energy << endl;
           t += tau;
@@ -1175,9 +1185,9 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
           mat tmp22 = lr_sol.S;
           mat tmp33 = lr_sol.V;
           
-          gt::start("Reject: increase rank");
+          //gt::start("Reject: increase rank");
           // Do all the updates
-          gt::start("Reject: increase rank (updates)");
+          //gt::start("Reject: increase rank (updates)");
           gi.update_rank(gi.r+1);
           lr_sol.update_info(gi.r);
           K_step_rk4.update_info(gi.r);
@@ -1188,14 +1198,14 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
           Vn.update_shape({gi.dvv_mult,gi.r});
           lr_sol.X.swap(Xn);
           lr_sol.V.swap(Vn);
-          gt::stop("Reject: increase rank (updates)");
+          //gt::stop("Reject: increase rank (updates)");
 
-          gt::start("Reject: increase rank (gram schmidt)");
+          //gt::start("Reject: increase rank (gram schmidt)");
           mgs_orthcol_cpu(lr_sol.X,ip_xx);
           mgs_orthcol_cpu(lr_sol.V,ip_vv);
-          gt::stop("Reject: increase rank (gram schmidt)");
+          //gt::stop("Reject: increase rank (gram schmidt)");
 
-          gt::start("Reject: increase rank (some resizes rxr)");
+          //gt::start("Reject: increase rank (some resizes rxr)");
           #ifdef __OPENMP__
           #pragma omp parallel for
           #endif
@@ -1225,8 +1235,8 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
           efield.update_info(gi.r);
           compute_C.update_info(gi.r);
           compute_D.update_info(gi.r);
-          gt::stop("Reject: increase rank (some resizes rxr)");
-          gt::stop("Reject: increase rank");
+          //gt::stop("Reject: increase rank (some resizes rxr)");
+          //gt::stop("Reject: increase rank");
 
           ccc+=1;
 
@@ -1281,17 +1291,17 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
             contf << "m" << endl;
             cout << "Accepted step, should decrease rank but min rank reached. Proceeding keeping min rank." << endl;
 
-            gt::start("Accept but min rank: swap");
+            //gt::start("Accept but min rank: swap");
             lr_sol.X.swap(Xn);
             lr_sol.V.swap(Vn);
             lr_sol.S.swap(Sn);
-            gt::stop("Accept but min rank: swap");
+            //gt::stop("Accept but min rank: swap");
 
           } else {
             contf << "a" << endl;
             cout << "Accepted step, decreasing rank by one." << endl;
 
-            gt::start("Accept: decrease rank");
+            //gt::start("Accept: decrease rank");
 
             // Do all the updates
             gi.update_rank(gi.r-1);
@@ -1330,7 +1340,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
             efield.update_info(gi.r);
             compute_C.update_info(gi.r);
             compute_D.update_info(gi.r);
-            gt::stop("Accept: decrease rank");
+            //gt::stop("Accept: decrease rank");
 
           }
           el_energyf << t << " " << el_energy << endl;
@@ -1339,11 +1349,11 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
       } else{
         contf << "s" << endl;
         cout << "Accepted step, keeping same rank." << endl;
-        gt::start("Accept keep rank: swap");
+        //gt::start("Accept keep rank: swap");
         lr_sol.X.swap(Xn);
         lr_sol.V.swap(Vn);
         lr_sol.S.swap(Sn);
-        gt::stop("Accept keep rank: swap");
+        //gt::stop("Accept keep rank: swap");
 
         el_energyf << t << " " << el_energy << endl;
         t += tau;
@@ -1355,7 +1365,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
       exit(1);
     }
   }
-  gt::stop("Main loop");
+  //gt::stop("Main loop");
 
     ofstream h_rank_f("h_rank.data");
     for(Index i = 0; i < h_rank.size(); i++){
@@ -1368,15 +1378,15 @@ int main(int argc, char** argv){
 
   cxxopts::Options options("vlasov_poisson", "3+3 dimensional dynamical low-rank Vlasov--Poisson solver");
   options.add_options()
-  ("device", "Device the simulation is run on (can be either cpu or gpu)", cxxopts::value<string>()->default_value("cpu"))
+  ("device", "Device the simulation is run on (can be either cpu or gpu)", cxxopts::value<string>()->default_value("gpu"))
   ("problem", "Initial value that is used in the simulation (either ll or ts)", cxxopts::value<string>()->default_value("ts"))
-  ("nx", "Number of grid points in space (as a whitespace separated list)", cxxopts::value<string>()->default_value("64 64 64"))
-  ("nv", "Number of grid points in velocity (as a whitespace separated list)", cxxopts::value<string>()->default_value("64 64 64"))
+  ("nx", "Number of grid points in space (as a whitespace separated list)", cxxopts::value<string>()->default_value("8 8 8"))
+  ("nv", "Number of grid points in velocity (as a whitespace separated list)", cxxopts::value<string>()->default_value("8 8 8"))
   ("final_time", "Time to which the simulation is run", cxxopts::value<double>()->default_value("40.0"))
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("0.01"))
-  ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("100"))
-  ("r_min", "Minimum rank of the simulation", cxxopts::value<int>()->default_value("10"))
-  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("300"))
+  ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("5"))
+  ("r_min", "Minimum rank of the simulation", cxxopts::value<int>()->default_value("4"))
+  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("60"))
   ("err", "Error control", cxxopts::value<string>()->default_value("ee"))
   ("tol_inc", "Tolerance for error control", cxxopts::value<double>()->default_value("0.00001"))
   ("tol_dec", "Tolerance for error control", cxxopts::value<double>()->default_value("0.0000001"))
@@ -1467,8 +1477,11 @@ int main(int argc, char** argv){
     X.push_back(xx.begin());
     V.push_back(vv.begin());
 
+    #ifdef __CUDA__
+    cout << "GPU SIMULATION" << endl;
+    #endif
     #ifdef __MKL__
-    cout << "MKL SIMULATION" << endl;
+    cout << "MKL ENABLED" << endl;
     #endif
     cout << "Simulation: " << problem << endl;
     cout << "Dof in space: " << gi.N_xx[0] << " " << gi.N_xx[1] << " " << gi.N_xx[2] << " " << endl;
@@ -1479,7 +1492,7 @@ int main(int argc, char** argv){
 
     integration_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
 
-    cout << gt::sorted_output() << endl;
+    //cout << gt::sorted_output() << endl;
   } else {
     cout << "ERROR: problem with name " << problem << " is not supported" << endl;
     exit(1);

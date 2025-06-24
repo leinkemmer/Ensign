@@ -45,7 +45,7 @@ struct multi_array {
     }
   }
 
-  // copy and swap assignment operator
+  // copy operator
   multi_array& operator=(const multi_array& ma) {
     if(v == nullptr) {
       sl = ma.sl;
@@ -94,7 +94,8 @@ struct multi_array {
       #endif
     }
   }
-  
+ 
+  // PROBABLY NOT NEEDED, TO BE REMOVED
   void resize_ad(array<Index,d> _e) {
     e = _e;
     emax = _e;
@@ -104,6 +105,7 @@ struct multi_array {
       v = (T*)malloc(sizeof(T)*num_elements);
     } else {
       #ifdef __CUDA__
+      cudaFree(v);
       v = (T*)gpu_malloc(sizeof(T)*num_elements);
       #else
       cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
@@ -121,7 +123,7 @@ struct multi_array {
     if(sl == stloc::host) {
       v = (T*)malloc(sizeof(T)*num_elements);
       /*
-      // NEEDED FOR LAZY MANAGEMENT OF MEMORY (TO BE CHECKED)
+      // FOR LAZY MANAGEMENT OF MEMORY TO CHECK ACTUAL MEMORY
      
      #pragma omp parallel for
       for(Index iii = 0; iii < num_elements; iii++){
