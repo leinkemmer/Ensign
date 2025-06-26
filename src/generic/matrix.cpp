@@ -711,36 +711,57 @@ void diagonalization::operator()(const multi_array<double,2>& CC, multi_array<do
 
 template<> 
 void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_array<double,2>& V, multi_array<double,1>& sigma_diag, const blas_ops& blas) {
-  #ifdef __MKL__
-  MKL_INT work_query = -1;
-  MKL_INT info;
-  MKL_INT size;
-  char mode = 'S';
-  MKL_INT m = input.shape()[0];
-  MKL_INT n = input.shape()[1];
-  MKL_INT m_U = U.shape()[0];
-  MKL_INT m_V = V.shape()[0];
-  #else
-  int work_query = -1;
-  int info;
-  int size;
-  char mode = 'S';
-  int m = input.shape()[0];
-  int n = input.shape()[1];
-  int m_U = U.shape()[0];
-  int m_V = V.shape()[0];
-  #endif
+  if(input.sl == stloc::host){
+    #ifdef __MKL__
+    MKL_INT work_query = -1;
+    MKL_INT info;
+    MKL_INT size;
+    char mode = 'S';
+    MKL_INT m = input.shape()[0];
+    MKL_INT n = input.shape()[1];
+    MKL_INT m_U = U.shape()[0];
+    MKL_INT m_V = V.shape()[0];
+    #else
+    int work_query = -1;
+    int info;
+    int size;
+    char mode = 'S';
+    int m = input.shape()[0];
+    int n = input.shape()[1];
+    int m_U = U.shape()[0];
+    int m_V = V.shape()[0];
+    #endif
 
-  multi_array<double,2> input_copy = input; // Lapack overwrites the input data
+    multi_array<double,2> input_copy = input; // Lapack overwrites the input data
 
-  vector<double> work({1});
-  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &work_query, &info);
+    vector<double> work({1});
+    dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &work_query, &info);
 
-  size = work[0];
-  work.resize({(size_t)size});
-  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &size, &info);
+    size = work[0];
+    
+    work.resize({(size_t)size});
+    dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &size, &info);
+  } else {
+    #ifdef __CUDA__
+      int m = input.shape()[0];
+      int n = input.shape()[1];
+      int lwork;
 
-  // lapack actually computes V^T and not V
+      cusolverDnDgesvd_bufferSize(blas.handle_cusolver,m,n,&lwork);
+
+      signed char mode = 'S';
+      multi_array<double,2> input_copy = input;
+      int m_U = U.shape()[0];
+      int m_V = V.shape()[0];
+      multi_array<double,1> work({lwork}, input.sl);
+      double *rwork = nullptr;
+      int *devInfo = nullptr;
+      cudaMalloc(reinterpret_cast<void **>(&devInfo), sizeof(int));
+      cusolverDnDgesvd(blas.handle_cusolver,mode,mode,m,n,input_copy.data(),m,sigma_diag.data(),U.data(),m_U,V.data(),m_V,work.data(),lwork,rwork,devInfo);
+      cudaFree(devInfo);
+    #endif
+  }
+  // Computed V^T and not V
   transpose_inplace(V);
 }
 

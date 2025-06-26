@@ -937,31 +937,43 @@ void mgs_orthcol_cpu(multi_array<double,2>& X, std::function<double(double*,doub
   for(Index i = 0; i < dims[0]; i++){
     X(i,rk-1) = distribution(generator);
   }
-    for(Index k=0;k<(rk-1);k++) {
-      r = inner_product(X.extract({rk-1}), X.extract({k}));
-      cblas_daxpy(dims[0], -r, X.extract({k}), 1, X.extract({rk-1}),1);
-    }
+  for(Index k=0;k<(rk-1);k++) {
+    r = inner_product(X.extract({rk-1}), X.extract({k}));
+    cblas_daxpy(dims[0], -r, X.extract({k}), 1, X.extract({rk-1}),1);
+  }
     double ip = inner_product(X.extract({rk-1}),X.extract({rk-1}));
 
       cblas_dscal(dims[0],1.0/sqrt(ip),X.extract({rk-1}),1);
 }
 
 #ifdef __CUDA__
-void mgs_orthcol_gpu(multi_array<double,2>& X, double w, blas) {
+  void mgs_orthcol_gpu(multi_array<double,2>& X, double w, const blas_ops& blas) {
+    array<Index,2> dims = X.shape();
+    Index n = dims[0];
+    Index rk = dims[1];
+    double* r;
+    cudaMalloc((void**)&r,sizeof(double));
+
     curandGenerator_t gen;
     curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
     curandSetPseudoRandomGeneratorSeed(gen,1234);
+
+    curandGenerateNormalDouble(gen,&X(0,rk-1),n, 0.0, 1.0);
   
-    array<Index,2> dims = X.shape();
-    Index rk = dims[1];
-    double r;
-      
-
-
-
+    for(Index k=0;k<(rk-1);k++) {
+      cublasDdot(blas.handle_devres, n, &X(0,rk-1), 1, &X(0,k), 1, r);
+      scale_unique<<<1,1>>>(r,w);
+      cudaDeviceSynchronize();
+      dmaxpy<<<(n+n_threads-1)/n_threads,n_threads>>>(n, r, &X(0,k), &X(0,rk-1));
+      cudaDeviceSynchronize();
+    }
+    cublasDdot(blas.handle_devres, n, &X(0,rk-1), 1, &X(0,rk-1), 1, r);
+    scale_sqrt_unique<<<1,1>>>(r,w);
+    cudaDeviceSynchronize();
+    ptw_div_gs<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &X(0,rk-1), r);
+    cudaDeviceSynchronize();
     curandDestroyGenerator(gen);
-
-}
+  }
 #endif
 
 double electric_energy(array<vec,3>& E, grid_info_reserve<3>& gi, const blas_ops& blas){
@@ -1325,11 +1337,21 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
           //gt::stop("Reject: increase rank (updates)");
 
           //gt::start("Reject: increase rank (gram schmidt)");
-          mgs_orthcol_cpu(lr_sol.X,ip_xx);
-          mgs_orthcol_cpu(lr_sol.V,ip_vv);
+          if(lr_sol.X.sl == stloc::host){
+            mgs_orthcol_cpu(lr_sol.X,ip_xx);
+            mgs_orthcol_cpu(lr_sol.V,ip_vv);
+          } else {
+            #ifdef __CUDA__
+              mgs_orthcol_gpu(lr_sol.X,gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2],blas);
+              mgs_orthcol_gpu(lr_sol.V,gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2],blas);
+            #endif
+          }
           //gt::stop("Reject: increase rank (gram schmidt)");
 
+          
           //gt::start("Reject: increase rank (some resizes rxr)");
+
+          // This could directly become a kernel, but s times s so we'll see
           #ifdef __OPENMP__
           #pragma omp parallel for
           #endif
@@ -1337,13 +1359,26 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
               Index idx_r = i%gi.r;
               Index idx_c = i/gi.r;
               if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
-                lr_sol.S(idx_r,idx_c) = 0.0;
+                if(lr_sol.S.sl == stloc::host){
+                  lr_sol.S(idx_r,idx_c) = 0.0;
+                } else {
+                  #ifdef __CUDA__
+                    double ZERO = 0.0;
+                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&ZERO, sizeof(double),cudaMemcpyHostToDevice);
+                  #endif
+                }
               } else {
-                lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+                if(lr_sol.S.sl == stloc::host){
+                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+                } else {
+                  #ifdef __CUDA__
+                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
+                  #endif
+                }
               }
           }
           Sn.resize_ad({gi.r,gi.r});
-
+          
           for(int ii = 0; ii < 3; ii++){
             C1[ii].resize_ad({gi.r,gi.r});
             C2[ii].resize_ad({gi.r,gi.r});
@@ -1385,7 +1420,13 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
             for(Index i=0; i < lr_sol.S.num_elements(); i++){
                 Index idx_r = i%gi.r;
                 Index idx_c = i/gi.r;
-                lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+                if(lr_sol.S.sl == stloc::host){
+                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+                }else{
+                  #ifdef __CUDA__
+                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
+                  #endif
+                }
             }
             Sn.resize_ad({gi.r,gi.r});
 
@@ -1445,7 +1486,13 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
             for(Index i=0; i < lr_sol.S.num_elements(); i++){
                 Index idx_r = i%gi.r;
                 Index idx_c = i/gi.r;
-                lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+                if(lr_sol.S.sl == stloc::host){
+                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+                }else{
+                  #ifdef __CUDA__
+                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
+                  #endif
+                }
             }
             Sn.resize_ad({gi.r,gi.r});
 

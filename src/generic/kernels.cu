@@ -281,7 +281,7 @@ __global__ void rk4_finalcomb(int n, double* A, double t, double* M1, double* M2
   int idx = threadIdx.x + blockDim.x * blockIdx.x;
 
   while(idx < n){
-    A[idx] += ((t/6.0) * (M1[idx]+2.0*M2[idx]+2.0*M3[idx]+M4[idx]-M5[idx]));
+    A[idx] += ((t/6.0) * (M1[idx]+2.0*M2[idx]+2.0*M3[idx]+M4[idx]-M5[idx])); // is minus coming from the call outside?
     idx += blockDim.x * gridDim.x;
   }
 }

@@ -227,8 +227,8 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
           ptw_div_gs<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j), nrm);
 
       }
-
   }
+  cudaFree(nrm);
 };
 
 // STILL TO BE TESTED
