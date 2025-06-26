@@ -946,6 +946,24 @@ void mgs_orthcol_cpu(multi_array<double,2>& X, std::function<double(double*,doub
       cblas_dscal(dims[0],1.0/sqrt(ip),X.extract({rk-1}),1);
 }
 
+#ifdef __CUDA__
+void mgs_orthcol_gpu(multi_array<double,2>& X, double w, blas) {
+    curandGenerator_t gen;
+    curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
+    curandSetPseudoRandomGeneratorSeed(gen,1234);
+  
+    array<Index,2> dims = X.shape();
+    Index rk = dims[1];
+    double r;
+      
+
+
+
+    curandDestroyGenerator(gen);
+
+}
+#endif
+
 double electric_energy(array<vec,3>& E, grid_info_reserve<3>& gi, const blas_ops& blas){
   double ee = 0.0;
   if(E[0].sl == stloc::host){
@@ -1011,7 +1029,6 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
   array<vec,3> E = create_vec_array(gi.dxx_mult, sl);
   array<vec,3> Etmp = create_vec_array(gi.dxx_mult, sl);
 
-
   PS_K_step_adapt K_step_rk4(sl, gi, &blas);
   PS_S_step_adapt S_step_rk4(sl, gi, &blas);
   PS_L_step_adapt L_step_rk4(sl, gi, &blas);
@@ -1033,10 +1050,10 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
 
   // needed for error control
   mat Kad({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
-  mat UUs({gi.r,gi.r}, stloc::host);
-  mat VVs({gi.r,gi.r}, stloc::host);
-  vec sigma({gi.r}, stloc::host);
-  mat tmps({gi.r,gi.r}, stloc::host);
+  mat UUs({gi.r,gi.r}, sl);
+  mat VVs({gi.r,gi.r}, sl);
+  vec sigma({gi.r}, sl);
+  mat tmps({gi.r,gi.r}, sl);
 
   //gt::stop("Initialization");
 
@@ -1240,8 +1257,17 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
       //gt::start("SVD decomposition");
       svd(Sn, UUs, VVs, sigma, blas);
       //gt::stop("SVD decomposition");
-      double svr = sigma(gi.r-1);
-      sigma(gi.r-1) = 0.0;
+      double svr;
+      if(Sn.sl == stloc::host){
+        svr = sigma(gi.r-1);
+        sigma(gi.r-1) = 0.0;
+      } else {
+        #ifdef __CUDA__
+          cudaMemcpy(&svr, &sigma(gi.r-1), sizeof(double),cudaMemcpyDeviceToHost);
+          double ZERO = 0.0;
+          cudaMemcpy(&sigma(gi.r-1),&ZERO, sizeof(double),cudaMemcpyHostToDevice);
+        #endif
+      }
 
       //gt::start("CUT el en (pmr, matmul, efield, ee)");
       //TODO: can be optimized, but it's r times r
