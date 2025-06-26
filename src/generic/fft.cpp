@@ -65,7 +65,7 @@ array<fftw_plan,2> create_plans_3d(array<Index,3> dims_, multi_array<double,1>& 
   return out;
 }
 
-// Plan needed in adapt, no many routine known a priori
+// Plan needed in adapt, since rank changes no howmany known a priori
 array<fftw_plan,2> create_plans_3d_adapt(array<Index,3> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq){
   array<fftw_plan,2> out;
 
@@ -113,6 +113,16 @@ array<cufftHandle,2> create_plans_3d(array<Index,3> dims_, int howmany){
   return out;
 }
 
+// Plan needed in adapt, since rank changes no howmany known a priori
+array<cufftHandle,2> create_plans_3d_adapt(array<Index,3> dims_){
+  array<cufftHandle,2> out;
+
+  cufftPlan3d(&out[0],int(dims_[2]),int(dims_[1]),int(dims_[0]), CUFFT_D2Z);
+  cufftPlan3d(&out[1],int(dims_[2]),int(dims_[1]),int(dims_[0]), CUFFT_Z2D);
+
+  return out;
+}
+
 void destroy_plans(array<cufftHandle,2>& plans){
   cufftDestroy(plans[0]);
   cufftDestroy(plans[1]);
@@ -143,7 +153,10 @@ fft<2, 3>::fft(array<Index,3> dims_, multi_array<double,2>& real, multi_array<co
     }
   } else {
     #ifdef __CUDA__
-    cuda_plans = create_plans_3d(dims_, real.shape()[1]);
+    if (adapt == true){
+      cuda_plans = create_plans_3d_adapt(dims_);
+    } else {
+      cuda_plans = create_plans_3d(dims_, real.shape()[1]);    }
     #endif
   }
 }
@@ -256,7 +269,7 @@ void fft<d, dim>::forward(double* real, complex<double>* freq, stloc sl) {
     fftw_execute_dft_r2c(plans[0],real,(fftw_complex*)freq);
   } else {
     #ifdef __CUDA__
-    // TODO
+      cufftExecD2Z(cuda_plans[0],real,(cufftDoubleComplex*)freq);
     #endif
   }
 }
@@ -285,7 +298,7 @@ void fft<d, dim>::backward(complex<double>* freq, double* real, stloc sl) {
     fftw_execute_dft_c2r(plans[1],(fftw_complex*)freq,real);
   } else {
     #ifdef __CUDA__
-    // TODO
+      cufftExecZ2D(cuda_plans[1],(cufftDoubleComplex*)freq,real);
     #endif
   }
 }

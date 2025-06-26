@@ -80,6 +80,8 @@ array<cufftHandle,2> create_plans_2d(array<Index,2> dims_, int howmany);
 */
 array<cufftHandle,2> create_plans_3d(array<Index,3> dims_, int howmany);
 
+array<cufftHandle,2> create_plans_3d_adapt(array<Index,3> dims_);
+
 /* Helper function to destroy cuFFT plans
 */
 void destroy_plans(array<cufftHandle,2>& plans);

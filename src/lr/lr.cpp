@@ -338,8 +338,8 @@ void orthogonalize::operator()(multi_array<double,2>& Q, multi_array<double,2>& 
     orthogonalize_householder_constw(Q, R, w);
   } else {
     #ifdef __CUDA__
-    //gram_schmidt_gpu(Q, R, w, gen, blas->handle_devres);
-    orthogonalize_householder_constw_gpu(Q, R, w, blas->handle_cusolver);
+    gram_schmidt_gpu(Q, R, w, gen, blas->handle_devres);
+    //orthogonalize_householder_constw_gpu(Q, R, w, blas->handle_cusolver);
     #else
     cout << "ERROR: orthogonalize_gpu called but no GPU support available." << endl;
     exit(1);

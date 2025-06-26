@@ -286,6 +286,33 @@ __global__ void rk4_finalcomb(int n, double* A, double t, double* M1, double* M2
   }
 }
 
+__global__ void addsub_rhs_k(int n, double* A, double* B, double* C){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    A[idx] += (B[idx] - C[idx]);
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+__global__ void setmultadd_rk4_k(int n, double* A, double* B, double t, double* C){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    A[idx] = B[idx] + t*C[idx];
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+__global__ void finstage_rk4_k(int n, double* A, double* B, double* C, double* D, double* E, double tau){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    A[idx] += (tau/6.0)*(B[idx]+2.0*(C[idx]+D[idx])+E[idx]);
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
 template<class T>
 __global__ void transpose_inplace_k(int n, T* A){
 
