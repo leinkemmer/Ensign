@@ -73,6 +73,13 @@ target_link_libraries(lr Ensign::Ensign Catch2::Catch2WithMain)
 add_test(NAME lr COMMAND lr)
 
 #
+# Interpolatory LR test
+#
+add_executable(interpolatory interpolatory.cpp)
+target_link_libraries(interpolatory Ensign::Ensign Catch2::Catch2WithMain)
+add_test(NAME interpolatory COMMAND interpolatory)
+
+#
 # index test
 #
 add_executable(index index.cpp)
@@ -100,3 +107,11 @@ add_test(NAME alfven_waves COMMAND alfven_waves_test)
 add_executable(lhd_instability_test lhd_instability.cpp)
 target_link_libraries(lhd_instability_test Ensign::Ensign Catch2::Catch2WithMain)
 add_test(NAME lhd_instability COMMAND lhd_instability_test)
+
+
+#
+# Drift-kinetic test
+#
+add_executable(drift_kinetics_test drift_kinetics.cpp)
+target_link_libraries(drift_kinetics_test Ensign::Ensign Catch2::Catch2WithMain)
+add_test(NAME drift_kinetics COMMAND drift_kinetics_test)

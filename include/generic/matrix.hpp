@@ -75,6 +75,14 @@ struct blas_ops {
   template<class T>
   void matvec_trans(const multi_array<T,2>& a, const multi_array<T,1>& b, multi_array<T,1>& c) const;
 
+
+  /* Transpose a matrix
+  */
+  template<class T>
+  void transpose(const multi_array<T,2>& in, multi_array<T,2>& out);
+
+
+
   bool gpu;
   #ifdef __CUDACC__
   cublasHandle_t  handle;

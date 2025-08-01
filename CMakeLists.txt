@@ -302,6 +302,7 @@ add_library(Ensign
   "src/generic/utility.cpp"
   "src/lr/coefficients.cpp"
   "src/lr/lr.cpp"
+  "src/lr/interpolatory.cpp"
 )
 
 add_library(Ensign::Ensign ALIAS Ensign)

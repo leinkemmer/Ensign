@@ -128,6 +128,11 @@ template void ptw_mult_row(const multi_array<complex<float>,2>&, const multi_arr
 
 template<class T>
 void transpose_inplace(multi_array<T,2>& a){
+  if(a.shape()[0] != a.shape()[1]) {
+    cout << "ERROR: transpose inplace is only implemented for square arrays." << endl;
+    exit(1);
+  }
+
   if (a.sl == stloc::host){
   Index m = a.shape()[0];
   T tmp = 0.0;
@@ -155,6 +160,8 @@ void transpose_inplace(multi_array<T,2>& a){
 
 template void transpose_inplace(multi_array<double,2>&);
 //template void transpose_inplace(multi_array<float,2>&);
+
+
 
 
 blas_ops::blas_ops(bool _gpu) : gpu(_gpu) {
@@ -640,6 +647,27 @@ void blas_ops::matvec_trans(const multi_array<float,2>& a, const multi_array<flo
       }
 
 }
+
+template<>
+void blas_ops::transpose(const multi_array<double,2>& in, multi_array<double,2>& out) {
+  if(in.sl == stloc::host && out.sl == stloc::host) {
+    #ifdef __OPENMP__
+    #pragma omp parallel for
+    #endif
+    for(Index j=0;j<out.shape()[1];j++) {
+      for(Index i=0;i<out.shape()[0];i++) {
+        out(i,j) = in(j,i);
+      }
+    }
+  } else {
+    cout << "ERROR: blas_ops::transpose is not yet impelmented for GPUs" << endl;
+    exit(1);
+  }
+}
+
+
+
+
 
 diagonalization::diagonalization(Index m) {
   #ifdef __MKL__
