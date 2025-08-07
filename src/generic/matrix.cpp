@@ -9,6 +9,10 @@ namespace Matrix {
 extern "C" {
   extern void dgees_(char*,char*,void*,int*,double*,int*, int*, double*, double*, double*, int*, double*, int*, bool*,int*);
   extern void dgesvd_(char*,char*,int*,int*,double*,int*,double*,double*,int*,double*,int*,double*,int*,int*);
+  extern void dgetrf_(int*, int*, double*, int*, int*, int*);
+  extern void zgetrf_(int*, int*, complex<double>*, int*, int*, int*);
+  extern void dgetrs_(char*, int*, int*, double*, int*, int*, double*, int*, int*);
+  extern void zgetrs_(char*, int*, int*, complex<double>*, int*, int*, complex<double>*, int*, int*);
 }
 #endif
 
@@ -729,13 +733,79 @@ void diagonalization::operator()(const multi_array<double,2>& CC, multi_array<do
   #endif
 
   if(lwork == -1){ // Dumb call to obtain optimal value to work
-  dgees_(&jobvs,&sort,nullptr,&nn,D.begin(),&lda,&value,diag_r.begin(),diag_i.begin(),TT.begin(),&ldvs,&work_opt,&lwork,nullptr,&info);
+    dgees_(&jobvs,&sort,nullptr,&nn,D.begin(),&lda,&value,diag_r.begin(),diag_i.begin(),TT.begin(),&ldvs,&work_opt,&lwork,nullptr,&info);
     lwork = int(work_opt);
   }else{
     multi_array<double,1> work({lwork});
     dgees_(&jobvs,&sort,nullptr,&nn,D.begin(),&lda,&value,diag_r.begin(),diag_i.begin(),TT.begin(),&ldvs,work.begin(),&lwork,nullptr,&info);
   }
 }
+
+
+
+template<class T>
+void lu_solver<T>::lu() {
+  if(A.sl == stloc::host) { // everything on CPU
+    #ifdef __MKL__
+    MKL_INT n = A.shape()[0];
+    MKL_INT info;
+    #else
+    int n = A.shape()[0];
+    int info;
+    #endif
+
+    if constexpr(std::is_same_v<T, double>) {
+      dgetrf_(&n, &n, A.data(), &n, ipiv.data(), &info);
+    } else if constexpr(std::is_same_v<T, complex<double>>) {
+      zgetrf_(&n, &n, A.data(), &n, ipiv.data(), &info);
+    }
+    if(info != 0) {
+      cout << "getrf failed with info = " << info << endl;
+      exit(1);
+    }
+  } else {
+    cout << "ERROR: lu_solver::lu is not yet implemented for GPU" << endl;
+    exit(1);
+  }
+
+}
+
+template void lu_solver<double>::lu();
+template void lu_solver<complex<double>>::lu();
+
+template<class T>
+void lu_solver<T>::solve(multi_array<T,1>& xb) {
+  if(A.sl == stloc::host && xb.sl == stloc::host) { // everything on CPU
+    char trans = 'N';
+    #ifdef __MKL__
+    MKL_INT n = A.shape()[0];
+    MKL_INT rhs = 1;
+    MKL_INT info;
+    #else
+    int n = A.shape()[0];
+    int nrhs = 1;
+    int info;
+    #endif
+
+    if constexpr(std::is_same_v<T, double>) {
+      dgetrs_(&trans, &n, &nrhs, A.data(), &n, ipiv.data(), xb.data(), &n, &info);
+    } else if constexpr(std::is_same_v<T, complex<double>>) {
+      zgetrs_(&trans, &n, &nrhs, A.data(), &n, ipiv.data(), xb.data(), &n, &info);
+    }
+    if(info != 0) {
+      cout << "getrs failed with info = " << info << endl;
+      exit(1);
+    }
+  } else {
+    cout << "ERROR: lu_solver::solve is not yet implemented for GPU" << endl;
+    exit(1);
+  }
+
+}
+
+template void lu_solver<double>::solve(multi_array<double,1>&);
+template void lu_solver<complex<double>>::solve(multi_array<complex<double>,1>&);
+
 
 template<> 
 void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_array<double,2>& V, multi_array<double,1>& sigma_diag, const blas_ops& blas) {

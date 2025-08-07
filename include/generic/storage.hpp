@@ -7,6 +7,8 @@
 
 namespace Ensign {
 
+
+
 template<class T, size_t d>
 struct multi_array {
   array<Index,d> e;
