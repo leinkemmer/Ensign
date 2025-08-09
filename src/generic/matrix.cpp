@@ -653,7 +653,7 @@ void blas_ops::matvec_trans(const multi_array<float,2>& a, const multi_array<flo
 }
 
 template<>
-void blas_ops::transpose(const multi_array<double,2>& in, multi_array<double,2>& out) {
+void blas_ops::transpose(const multi_array<double,2>& in, multi_array<double,2>& out) const {
   if(in.sl == stloc::host && out.sl == stloc::host) {
     #ifdef __OPENMP__
     #pragma omp parallel for
@@ -817,7 +817,7 @@ void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_arr
   MKL_INT m = input.shape()[0];
   MKL_INT n = input.shape()[1];
   MKL_INT m_U = U.shape()[0];
-  MKL_INT m_V = V.shape()[0];
+  MKL_INT m_V = V.shape()[1];
   #else
   int work_query = -1;
   int info;
@@ -826,20 +826,22 @@ void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_arr
   int m = input.shape()[0];
   int n = input.shape()[1];
   int m_U = U.shape()[0];
-  int m_V = V.shape()[0];
+  int m_V = V.shape()[1];
   #endif
 
   multi_array<double,2> input_copy = input; // Lapack overwrites the input data
 
+  multi_array<double,2> VV({V.shape()[1], V.shape()[0]});
   vector<double> work({1});
-  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &work_query, &info);
+  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, VV.data(), &m_V, work.data(), &work_query, &info);
 
   size = work[0];
   work.resize({(size_t)size});
-  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &size, &info);
+  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, VV.data(), &m_V, work.data(), &size, &info);
 
   // lapack actually computes V^T and not V
-  transpose_inplace(V);
+  //transpose_inplace(V);
+  blas.transpose(VV, V);
 }
 
 } // namespace Matrix

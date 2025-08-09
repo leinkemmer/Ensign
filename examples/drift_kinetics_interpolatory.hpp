@@ -3,6 +3,7 @@
 #include <generic/matrix.hpp>
 #include <generic/storage.hpp>
 #include <generic/fft.hpp>
+#include <generic/timer.hpp>
 
 using namespace Ensign;
 using namespace Ensign::Matrix;
@@ -170,7 +171,8 @@ struct quasi_neutrality_solver {
           double n0_i = gi.n0(gi.rvar(i));
           rhs(idx_rhs,i) = -1.0;
           for(Index ir=0;ir<r;ir++) {
-            rhs(idx_rhs,i) += X(idx,ir)*L_int(ir)/n0_i;
+            double val = X(idx,ir)*L_int(ir)/n0_i;
+            rhs(idx_rhs,i) += val;
           }
         }
       }
@@ -288,8 +290,9 @@ double rhs_driftkinetic(const grid_info& gi, const mat& X, const mat& L, const v
   if(i==0 || i==gi.n_x[0]-1) {
     return 0.0; 
   } else {
-    double adv_r = -gi.q/(gi.m*gi.B0*rvar)*(potential(theta_p1)-potential(theta_m1))/(2.0*gi.h_x[1])*(X(rvar_p1,ir)-X(rvar_m1,ir))/(2.0*gi.h_x[0])*L(idx_v,ir);
-    double adv_theta = gi.q/(gi.m*gi.B0*rvar)*(potential(rvar_p1)-potential(rvar_m1))/(2.0*gi.h_x[0])*(X(theta_p1,ir)-X(theta_m1,ir))/(2.0*gi.h_x[1])*L(idx_v,ir);
+    // TODO: is the sign ok here?
+    double adv_r = gi.q/(gi.m*gi.B0*rvar)*(potential(theta_p1)-potential(theta_m1))/(2.0*gi.h_x[1])*(X(rvar_p1,ir)-X(rvar_m1,ir))/(2.0*gi.h_x[0])*L(idx_v,ir);
+    double adv_theta = +gi.q/(gi.m*gi.B0*rvar)*(potential(rvar_p1)-potential(rvar_m1))/(2.0*gi.h_x[0])*(X(theta_p1,ir)-X(theta_m1,ir))/(2.0*gi.h_x[1])*L(idx_v,ir);
     double adv_phi =  -vpar/R*(X(phi_p1,ir)-X(phi_m1,ir))/(2.0*gi.h_x[2])*L(idx_v,ir);
     double adv_vpar = gi.q/(gi.m*R)*(potential(phi_p1)-potential(phi_m1))/(2.0*gi.h_x[2])*X(idx_x, ir)*(L(vpar_p1,ir) - L(vpar_m1,ir))/(2.0*gi.h_v[0]);
   return adv_r + adv_theta + adv_phi + adv_vpar;
@@ -299,7 +302,7 @@ double rhs_driftkinetic(const grid_info& gi, const mat& X, const mat& L, const v
 
 // TOOD: pointer of const vs const pointer
 template<class RHS>
-void compute_stage(double dt, const grid_info& gi, const mat& X0, const mat& L0, double fac0, const mat& X, const mat& L, const indices& I, const indices& J, RHS rhs, mat& f_I, mat& f_J) {
+void compute_stage(double dt, const grid_info& gi, const mat& X0, const mat& L0, double fac0, const mat& X, const mat& L, const indices& I, const indices& J, RHS rhs, const vec& potential, mat& f_I, mat& f_J) {
 
   // Here we colloquate at v, mu points and compute f_J
   for(Index ir=0;ir<gi.r_over;ir++) {
@@ -314,7 +317,7 @@ void compute_stage(double dt, const grid_info& gi, const mat& X0, const mat& L0,
           f_J(idx_x, ir) = 0.0;
           for(Index ir2=0;ir2<gi.r;ir2++) {
             f_J(idx_x, ir) += fac0*X0(idx_x,ir2)*L0(idx_J,ir2)
-                              + dt*rhs(gi, X, L, i, j, k, iv[0], iv[1], ir2);
+                              + dt*rhs(gi, X, L, potential, i, j, k, iv[0], iv[1], ir2);
           }
         }
       }
@@ -333,7 +336,7 @@ void compute_stage(double dt, const grid_info& gi, const mat& X0, const mat& L0,
         f_I(ir, idx_v) = 0.0;
         for(Index ir2=0;ir2<gi.r;ir2++) {
           f_I(ir, idx_v) += fac0*X0(idx_I,ir2)*L0(idx_v,ir2)
-                            + dt*rhs(gi, X, L, ix[0], ix[1], ix[2], l, m, ir2);
+                            + dt*rhs(gi, X, L, potential, ix[0], ix[1], ix[2], l, m, ir2);
         }
       }
     }
@@ -341,7 +344,7 @@ void compute_stage(double dt, const grid_info& gi, const mat& X0, const mat& L0,
 }
 
 template<class RHS>
-void rk4(double dt, const grid_info& gi, lr2<double>& f, RHS rhs, blas_ops& blas) {
+void rk4(double dt, const grid_info& gi, lr2<double>& f, RHS rhs, const multi_array<double,1>& potential, blas_ops& blas) {
   indices I({gi.r_over}), J({gi.r_over});
   deim_ext(f.X, gi.r_over, I);
   deim_ext(f.V, gi.r_over, J);
@@ -363,25 +366,25 @@ void rk4(double dt, const grid_info& gi, lr2<double>& f, RHS rhs, blas_ops& blas
 
   // first stage of RK4
   blas.matmul_transb(f.V, f.S, L0);
-  compute_stage(0.5*dt, gi, f.X, L0, 1.0, f.X, L0, I, J, rhs, f_I_stage, f_J_stage);
+  compute_stage(0.5*dt, gi, f.X, L0, 1.0, f.X, L0, I, J, rhs, potential, f_I_stage, f_J_stage);
   f_I.sadd(1.0/3.0, f_I_stage);
   f_J.sadd(1.0/3.0, f_J_stage);
 
   // second stage of RK4
   colloquation_to_lr(f_I_stage, f_J_stage, I, X, L, blas);
-  compute_stage(0.5*dt, gi, f.X, L0, 1.0, X, L, I, J, rhs, f_I_stage, f_J_stage);
+  compute_stage(0.5*dt, gi, f.X, L0, 1.0, X, L, I, J, rhs, potential, f_I_stage, f_J_stage);
   f_I.sadd(2.0/3.0, f_I_stage);
   f_J.sadd(2.0/3.0, f_J_stage);
   
   // third stage of RK4
   colloquation_to_lr(f_I_stage, f_J_stage, I, X, L, blas);
-  compute_stage(dt, gi, f.X, L0, 1.0, X, L, I, J, rhs, f_I_stage, f_J_stage);
+  compute_stage(dt, gi, f.X, L0, 1.0, X, L, I, J, rhs, potential, f_I_stage, f_J_stage);
   f_I.sadd(1.0/3.0, f_I_stage);
   f_J.sadd(1.0/3.0, f_J_stage);
 
   // fourth stage of RK4
   colloquation_to_lr(f_I_stage, f_J_stage, I, X, L, blas);
-  compute_stage(0.5*dt, gi, f.X, L0, -1.0, X, L, I, J, rhs, f_I_stage, f_J_stage);
+  compute_stage(0.5*dt, gi, f.X, L0, -1.0, X, L, I, J, rhs, potential, f_I_stage, f_J_stage);
   f_I.sadd(1.0/3.0, f_I_stage);
   f_J.sadd(1.0/3.0, f_J_stage);
 

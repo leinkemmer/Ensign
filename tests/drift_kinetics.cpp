@@ -7,7 +7,7 @@
 blas_ops blas;
 
 
-double rhs_advphi(const grid_info& gi, const multi_array<double,2>& X, const multi_array<double,2>& L, Index i, Index j, Index k, Index l, Index m, Index ir) {
+double rhs_advphi(const grid_info& gi, const multi_array<double,2>& X, const multi_array<double,2>& L, const multi_array<double,1> potential, Index i, Index j, Index k, Index l, Index m, Index ir) {
   //Index phi = gi.lin_idx_x({i,j,k});
   Index phi_p1 = gi.lin_idx_x({i,j,(k+1)%gi.n_x[2]});
   Index phi_m1 = gi.lin_idx_x({i,j,(k-1+gi.n_x[2])%gi.n_x[2]});
@@ -69,8 +69,9 @@ TEST_CASE( "Drift-kinetic", "[dk]" ) {
    double t_final = 2*M_PI;
    double dt = t_final/num_steps;
  
+   vec potential; // not used
    for(Index n=0;n<100;n++) {
-     rk4(dt, gi, f, rhs_advphi, blas);
+     rk4(dt, gi, f, rhs_advphi, potential, blas);
    
    /*
    {

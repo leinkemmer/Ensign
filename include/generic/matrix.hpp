@@ -78,7 +78,7 @@ struct blas_ops {
   /* Transpose a matrix
   */
   template<class T>
-  void transpose(const multi_array<T,2>& in, multi_array<T,2>& out);
+  void transpose(const multi_array<T,2>& in, multi_array<T,2>& out) const;
 
 
   bool gpu;
