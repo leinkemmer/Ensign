@@ -149,12 +149,12 @@ TEST_CASE( "Drift-kinetic", "[dk]" ) {
       }
     }
 
-    double err = 0.0, max_val = 0.0;
+    double err_cd2 = 0.0, err_cd4 = 0.0, err_upw3 = 0.0, max_val = 0.0;
     for(Index m=0;m<gi.n_v[1];m++) {
       for(Index l=0;l<gi.n_v[0];l++) {
         for(Index k=0;k<gi.n_x[2];k++) {
           for(Index j=0;j<gi.n_x[1];j++) {
-            for(Index i=1;i<gi.n_x[0]-1;i++) {
+            for(Index i=2;i<gi.n_x[0]-2;i++) {
               double rvar = gi.rvar(i);
               double theta = gi.theta(j);
               double phi = gi.phi(k);
@@ -169,8 +169,12 @@ TEST_CASE( "Drift-kinetic", "[dk]" ) {
               double adv_r = 8.0*expr*expv*gi.q*(rvar-2.5)*cos(2*theta)*cos(theta+2.0*phi)/(gi.B0*gi.m*rvar);
 
               double val_exact = adv_phi + adv_vpar + adv_theta + adv_r;
-              double val = rhs_driftkinetic(gi, X, L, potential, i, j, k, l, m, 0);
-              err = max_err(err, abs(val - val_exact));
+              double val_cd2 = rhs_driftkinetic_cd2(gi, X, L, potential, i, j, k, l, m, 0);
+              err_cd2 = max_err(err_cd2, abs(val_cd2 - val_exact));
+              double val_cd4 = rhs_driftkinetic_cd4(gi, X, L, potential, i, j, k, l, m, 0);
+              err_cd4 = max_err(err_cd4, abs(val_cd4 - val_exact));
+              double val_upw3 = rhs_driftkinetic_upwind3(gi, X, L, potential, i, j, k, l, m, 0);
+              err_upw3 = max_err(err_upw3, abs(val_upw3 - val_exact));
               max_val = max(max_val, abs(val_exact));
             }
           }
@@ -178,8 +182,12 @@ TEST_CASE( "Drift-kinetic", "[dk]" ) {
       }
     }
 
-    cout << "err: " << err/max_val << " " << max_val << endl;
-    REQUIRE(err/max_val < 4e-2);
+    cout << "err_cd2: " << err_cd2/max_val << " " << max_val << endl;
+    cout << "err_cd4: " << err_cd4/max_val << " " << max_val << endl;
+    cout << "err_upw3: " << err_upw3/max_val << " " << max_val << endl;
+    REQUIRE(err_cd2/max_val < 4e-2);
+    REQUIRE(err_cd4/max_val < 3e-3);
+    REQUIRE(err_upw3/max_val < 1e-2);
 
     // compute the rhs of the quasi-neutrality equation 
     gi.n0 = [](double r) { return 1.0+r; };

@@ -123,6 +123,7 @@ int main(int argc, char** argv) {
   cxxopts::Options options("drift_kinetic_interpolatory", "2+2 dimensional dynamical low-rank solver for Alfven wave problems");
   options.add_options()
   ("problem", "Initial value that is used in the simulation", cxxopts::value<string>()->default_value("ITG"))
+  ("spaced", "cd2, cd4, or upwind3", cxxopts::value<string>()->default_value("cd2"))
   ("final_time", "Time to which the simulation is run", cxxopts::value<double>()->default_value("6000.0"))
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("2.0"))
   ("r,rank", "Rank of the simulation", cxxopts::value<int>()->default_value("15"))
@@ -155,6 +156,7 @@ int main(int argc, char** argv) {
   double final_time = result["final_time"].as<double>();
   double deltat = result["deltat"].as<double>();
   Index snapshots = result["snapshots"].as<int>();
+  string spaced = result["spaced"].as<string>();
 
   // set the domain (TODO: Is R0 consistent with that?)
   double r_min=0.1, r_max = 14.5, r_p = 0.5*(r_min+r_max);
@@ -266,7 +268,16 @@ int main(int argc, char** argv) {
       fs << t << "\t" << ee << endl;
 
       gt::start("rk4");
-      rk4(deltat, gi, f, rhs_driftkinetic, potential, blas);
+      if(spaced == "cd2") {
+        rk4(deltat, gi, f, rhs_driftkinetic_cd2, potential, blas);
+      } else if(spaced == "cd4") {
+        rk4(deltat, gi, f, rhs_driftkinetic_cd4, potential, blas);
+      } else if(spaced == "upwind3") {
+        rk4(deltat, gi, f, rhs_driftkinetic_upwind3, potential, blas);
+      } else {
+        cout << "ERROR: space discretization " << spaced << " not found." << endl;
+        exit(1);
+      }
       gt::stop("rk4");
 
       t += deltat;

@@ -127,7 +127,6 @@ void colloquation_to_lr(const multi_array<double,2>& f_I, multi_array<double,2>&
     double cond = sigma1(0)/sigma1(r-1);
     if(cond > 1e7) {
         cout << "WARNING: condition number of U in colloquation_to_lr is " << cond << endl;
-        exit(1);
     }
 
    // cout << "V1: " << V1 << endl;
