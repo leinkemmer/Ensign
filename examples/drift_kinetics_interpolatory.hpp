@@ -58,6 +58,7 @@ struct grid_info {
 
   Index lin_idx_x(mind<3> i) const {
     return i[0] + n_x[0]*i[1] + n_x[0]*n_x[1]*i[2];
+    //return i[1] + i[2]*n_x[1] + i[0]*n_x[1]*n_x[2];
   }
   
   Index lin_idx_v(mind<3> i) const {
@@ -86,6 +87,7 @@ struct grid_info {
 
   array<Index,3> from_lin_idx_x(Index idx) const {
     return {idx % n_x[0], (idx/n_x[0]) % n_x[1], (idx/n_x[0]/n_x[1])};
+    //return {idx/n_x[1]/n_x[2], idx%n_x[1], (idx/n_x[1])%n_x[2]};
   }
   
   array<Index,2> from_lin_idx_v(Index idx) const {
@@ -291,20 +293,22 @@ double rhs_driftkinetic(const grid_info& gi, const mat& X, const mat& L, const v
     return 0.0; 
   } else {
     // TODO: is the sign ok here?
-    double adv_r = gi.q/(gi.m*gi.B0*rvar)*(potential(theta_p1)-potential(theta_m1))/(2.0*gi.h_x[1])*(X(rvar_p1,ir)-X(rvar_m1,ir))/(2.0*gi.h_x[0])*L(idx_v,ir);
+    double adv_r = -gi.q/(gi.m*gi.B0*rvar)*(potential(theta_p1)-potential(theta_m1))/(2.0*gi.h_x[1])*(X(rvar_p1,ir)-X(rvar_m1,ir))/(2.0*gi.h_x[0])*L(idx_v,ir);
     double adv_theta = +gi.q/(gi.m*gi.B0*rvar)*(potential(rvar_p1)-potential(rvar_m1))/(2.0*gi.h_x[0])*(X(theta_p1,ir)-X(theta_m1,ir))/(2.0*gi.h_x[1])*L(idx_v,ir);
     double adv_phi =  -vpar/R*(X(phi_p1,ir)-X(phi_m1,ir))/(2.0*gi.h_x[2])*L(idx_v,ir);
     double adv_vpar = gi.q/(gi.m*R)*(potential(phi_p1)-potential(phi_m1))/(2.0*gi.h_x[2])*X(idx_x, ir)*(L(vpar_p1,ir) - L(vpar_m1,ir))/(2.0*gi.h_v[0]);
-  return adv_r + adv_theta + adv_phi + adv_vpar;
+    return adv_r + adv_theta + adv_phi + adv_vpar;
   }
 
 }
 
-// TOOD: pointer of const vs const pointer
+
 template<class RHS>
 void compute_stage(double dt, const grid_info& gi, const mat& X0, const mat& L0, double fac0, const mat& X, const mat& L, const indices& I, const indices& J, RHS rhs, const vec& potential, mat& f_I, mat& f_J) {
 
+  gt::start("rk4_rhs_J");
   // Here we colloquate at v, mu points and compute f_J
+  #pragma omp parallel for
   for(Index ir=0;ir<gi.r_over;ir++) {
     Index idx_J = J(ir);
     array<Index,2> iv = gi.from_lin_idx_v(idx_J);
@@ -323,8 +327,11 @@ void compute_stage(double dt, const grid_info& gi, const mat& X0, const mat& L0,
       }
     }
   }
+  gt::stop("rk4_rhs_J");
 
+  gt::start("rk4_rhs_I");
   // Here we colloquate at r, theta, phi points and compute f_I
+  #pragma omp parallel for
   for(Index ir=0;ir<gi.r_over;ir++) {
     Index idx_I = I(ir);
     array<Index,3> ix = gi.from_lin_idx_x(idx_I);
@@ -341,6 +348,7 @@ void compute_stage(double dt, const grid_info& gi, const mat& X0, const mat& L0,
       }
     }
   }
+  gt::stop("rk4_rhs_I");
 }
 
 template<class RHS>

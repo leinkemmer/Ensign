@@ -241,12 +241,16 @@ int main(int argc, char** argv) {
         final_step = true;
       }
   
+      gt::start("qn_rhs");
       blas.matmul_transb(f.V, f.S, L);
       qns.compute_rhs(f.X, L);
+      gt::stop("qn_rhs");
 
       //cout << qns.rhs << endl;
       //exit(1);
+      gt::start("qn_solve");
       qns.solve(potential);
+      gt::stop("qn_solve");
 
       if(snapshots>=2 && (n==0 || (n % int(ceil(num_steps/double(snapshots-1))) == 0))) {
         std::stringstream ss_fn;
@@ -261,7 +265,9 @@ int main(int argc, char** argv) {
       
       fs << t << "\t" << ee << endl;
 
+      gt::start("rk4");
       rk4(deltat, gi, f, rhs_driftkinetic, potential, blas);
+      gt::stop("rk4");
 
       t += deltat;
       n++;
@@ -273,4 +279,5 @@ int main(int argc, char** argv) {
     ss_fn << "out-" << t << ".nc";
     save_lr(ss_fn.str(), f, potential, gi);
 
+  cout << gt::sorted_output() << endl;
 }
