@@ -198,22 +198,7 @@ struct quasi_neutrality_solver {
       fft = make_unique_ptr<fft2d<2>>(array<Index,2>({gi.n_x[1],gi.n_x[2]}), rhs, rhs_hat);
 
     fft->forward(rhs, rhs_hat);
-/*
-    // solve the linear systems
-    cvec b({gi.n_x[0]});
-    for(Index i=0;i<gi.n_x[0];i++) {
-      b(i) = rhs_hat(0,i)/double(gi.n_x[1]*gi.n_x[2]);
-    }
-    b(0) = 0.0;
-    b(gi.n_x[0]-1) = 0.0;
-    cout << b << endl;
-    lu_solvers[gi.n_x[1]].solve(b);
-    cout << b << endl;
-    //exit(1);
-    for(Index i=0;i<gi.n_x[0];i++) {
-      rhs_hat(0,i) = b(i);
-    }
-*/
+    
     cvec b({gi.n_x[0]});
     for(Index k=0;k<gi.n_x[2];k++) {
       for(Index j=0;j<gi.n_x[1]/2+1;j++) {
@@ -296,18 +281,6 @@ double rhs_driftkinetic_cd2(const grid_info& gi, const mat& X, const mat& L, con
     double potential_phi = cd2([&](Index i) { return potential(gi.shift_phi(idx_x,i)); }, gi.h_x[2]);
 
     double L_vpar = cd2([&](Index i) { return L(gi.shift_vpar(idx_v,i),ir); }, gi.h_v[0]);
-
-    /*
-    double X_rvar = (X(gi.shift_rvar(idx_x,1),ir)-X(gi.shift_rvar(idx_x,-1),ir))/(2.0*gi.h_x[0]);
-    double X_theta = (X(gi.shift_theta(idx_x,1),ir)-X(gi.shift_theta(idx_x,-1),ir))/(2.0*gi.h_x[1]);
-    double X_phi = (X(gi.shift_phi(idx_x,1),ir)-X(gi.shift_phi(idx_x,-1),ir))/(2.0*gi.h_x[2]);
-
-    double potential_rvar = (potential(gi.shift_rvar(idx_x,1))-potential(gi.shift_rvar(idx_x,-1)))/(2.0*gi.h_x[0]);
-    double potential_theta = (potential(gi.shift_theta(idx_x, 1))-potential(gi.shift_theta(idx_x, -1)))/(2.0*gi.h_x[1]);
-    double potential_phi = (potential(gi.shift_phi(idx_x,1))-potential(gi.shift_phi(idx_x,-1)))/(2.0*gi.h_x[2]);
-
-    double L_vpar = (L(gi.shift_vpar(idx_v,1),ir)-L(gi.shift_vpar(idx_v,-1),ir))/(2.0*gi.h_v[0]);
-    */
 
     double adv_r = -gi.q/(gi.m*gi.B0*rvar)*potential_theta*X_rvar*L(lidx_v,ir);
     double adv_theta = +gi.q/(gi.m*gi.B0*rvar)*potential_rvar*X_theta*L(lidx_v,ir);
@@ -472,13 +445,6 @@ void rk4(double dt, const grid_info& gi, lr2<double>& f, RHS rhs, const multi_ar
   f_I.set_zero();
   f_J.set_zero();
 
-
-  // // euler (for testing)
-  // blas.matmul_transb(f.V, f.S, L0);
-  // compute_stage(dt, gi, f.X, L0, 1.0, f.X, L0, I, J, f_I_stage, f_J_stage);
-  // f_I.sadd(1.0, f_I_stage);
-  // f_J.sadd(1.0, f_J_stage);
-
   // first stage of RK4
   blas.matmul_transb(f.V, f.S, L0);
   compute_stage(0.5*dt, gi, f.X, L0, 1.0, f.X, L0, I, J, rhs, potential, f_I_stage, f_J_stage);
@@ -503,102 +469,5 @@ void rk4(double dt, const grid_info& gi, lr2<double>& f, RHS rhs, const multi_ar
   f_I.sadd(1.0/3.0, f_I_stage);
   f_J.sadd(1.0/3.0, f_J_stage);
 
-  /*
-  ofstream fs("f_I.data");
-    for(Index j=0;j<gi.N_v;j++) {
-      fs << j << " ";
-      for(Index i=0;i<gi.r_over;i++) {
-        fs << f_I(i, j) << " ";
-    }
-    fs << endl;
-  }
-  
-  {
-  ofstream fs("f_J.data");
-    for(Index j=0;j<gi.N_x;j++) {
-      fs << j << " ";
-      for(Index i=0;i<gi.r_over;i++) {
-        fs << f_J(j, i) << " ";
-    }
-    fs << endl;
-  }
-  }
-  */
-
-  /*
-  // compute the orthonormalized low-rank decomposition
-  colloquation_to_lr(f_I, f_J, I, J, f.X, L, blas);
-
-  {
-  ofstream fs("f_X.data");
-    for(Index j=0;j<gi.N_x;j++) {
-      fs << j << " ";
-      for(Index i=0;i<gi.r;i++) {
-        fs << f.X(j,i) << " ";
-    }
-    fs << endl;
-  }
-  }
-
-  {
-    //multi_array<double,2> L({gi.N_v, gi.r});
-    //blas.matmul_transb(f.V, f.S, L);
-    ofstream fs("f_V.data");
-    for(Index j=0;j<gi.N_v;j++) {
-      fs << j << " ";
-      for(Index i=0;i<gi.r;i++) {
-        fs << L(j,i) << " ";
-    }
-    fs << endl;
-  }
-  }
-
-  //static int i=0;
-  //i++;
-  //if(i >= 27) {
-  //  exit(1);
-  //}
-
-  cout << "I: " << I << endl;
-  cout << "J: " << J << endl;
-  */
   colloquation_to_lr(f_I, f_J, I, f, blas);
-
 }
-
-
-
-
-/*
-void phi_adv(double dt, const grid_info& gi, const lr2<double>& f, const mind<1>& I, const mind<1>& J, multi_array<double,2>& YI, multi_array<double,2>& YJ) {
-
-  // TODO
-  blas.matmul(f.X, f.S, K);
-  V_J = extract_indices(V, J);
-  blas.matmul(K, V_J, f_J);
-
-  Index nad = gi.n_x[2];
-  for(Index m=0;m<I.size();m++) {
-    double v_par = gi.v_from_idx<0>(I[m]);
-    double adv = -dt*v_par/gi.h_v[0];
-    Index adv_n = Index(floor(adv));
-    double alpha = adv - adv_n;
-    for(Index i=0;i<gi.n_x[0];i++) {
-      for(Index j=0;j<gi.n_x[1];j++) {
-       // setup the interpolation
-       for(Index k=0;k<gi.n_x[2];k++) {
-        Index idx_x = gi.lin_idx_x({i,j,k});
-        Index idx_x_0 = gi.lin_idx_x({i,j,(k+adv_n+nad)%nad});
-        Index idx_x_1 = gi.lin_idx_x({i,j,(k+adv_n+1+nad)%nad});
-        YJ(idx_x, I[m]) = alpha*f_J(idx_x_0,m) + (1.0-alpha)*f_J(idx_x_1,m);
-       }
-      }
-    }
-  }
-
-  // TODO: the one for YI is just the opposite
-  K_I = extract_indices(K, I);
-  blas.matmul(K_I, V, f_I);
-
-}
-*/

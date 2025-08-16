@@ -94,12 +94,6 @@ void colloquation_to_lr(const multi_array<double,2>& f_I, multi_array<double,2>&
     Index r = X.shape()[1];
     Index r_over = f_I.shape()[0];
 
-    //ofstream fs("test.data");
-    //for(Index i=0;i<32;i++) {
-    //    fs << i << " " << f_J(i,0) << " " << f_I(0,i) << endl;
-    //}
-    //fs.close();
-
     multi_array<double,2> U_hat({nx,r_over}), V_hat({r_over,r_over});
     multi_array<double,1> sigma_hat({r_over});
     svd(f_J, U_hat, V_hat, sigma_hat, blas);
@@ -116,7 +110,6 @@ void colloquation_to_lr(const multi_array<double,2>& f_I, multi_array<double,2>&
             U_trunc(M,m) = U_hat(I(M),m);
         }
     }
-
 
     // compute the pseudo-inverse by SVD
     multi_array<double,2> U1({r_over, r});
@@ -149,36 +142,6 @@ void colloquation_to_lr(const multi_array<double,2>& f_I, multi_array<double,2>&
     multi_array<double,2> L_transpose({r,nv});
     blas.matmul(V1, tmp, L_transpose);
     blas.transpose(L_transpose, L);
-
-    //cout << "L: " << L << endl;
-
-    /*
-    {
-    double err = 0.0;
-    multi_array<double, 2> f_full({nx, nv});
-    blas.matmul_transb(X, L, f_full);
-    for(Index m=0;m<r_over;m++) {
-        for(Index i=0;i<nv;i++) {
-            err = max_err(err, abs(f_full(I(m),i)-f_I(m,i)));
-        }
-    }
-    cout << "err vs f_I: " << err << endl;
-    }
-    {
-    double err = 0.0;
-    multi_array<double, 2> f_full({nx, nv});
-    blas.matmul_transb(X, L, f_full);
-    for(Index m=0;m<r_over;m++) {
-        for(Index i=0;i<nx;i++) {
-            err = max_err(err, abs(f_full(i,J(m))-f_J(i,m)));
-            if(abs(f_full(i,J(m))-f_J(i,m))> 1e-10) {
-                cout << "(" << i << " " << m << ")" <<  f_full(i,J(m)) << " " << f_J(i,m) << endl;
-            }
-        }
-    }
-    cout << "err vs f_J: " << err << endl;
-    }
-    */
 }
 
 void colloquation_to_lr(const multi_array<double,2>& f_I, multi_array<double,2>& f_J, const multi_array<Index,1>& I, lr2<double>& f, Matrix::blas_ops& blas) {
@@ -189,11 +152,5 @@ void colloquation_to_lr(const multi_array<double,2>& f_I, multi_array<double,2>&
     ortho(f.V, f.S, 1.0);
     Matrix::transpose_inplace(f.S);
 }
-
-// at the moment not needed
-//void exatract_indices(const multi_array<double,2>& U, const multi_array<Index,1>& I, multi_array<double,2>& U_out) {
-//    // TODO
-//
-//}
 
 }

@@ -16,15 +16,7 @@ void lr_maxwellian(grid_info& gi, std::function<double(double)> T, mat& U, mat& 
   mat UU({gi.n_x[0], m}), VV({gi.n_v[0], m});
   vec sigma({m});
   svd(f_eq, UU, VV, sigma, blas);
-/*
-  cout << "sigma: " << sigma << endl;
-  cout << "UU: " << endl;
-  for(Index i=0;i<gi.n_x[0];i++)
-    cout << UU(i,0) << endl;
-  cout << "VV: " << endl;
-  for(Index i=0;i<gi.n_v[0];i++)
-    cout << VV(i,0) << endl;
-*/
+  
   for(Index ir=0;ir<gi.r;ir++) {
     for(Index i=0;i<gi.n_x[0];i++) { 
       U(i, ir) = UU(i, ir)*sigma(ir);

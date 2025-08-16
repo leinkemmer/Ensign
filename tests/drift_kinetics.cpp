@@ -8,13 +8,10 @@ blas_ops blas;
 
 
 double rhs_advphi(const grid_info& gi, const multi_array<double,2>& X, const multi_array<double,2>& L, const multi_array<double,1> potential, Index i, Index j, Index k, Index l, Index m, Index ir) {
-  //Index phi = gi.lin_idx_x({i,j,k});
   Index phi_p1 = gi.lin_idx_x({i,j,(k+1)%gi.n_x[2]});
   Index phi_m1 = gi.lin_idx_x({i,j,(k-1+gi.n_x[2])%gi.n_x[2]});
   Index idx_v = gi.lin_idx_v({l,m});
   return -gi.vpar(l)/gi.R0*(X(phi_p1,ir)-X(phi_m1,ir))/(2.0*gi.h_x[2])*L(idx_v,ir);
-  //return (X(phi_p1,ir)-X(phi_m1,ir))/(2.0*gi.h_x[2])*L(idx_v,ir);
-  //return -(X(phi,ir)-X(phi_m1,ir))/(gi.h_x[2])*L(idx_v,ir);
 }
 
 
@@ -42,29 +39,6 @@ TEST_CASE( "Drift-kinetic", "[dk]" ) {
    lr2<double> f(gi.r, {gi.N_x, gi.N_v});
    initialize(f, X, V, 1.0, 1.0, blas);
  
-   //ofstream fs("test1.data");
-   //for(Index i=0;i<32;i++)
-   //  fs << i << " " << f.X(i, 0) << " " << f.V(i,0) << endl;
-   //fs.close();
- 
-   /*
-   multi_array<double,2> f_full = f.full(blas);
-   double err=0.0;
-   ofstream fs("in.data");
-   ofstream fs2("check1.data");
-   for(Index j=0;j<n_coeff;j++) {
-     for(Index i=0;i<n_adv;i++) {
-       double phi = gi.phi(i);
-       err = max_err(err, abs(f_full(i,j)-cos(phi)));
-       fs << cos(phi-M_PI) << " ";
-       if(j==0)
-         fs2 << i << " " << cos(phi) <<  endl;
-     }
-     fs << endl;
-   }
-   cout << "err: " << err << endl;
-   */
- 
    Index num_steps = 100;
    double t_final = 2*M_PI;
    double dt = t_final/num_steps;
@@ -73,30 +47,6 @@ TEST_CASE( "Drift-kinetic", "[dk]" ) {
    for(Index n=0;n<100;n++) {
      rk4(dt, gi, f, rhs_advphi, potential, blas);
    
-   /*
-   {
-     multi_array<double,2> f_full = f.full(blas);
-     double err=0.0;
-     ofstream fs("out.data");
-     ofstream fs2("check2.data");
-     for(Index j=0;j<n_coeff;j++) {
-       for(Index i=0;i<n_adv;i++) {
-         double phi = gi.phi(i);
-         err = max_err(err, abs(f_full(i,j)-cos(phi-0*double(n+1)/64*2*M_PI)));
-         fs << f_full(i,j) << " ";
-         if(j==0)
-           fs2 << i << " " << f_full(i,j) << endl;
-       }
-       fs << endl;
-     }
-     cout << "err: " << err << endl;
- 
-     if(err > 1e-12) {
-       cout << "error after " << n << endl;
-       exit(1);
-     }
-   }
-     */
    }
  
    {
@@ -233,7 +183,6 @@ TEST_CASE( "Drift-kinetic", "[dk]" ) {
           double theta = gi.theta(j);
           double phi = gi.phi(k);
 
-          //qns.rhs(idx_rhs, i) = (rvar-4.0*pow(rvar,2)+(-20.0+pow(rvar,2)*(-3.0+gi.B0*gi.q*(-5.0+rvar)*(4.0+rvar)*gi.Omega))*cos(2*phi)*sin(theta))/(gi.B0*pow(rvar,2)*gi.Omega); // n0=Te=1
           qns.rhs(idx_rhs, i) = ((3.0-8.0*rvar)*rvar+(-20.0+rvar*(2.0-7.0*rvar+gi.B0*gi.q*(-5.0+rvar)*(4.0+rvar)*gi.Omega))*cos(2*phi)*sin(theta))/(gi.B0*pow(rvar,2)*gi.Omega);
         }
       }

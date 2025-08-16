@@ -1,7 +1,3 @@
-// TODO: implement the deim_ext
-// TODO: implement the blas.transpose
-// TODO: check that the tests pass
-
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch_all.hpp>
 
