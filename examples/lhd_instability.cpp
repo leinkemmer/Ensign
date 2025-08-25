@@ -13,9 +13,11 @@ int main(int argc, char** argv) {
   ("method", "Numerical method used for the integration of the K and L step (rk4_cd2, upwind_euler, rk4_upwind or rk4_upwind3)", cxxopts::value<string>()->default_value("rk4_cd2"))
   ("final_time", "Time to which the simulation is run", cxxopts::value<double>()->default_value("400.0"))
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("8e-4"))
+  ("domain", "How large is the domain in v (either full or half)", cxxopts::value<string>()->default_value("half"))
   ("r_i,rank_ions", "Rank of the ions", cxxopts::value<int>()->default_value("10"))
   ("r_e,rank_electrons", "Rank of the electrons", cxxopts::value<int>()->default_value("10"))
   ("n", "Number of grid points (as a whitespace separated list)", cxxopts::value<string>()->default_value("1152 512 512"))
+  ("mass_ratio", "Ion mass divided by the electron mass", cxxopts::value<double>()->default_value("25.0"))
   ("snapshots", "Number of files written to disk", cxxopts::value<int>()->default_value("0"))
   ("h,help", "Help message")
   ;
@@ -28,27 +30,36 @@ int main(int argc, char** argv) {
 
   // parse the command line parameters
   string method = result["method"].as<string>();
+  string domain_size = result["domain"].as<string>();
   Index r_e = result["r_e"].as<int>();
   Index r_i = result["r_i"].as<int>();
   mind<3> N = parse<3>(result["n"].as<string>());
   Index snapshots = result["snapshots"].as<int>();
+  double mass_ratio = result["mass_ratio"].as<double>();
 
   // parameters for the simulation
   Index n_x = N[0]; 
   mind<2> n_v = {N[1], N[2]};
-  //mfp<3> a_e = {0.0, -1.125, -1.128};
-  //mfp<3> b_e = {1.414, 1.125, 1.122};
-  //mfp<3> a_i = {0.0, -0.225, -0.15};
-  //mfp<3> b_i = {1.414, 0.225, 0.30};
-  // smaller domain
-  mfp<3> a_e = {0.0, -0.5*1.125, -0.5*1.128};
-  mfp<3> b_e = {1.414, 0.5*1.125, 0.5*1.122};
-  mfp<3> a_i = {0.0, -0.5*0.225, -0.0375};
-  mfp<3> b_i = {1.414, 0.5*0.225, 0.1875};
+  mfp<3> a_e, b_e, a_i, b_i;
+  if(domain_size == "half") {
+    // smaller domain
+    a_e = {0.0, -0.5*1.125, -0.5*1.128};
+    b_e = {1.414, 0.5*1.125, 0.5*1.122};
+    a_i = {0.0, -0.5*0.225, -0.0375};
+    b_i = {1.414, 0.5*0.225, 0.1875};
+  } else if(domain_size == "full") {
+    a_e = {0.0, -1.125, -1.128};
+    b_e = {1.414, 1.125, 1.122};
+    a_i = {0.0, -0.225, -0.15};
+    b_i = {1.414, 0.225, 0.30};
+  } else {
+      cout << "ERROR: domain must be either full or half, but is " << domain_size << endl;
+      exit(1);
+  }
   double g = -7.5e-3;
   double B = 1.0;
   double m_i = 1.0;
-  double m_e = 1.0/25.0;
+  double m_e = 1.0/mass_ratio;
   double Omega_e = 2.5;
   double Omega_i = 0.1;
   double alpha = 2e-4;
@@ -100,7 +111,7 @@ int main(int argc, char** argv) {
   }
 
   std::ofstream fs("evolution.data");
-  fs << "# electric_energy nu mass_err_electrons mass_err_ions mom_err_electrons mom_err_ions energy_err kinetic_energy_electrons kinetic_energy_ions sum_g_energy_electrons sum_g_energy_ions" << endl;
+  fs << "# electric_energy nu mass_err_electrons mass_err_ions mom_err_electrons mom_err_ions energy_err kinetic_energy_electrons kinetic_energy_ions sum_g_energy_electrons sum_g_energy_ions nu_ionmass mass_e mass_i mom_e mom_i energy" << endl;
   double ken_e_0 = vlasov_e.compute_nh(n_e, hx_e, hy_e);
   double ken_i_0 = vlasov_i.compute_nh(n_i, hx_i, hy_i);
   double mass_e_0 = integrate_x(n_e, gi_e);
@@ -123,6 +134,7 @@ int main(int argc, char** argv) {
     double ken_i = vlasov_i.compute_nh(n_i, hx_i, hy_i);
     poi.compute(n_e, n_i);
     double nu = poi.compute_anomcoll(n_e, n_i, hy_e, hy_i);
+    double nu_ionmass = poi.compute_anomcoll_ionmass(n_e, n_i, hy_e, hy_i);
     double mass_e = integrate_x(n_e, gi_e);
     double mass_i = integrate_x(n_i, gi_i);
     double mom_e = integrate_x(hy_e, gi_e);
@@ -131,7 +143,7 @@ int main(int argc, char** argv) {
     sum_g_energy_i -= deltat*gi_i.g*gi_i.m*integrate_x(hx_i, gi_i);
     double energy = ken_e + ken_i + poi.ee + sum_g_energy_e + sum_g_energy_i;
     gt::stop("diagnostics");
-    fs << t << "\t\t" << poi.ee << "\t\t" << nu << "\t\t" << abs(mass_e-mass_e_0)/mass_e_0 << "\t\t" << abs(mass_i-mass_i_0)/mass_i_0 << "\t\t" << abs(mom_e-mom_e_0) << "\t\t" << abs(mom_i-mom_i_0) << "\t\t" << abs(energy-energy_0)/abs(energy_0) << " " << ken_e << " " << ken_i << " " << sum_g_energy_e << " " << sum_g_energy_i << endl;
+    fs << t << "\t\t" << poi.ee << "\t\t" << nu << "\t\t" << abs(mass_e-mass_e_0)/mass_e_0 << "\t\t" << abs(mass_i-mass_i_0)/mass_i_0 << "\t\t" << abs(mom_e-mom_e_0) << "\t\t" << abs(mom_i-mom_i_0) << "\t\t" << abs(energy-energy_0)/abs(energy_0) << " " << ken_e << " " << ken_i << " " << sum_g_energy_e << " " << sum_g_energy_i << " " << nu_ionmass << " " << mass_e << " " << mass_i << " " << mom_e << " " << mom_i << " " << energy << endl;
 
     gt::start("step");
     vlasov_e.step(deltat, poi.E);
