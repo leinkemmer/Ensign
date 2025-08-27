@@ -7,7 +7,7 @@
 blas_ops blas;
 
 
-double rhs_advphi(const grid_info& gi, const multi_array<double,2>& X, const multi_array<double,2>& L, const multi_array<double,1> potential, Index i, Index j, Index k, Index l, Index m, Index ir) {
+double rhs_advphi(const grid_info& gi, const multi_array<double,2>& X, const multi_array<double,2>& L, const multi_array<double,1>, const multi_array<double,1>, const multi_array<double,1>, Index i, Index j, Index k, Index l, Index m, Index ir) {
   Index phi_p1 = gi.lin_idx_x({i,j,(k+1)%gi.n_x[2]});
   Index phi_m1 = gi.lin_idx_x({i,j,(k-1+gi.n_x[2])%gi.n_x[2]});
   Index idx_v = gi.lin_idx_v({l,m});
@@ -43,10 +43,9 @@ TEST_CASE( "Drift-kinetic", "[dk]" ) {
    double t_final = 2*M_PI;
    double dt = t_final/num_steps;
  
-   vec potential; // not used
+   vec potential({gi.N_x}); // not used
    for(Index n=0;n<100;n++) {
      rk4(dt, gi, f, rhs_advphi, potential, blas);
-   
    }
  
    {
@@ -100,6 +99,8 @@ TEST_CASE( "Drift-kinetic", "[dk]" ) {
     }
 
     double err_cd2 = 0.0, err_cd4 = 0.0, err_upw3 = 0.0, max_val = 0.0;
+    multi_array<double,1> potential_r({gi.N_x}), potential_theta({gi.N_x});
+    potential_deriv(potential, potential_r, potential_theta, gi);
     for(Index m=0;m<gi.n_v[1];m++) {
       for(Index l=0;l<gi.n_v[0];l++) {
         for(Index k=0;k<gi.n_x[2];k++) {
@@ -113,17 +114,17 @@ TEST_CASE( "Drift-kinetic", "[dk]" ) {
               double expv = exp(-0.5*pow(vpar,2));
               double expr = exp(-2.0*pow(rvar-2.5,2));
 
-              double adv_phi = 2.0*expr*expv*vpar*sin(theta + 2*phi)/(gi.R0 + rvar*cos(theta)); // ok
-              double adv_vpar =expv*gi.q*vpar*(1.0+expr*cos(theta+2*phi))*sin(phi)/(gi.m*(gi.R0 + rvar*cos(theta))); //ok
-              double adv_theta = -expr*expv*gi.q*sin(theta+2*phi)/(gi.B0*gi.m*rvar); // ok
+              double adv_phi = 2.0*expr*expv*vpar*sin(theta + 2*phi)/(gi.R0 + rvar*cos(theta));
+              double adv_vpar =expv*gi.q*vpar*(1.0+expr*cos(theta+2*phi))*sin(phi)/(gi.m*(gi.R0 + rvar*cos(theta)));
+              double adv_theta = -expr*expv*gi.q*sin(theta+2*phi)/(gi.B0*gi.m*rvar);
               double adv_r = 8.0*expr*expv*gi.q*(rvar-2.5)*cos(2*theta)*cos(theta+2.0*phi)/(gi.B0*gi.m*rvar);
 
               double val_exact = adv_phi + adv_vpar + adv_theta + adv_r;
-              double val_cd2 = rhs_driftkinetic_cd2(gi, X, L, potential, i, j, k, l, m, 0);
+              double val_cd2 = rhs_driftkinetic_cd2(gi, X, L, potential, potential_r, potential_theta, i, j, k, l, m, 0);
               err_cd2 = max_err(err_cd2, abs(val_cd2 - val_exact));
-              double val_cd4 = rhs_driftkinetic_cd4(gi, X, L, potential, i, j, k, l, m, 0);
+              double val_cd4 = rhs_driftkinetic_cd4(gi, X, L, potential, potential_r, potential_theta, i, j, k, l, m, 0);
               err_cd4 = max_err(err_cd4, abs(val_cd4 - val_exact));
-              double val_upw3 = rhs_driftkinetic_upwind3(gi, X, L, potential, i, j, k, l, m, 0);
+              double val_upw3 = rhs_driftkinetic_upwind3(gi, X, L, potential, potential_r, potential_theta, i, j, k, l, m, 0);
               err_upw3 = max_err(err_upw3, abs(val_upw3 - val_exact));
               max_val = max(max_val, abs(val_exact));
             }

@@ -4,6 +4,7 @@
 #include <generic/storage.hpp>
 #include <generic/fft.hpp>
 #include <generic/timer.hpp>
+#include <generic/netcdf.hpp>
 
 using namespace Ensign;
 using namespace Ensign::Matrix;
@@ -148,9 +149,9 @@ struct quasi_neutrality_solver {
         lu_solvers[j].A(i,i-1) = fac*(1.0/pow(h,2)  - (1.0/rvar + (gi.n0(rvar+1e-7)-gi.n0(rvar))/1e-7/gi.n0(rvar))/(2.0*h));
       }
       // homogeneous Neumann boundary conditions on the left
-      lu_solvers[j].A(0, 0) = -3.0/2.0;
-      lu_solvers[j].A(0, 1) =  2.0;
-      lu_solvers[j].A(0, 2) =  -1.0/2.0;
+      lu_solvers[j].A(0, 0) = -3.0/2.0/h;
+      lu_solvers[j].A(0, 1) =  2.0/h;
+      lu_solvers[j].A(0, 2) =  -1.0/2.0/h;
       // homogeneous Dirichlet condition on the right, but the boundary value is stored so we just leave it alone
       lu_solvers[j].A(gi.n_x[0]-1,gi.n_x[0]-1) = 1.0;
     }
@@ -257,7 +258,7 @@ double cd2(Evaluator eval, double h) {
   return (eval(1)-eval(-1))/(2.0*h);
 }
 
-double rhs_driftkinetic_cd2(const grid_info& gi, const mat& X, const mat& L, const vec& potential, Index i, Index j, Index k, Index l, Index m, Index ir) {
+double rhs_driftkinetic_cd2(const grid_info& gi, const mat& X, const mat& L, const vec& potential, const vec& potential_rvar, const vec& potential_theta, Index i, Index j, Index k, Index l, Index m, Index ir) {
   double rvar = gi.rvar(i);
   double theta = gi.theta(j);
   double vpar = gi.vpar(l);
@@ -272,18 +273,17 @@ double rhs_driftkinetic_cd2(const grid_info& gi, const mat& X, const mat& L, con
   if(i==0 || i==gi.n_x[0]-1) {
     return 0.0; 
   } else {
-    double X_rvar = cd2([&](Index i) { return X(gi.shift_rvar(idx_x,i),ir); }, gi.h_x[0]); 
-    double X_theta = cd2([&](Index i) { return X(gi.shift_theta(idx_x,i),ir); }, gi.h_x[1]);
-    double X_phi = cd2([&](Index i) { return X(gi.shift_phi(idx_x,i),ir); }, gi.h_x[2]);
+    double X_rvar = cd2([&](Index s) { return potential_theta(gi.shift_rvar(idx_x,s))*X(gi.shift_rvar(idx_x,s),ir); }, gi.h_x[0]);
+    double X_theta = cd2([&](Index s) { return potential_rvar(gi.shift_theta(idx_x,s))*X(gi.shift_theta(idx_x,s),ir); }, gi.h_x[1]);
+    double X_phi = cd2([&](Index s) { return X(gi.shift_phi(idx_x,s),ir); }, gi.h_x[2]);
 
-    double potential_rvar = cd2([&](Index i) { return potential(gi.shift_rvar(idx_x,i)); }, gi.h_x[0]);
-    double potential_theta = cd2([&](Index i) { return potential(gi.shift_theta(idx_x,i)); }, gi.h_x[1]);
-    double potential_phi = cd2([&](Index i) { return potential(gi.shift_phi(idx_x,i)); }, gi.h_x[2]);
+    double potential_phi = cd2([&](Index s) { return potential(gi.shift_phi(idx_x,s)); }, gi.h_x[2]);
 
-    double L_vpar = cd2([&](Index i) { return L(gi.shift_vpar(idx_v,i),ir); }, gi.h_v[0]);
+    double L_vpar = cd2([&](Index s) { return L(gi.shift_vpar(idx_v,s),ir); }, gi.h_v[0]);
 
-    double adv_r = -gi.q/(gi.m*gi.B0*rvar)*potential_theta*X_rvar*L(lidx_v,ir);
-    double adv_theta = +gi.q/(gi.m*gi.B0*rvar)*potential_rvar*X_theta*L(lidx_v,ir);
+    double adv_r = -gi.q/(gi.m*gi.B0*rvar)*X_rvar*L(lidx_v,ir);
+    double adv_theta = +gi.q/(gi.m*gi.B0*rvar)*X_theta*L(lidx_v,ir);
+    
     double adv_phi =  -vpar/R*X_phi*L(lidx_v,ir);
     double adv_vpar = gi.q/(gi.m*R)*potential_phi*X(lidx_x, ir)*L_vpar;
     return adv_r + adv_theta + adv_phi + adv_vpar;
@@ -297,7 +297,7 @@ double cd4(Evaluator eval, double h) {
   return (1.0/12.0*eval(-2) - 2.0/3.0*eval(-1) + 2.0/3.0*eval(1) - 1.0/12.0*eval(2))/h;
 }
 
-double rhs_driftkinetic_cd4(const grid_info& gi, const mat& X, const mat& L, const vec& potential, Index i, Index j, Index k, Index l, Index m, Index ir) {
+double rhs_driftkinetic_cd4(const grid_info& gi, const mat& X, const mat& L, const vec& potential, const vec& potential_rvar, const vec& potential_theta, Index i, Index j, Index k, Index l, Index m, Index ir) {
   double rvar = gi.rvar(i);
   double theta = gi.theta(j);
   double vpar = gi.vpar(l);
@@ -312,20 +312,23 @@ double rhs_driftkinetic_cd4(const grid_info& gi, const mat& X, const mat& L, con
   if(i==0 || i==1 || i==gi.n_x[0]-1 || i==gi.n_x[0]-2) {
     return 0.0; 
   } else {
-    double X_rvar = cd4([&](Index i) { return X(gi.shift_rvar(idx_x,i),ir); }, gi.h_x[0]); 
-    double X_theta = cd4([&](Index i) { return X(gi.shift_theta(idx_x,i),ir); }, gi.h_x[1]);
-    double X_phi = cd4([&](Index i) { return X(gi.shift_phi(idx_x,i),ir); }, gi.h_x[2]);
-
+    // this is not in conservative formulation
     double potential_rvar = cd4([&](Index i) { return potential(gi.shift_rvar(idx_x,i)); }, gi.h_x[0]);
     double potential_theta = cd4([&](Index i) { return potential(gi.shift_theta(idx_x,i)); }, gi.h_x[1]);
-    double potential_phi = cd4([&](Index i) { return potential(gi.shift_phi(idx_x,i)); }, gi.h_x[2]);
+    double X_rvar = potential_theta*cd4([&](Index s) { return X(gi.shift_rvar(idx_x,s),ir); }, gi.h_x[0]);
+    double X_theta = potential_rvar*cd4([&](Index s) { return X(gi.shift_theta(idx_x,s),ir); }, gi.h_x[1]);
+    double X_phi = cd4([&](Index s) { return X(gi.shift_phi(idx_x,s),ir); }, gi.h_x[2]);
 
-    double L_vpar = cd4([&](Index i) { return L(gi.shift_vpar(idx_v,i),ir); }, gi.h_v[0]);
+    double potential_phi = cd4([&](Index s) { return potential(gi.shift_phi(idx_x,s)); }, gi.h_x[2]);
 
-    double adv_r = -gi.q/(gi.m*gi.B0*rvar)*potential_theta*X_rvar*L(lidx_v,ir);
-    double adv_theta = +gi.q/(gi.m*gi.B0*rvar)*potential_rvar*X_theta*L(lidx_v,ir);
+    double L_vpar = cd4([&](Index s) { return L(gi.shift_vpar(idx_v,s),ir); }, gi.h_v[0]);
+
+    double adv_r = -gi.q/(gi.m*gi.B0*rvar)*X_rvar*L(lidx_v,ir);
+    double adv_theta = +gi.q/(gi.m*gi.B0*rvar)*X_theta*L(lidx_v,ir);
+    
     double adv_phi =  -vpar/R*X_phi*L(lidx_v,ir);
     double adv_vpar = gi.q/(gi.m*R)*potential_phi*X(lidx_x, ir)*L_vpar;
+
     return adv_r + adv_theta + adv_phi + adv_vpar;
   }
 }
@@ -340,7 +343,7 @@ double upwind3(Evaluator eval, double velocity, double h) {
   }
 }
 
-double rhs_driftkinetic_upwind3(const grid_info& gi, const mat& X, const mat& L, const vec& potential, Index i, Index j, Index k, Index l, Index m, Index ir) {
+double rhs_driftkinetic_upwind3(const grid_info& gi, const mat& X, const mat& L, const vec& potential, const vec& potential_rvar, const vec& potential_theta, Index i, Index j, Index k, Index l, Index m, Index ir) {
   double rvar = gi.rvar(i);
   double theta = gi.theta(j);
   double vpar = gi.vpar(l);
@@ -355,26 +358,25 @@ double rhs_driftkinetic_upwind3(const grid_info& gi, const mat& X, const mat& L,
   if(i==0 || i==1 || i==gi.n_x[0]-1 || i==gi.n_x[0]-2) {
     return 0.0; 
   } else {
+    // not in conservative form
     double potential_rvar = cd4([&](Index i) { return potential(gi.shift_rvar(idx_x,i)); }, gi.h_x[0]);
     double potential_theta = cd4([&](Index i) { return potential(gi.shift_theta(idx_x,i)); }, gi.h_x[1]);
-    double potential_phi = cd4([&](Index i) { return potential(gi.shift_phi(idx_x,i)); }, gi.h_x[2]);
-
 
     double adv_r_coeff = gi.q/(gi.m*gi.B0*rvar)*potential_theta;
-    double X_rvar = upwind3([&](Index i) { return X(gi.shift_rvar(idx_x,i),ir); }, adv_r_coeff, gi.h_x[0]); 
-    double adv_r = -adv_r_coeff*X_rvar*L(lidx_v,ir);
-
+    double X_rvar = potential_theta*upwind3([&](Index s) { return X(gi.shift_rvar(idx_x,s),ir); }, adv_r_coeff, gi.h_x[0]); 
+    double adv_r = -gi.q/(gi.m*gi.B0*rvar)*X_rvar*L(lidx_v,ir);
 
     double adv_theta_coeff = -gi.q/(gi.m*gi.B0*rvar)*potential_rvar;
-    double X_theta = upwind3([&](Index i) { return X(gi.shift_theta(idx_x,i),ir); }, adv_theta_coeff, gi.h_x[1]);
-    double adv_theta = -adv_theta_coeff*X_theta*L(lidx_v,ir);
+    double X_theta = potential_rvar*upwind3([&](Index s) { return X(gi.shift_theta(idx_x,s),ir); }, adv_theta_coeff, gi.h_x[1]);
+    double adv_theta = gi.q/(gi.m*gi.B0*rvar)*X_theta*L(lidx_v,ir);
 
     double adv_phi_coeff = vpar/R;
-    double X_phi = upwind3([&](Index i) { return X(gi.shift_phi(idx_x,i),ir); }, adv_phi_coeff, gi.h_x[2]);
+    double X_phi = upwind3([&](Index s) { return X(gi.shift_phi(idx_x,s),ir); }, adv_phi_coeff, gi.h_x[2]);
     double adv_phi = -adv_phi_coeff*X_phi*L(lidx_v,ir);
 
+    double potential_phi = cd4([&](Index s) { return potential(gi.shift_phi(idx_x,s)); }, gi.h_x[2]);
     double adv_vpar_coeff = -gi.q/(gi.m*R)*potential_phi;
-    double L_vpar = upwind3([&](Index i) { return L(gi.shift_vpar(idx_v,i),ir); }, adv_vpar_coeff, gi.h_v[0]);
+    double L_vpar = upwind3([&](Index s) { return L(gi.shift_vpar(idx_v,s),ir); }, adv_vpar_coeff, gi.h_v[0]);
     double adv_vpar = -adv_vpar_coeff*X(lidx_x, ir)*L_vpar;
 
     return adv_r + adv_theta + adv_phi + adv_vpar;
@@ -382,9 +384,91 @@ double rhs_driftkinetic_upwind3(const grid_info& gi, const mat& X, const mat& L,
 }
 
 
+void save_lr(string fn, const lr2<double>& lr_sol, const vec& potential, const grid_info& gi) {
+    nc_writer ncw(fn, {gi.n_x[0], gi.n_x[1], gi.n_x[2], gi.n_v[0], gi.n_v[1], gi.r}, {"rvar", "theta", "phi", "vpar", "mu", "r"});
+    ncw.add_var("r", {"r"});
+    ncw.add_var("rvar", {"rvar"});
+    ncw.add_var("theta", {"theta"});
+    ncw.add_var("phi", {"phi"});
+    ncw.add_var("vpar", {"vpar"});
+    ncw.add_var("mu", {"mu"});
+    ncw.add_var("X", {"r", "phi", "theta", "rvar"});
+    ncw.add_var("S", {"r", "r"});
+    ncw.add_var("V", {"r", "mu", "vpar"});
+    ncw.add_var("potential", {"phi", "theta", "rvar"});
+
+    ncw.start_write_mode();
+
+    vector<double> vec_r(gi.r);
+    for(Index i=0;i<gi.r;i++)
+      vec_r[i] = i;
+
+    vector<double> vec_rvar(gi.n_x[0]);
+    for(Index i=0;i<gi.n_x[0];i++)
+        vec_rvar[i] = gi.rvar(i);
+
+    vector<double> vec_theta(gi.n_x[1]);
+    for(Index i=0;i<gi.n_x[1];i++)
+        vec_theta[i] = gi.theta(i);
+    
+    vector<double> vec_phi(gi.n_x[2]);
+    for(Index i=0;i<gi.n_x[2];i++)
+        vec_phi[i] = gi.phi(i);
+
+    vector<double> vec_vpar(gi.n_v[0]);
+    for(Index i=0;i<gi.n_v[0];i++)
+        vec_vpar[i] = gi.vpar(i);
+
+    vector<double> vec_mu(gi.n_v[1]);
+    for(Index i=0;i<gi.n_v[1];i++)
+        vec_mu[i] = gi.mu(i);
+
+    ncw.write("r", vec_r.data());
+    ncw.write("rvar", vec_rvar.data());
+    ncw.write("theta", vec_theta.data());
+    ncw.write("phi", vec_phi.data());
+    ncw.write("vpar", vec_vpar.data());
+    ncw.write("mu", vec_mu.data());
+
+    ncw.write("X", lr_sol.X.data());
+    ncw.write("S", lr_sol.S.data());
+    ncw.write("V", lr_sol.V.data());
+
+    ncw.write("potential", potential.data());
+}
+
+void potential_deriv(const vec& potential, vec& potential_r, vec& potential_theta, const grid_info& gi) {
+  #pragma omp parallel for
+  for(Index k=0;k<gi.n_x[2];k++) {
+    for(Index j=0;j<gi.n_x[1];j++) {
+      for(Index i=0;i<gi.n_x[0];i++) {
+        mind<3> idx_x = {i,j,k};
+        Index lidx_x = gi.lin_idx_x(idx_x);
+        if(gi.n_x[0]==1) { // necessary for some of the test cases
+            potential_r(lidx_x) = 0.0;
+        } else if(i==0) {
+          potential_r(lidx_x) = (-3.0/2.0*potential(gi.lin_idx_x({0,j,k})) + 2.0*potential(gi.lin_idx_x({1,j,k})) - 0.5*potential(gi.lin_idx_x({2,j,k})))/gi.h_x[0];
+        } else if(i==gi.n_x[0]-1) {
+          potential_r(lidx_x) = (3.0/2.0*potential(gi.lin_idx_x({gi.n_x[0]-1,j,k})) - 2.0*potential(gi.lin_idx_x({gi.n_x[0]-2,j,k})) + 0.5*potential(gi.lin_idx_x({gi.n_x[0]-3,j,k})))/gi.h_x[0];
+        } else {
+          potential_r(lidx_x) = cd2([&](Index s) { return potential(gi.shift_rvar(idx_x,s)); }, gi.h_x[0]);
+        }
+        potential_theta(lidx_x) = cd2([&](Index s) { return potential(gi.shift_theta(idx_x,s)); }, gi.h_x[1]);
+      }
+    }
+  }
+}
 
 template<class RHS>
 void compute_stage(double dt, const grid_info& gi, const mat& X0, const mat& L0, double fac0, const mat& X, const mat& L, const indices& I, const indices& J, RHS rhs, const vec& potential, mat& f_I, mat& f_J) {
+  gt::start("compute_E_from_pot");
+  vec potential_r({gi.N_x}), potential_theta({gi.N_x});
+  potential_deriv(potential, potential_r, potential_theta, gi);
+  lr2<double> f(gi.r, {gi.N_x, gi.N_v});
+  save_lr("test_r.nc", f, potential_r, gi);
+  save_lr("test_t.nc", f, potential_theta, gi);
+  //exit(1);
+  gt::stop("compute_E_from_pot");
 
   gt::start("rk4_rhs_J");
   // Here we colloquate at v, mu points and compute f_J
@@ -401,7 +485,7 @@ void compute_stage(double dt, const grid_info& gi, const mat& X0, const mat& L0,
           f_J(idx_x, ir) = 0.0;
           for(Index ir2=0;ir2<gi.r;ir2++) {
             f_J(idx_x, ir) += fac0*X0(idx_x,ir2)*L0(idx_J,ir2)
-                              + dt*rhs(gi, X, L, potential, i, j, k, iv[0], iv[1], ir2);
+                              + dt*rhs(gi, X, L, potential, potential_r, potential_theta, i, j, k, iv[0], iv[1], ir2);
           }
         }
       }
@@ -423,7 +507,7 @@ void compute_stage(double dt, const grid_info& gi, const mat& X0, const mat& L0,
         f_I(ir, idx_v) = 0.0;
         for(Index ir2=0;ir2<gi.r;ir2++) {
           f_I(ir, idx_v) += fac0*X0(idx_I,ir2)*L0(idx_v,ir2)
-                            + dt*rhs(gi, X, L, potential, ix[0], ix[1], ix[2], l, m, ir2);
+                            + dt*rhs(gi, X, L, potential, potential_r, potential_theta, ix[0], ix[1], ix[2], l, m, ir2);
         }
       }
     }

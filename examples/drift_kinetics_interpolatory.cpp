@@ -1,5 +1,4 @@
 #include "drift_kinetics_interpolatory.hpp"
-#include <generic/netcdf.hpp>
 
 #include <cxxopts.hpp>
 
@@ -57,57 +56,35 @@ double electric_energy(const vec& potential, const grid_info& gi) {
   return sqrt(ee);
 }
 
-void save_lr(string fn, const lr2<double>& lr_sol, const vec& potential, const grid_info& gi) {
-    nc_writer ncw(fn, {gi.n_x[0], gi.n_x[1], gi.n_x[2], gi.n_v[0], gi.n_v[1], gi.r}, {"rvar", "theta", "phi", "vpar", "mu", "r"});
-    ncw.add_var("r", {"r"});
-    ncw.add_var("rvar", {"rvar"});
-    ncw.add_var("theta", {"theta"});
-    ncw.add_var("phi", {"phi"});
-    ncw.add_var("vpar", {"vpar"});
-    ncw.add_var("mu", {"mu"});
-    ncw.add_var("X", {"r", "phi", "theta", "rvar"});
-    ncw.add_var("S", {"r", "r"});
-    ncw.add_var("V", {"r", "mu", "vpar"});
-    ncw.add_var("potential", {"phi", "theta", "rvar"});
+double diagnostics(const lr2<double>& f, const grid_info& gi, const blas_ops& blas) {
+  vec V_int({gi.r});
+  V_int.set_zero();
+  for(Index ir=0;ir<gi.r;ir++) {
+    for(Index k=0;k<gi.n_v[1];k++) {
+      for(Index j=0;j<gi.n_v[0];j++) {
+        Index idx = gi.lin_idx_v({j, k});
+        V_int(ir) += f.V(idx, ir)*gi.h_v[0]*gi.h_v[1];
+      }
+    }
+  }
 
-    ncw.start_write_mode();
+  mat K({gi.N_x,gi.r});
+  blas.matmul(f.X, f.S, K);
 
-    vector<double> vec_r(gi.r);
-    for(Index i=0;i<gi.r;i++)
-      vec_r[i] = i;
-
-    vector<double> vec_rvar(gi.n_x[0]);
-    for(Index i=0;i<gi.n_x[0];i++)
-        vec_rvar[i] = gi.rvar(i);
-
-    vector<double> vec_theta(gi.n_x[1]);
-    for(Index i=0;i<gi.n_x[1];i++)
-        vec_theta[i] = gi.theta(i);
-    
-    vector<double> vec_phi(gi.n_x[2]);
-    for(Index i=0;i<gi.n_x[2];i++)
-        vec_phi[i] = gi.phi(i);
-
-    vector<double> vec_vpar(gi.n_v[0]);
-    for(Index i=0;i<gi.n_v[0];i++)
-        vec_vpar[i] = gi.vpar(i);
-
-    vector<double> vec_mu(gi.n_v[1]);
-    for(Index i=0;i<gi.n_v[1];i++)
-        vec_mu[i] = gi.mu(i);
-
-    ncw.write("r", vec_r.data());
-    ncw.write("rvar", vec_rvar.data());
-    ncw.write("theta", vec_theta.data());
-    ncw.write("phi", vec_phi.data());
-    ncw.write("vpar", vec_vpar.data());
-    ncw.write("mu", vec_mu.data());
-
-    ncw.write("X", lr_sol.X.data());
-    ncw.write("S", lr_sol.S.data());
-    ncw.write("V", lr_sol.V.data());
-
-    ncw.write("potential", potential.data());
+  double mass = 0.0;
+  #pragma omp parallel for collapse(2) reduction(+:mass)
+  for(Index ir=0;ir<gi.r;ir++) {
+    for(Index k=0;k<gi.n_x[2];k++) {
+      for(Index j=0;j<gi.n_x[1];j++) {
+        for(Index i=0;i<gi.n_x[0];i++) {
+          Index idx = gi.lin_idx_x({i,j,k});
+          mass += gi.rvar(i)*K(idx, ir)*V_int(ir)*gi.h_x[0]*gi.h_x[1]*gi.h_x[2];
+        }
+      }
+    }
+  }
+  
+  return mass;
 }
 
 
@@ -222,6 +199,8 @@ int main(int argc, char** argv) {
   mat L({gi.N_v, gi.r});
   quasi_neutrality_solver qns(gi);
 
+  double mass0 = diagnostics(f, gi, blas);
+
   double t = 0.0;
   bool final_step = false;
   Index n = 0;
@@ -240,8 +219,6 @@ int main(int argc, char** argv) {
       qns.compute_rhs(f.X, L);
       gt::stop("qn_rhs");
 
-      //cout << qns.rhs << endl;
-      //exit(1);
       gt::start("qn_solve");
       qns.solve(potential);
       gt::stop("qn_solve");
@@ -253,11 +230,12 @@ int main(int argc, char** argv) {
       }
 
       double ee = electric_energy(potential, gi);
+      double mass = diagnostics(f, gi, blas);
 
       cout << "\r" << std::setw(30) << "";
-      cout << "\rt=" << t << endl;
-      
-      fs << t << "\t" << ee << endl;
+      cout << "\rt=" << t << "\t" << abs(mass-mass0)/mass0 << endl;
+
+      fs << t << "\t" << ee << "\t" << mass << "\t" << abs(mass-mass0)/mass0 << endl;
 
       gt::start("rk4");
       if(spaced == "cd2") {
