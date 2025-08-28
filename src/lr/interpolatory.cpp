@@ -88,7 +88,7 @@ void deim_ext(const multi_array<double,2>& _U, Index r_over, multi_array<Index,1
 }
 
 
-void colloquation_to_lr(const multi_array<double,2>& f_I, multi_array<double,2>& f_J, const multi_array<Index,1>& I, multi_array<double,2>& X, multi_array<double,2>& L, Matrix::blas_ops& blas) {
+double colloquation_to_lr(const multi_array<double,2>& f_I, multi_array<double,2>& f_J, const multi_array<Index,1>& I, multi_array<double,2>& X, multi_array<double,2>& L, Matrix::blas_ops& blas) {
     Index nx = X.shape()[0];
     Index nv = L.shape()[0];
     Index r = X.shape()[1];
@@ -142,15 +142,18 @@ void colloquation_to_lr(const multi_array<double,2>& f_I, multi_array<double,2>&
     multi_array<double,2> L_transpose({r,nv});
     blas.matmul(V1, tmp, L_transpose);
     blas.transpose(L_transpose, L);
+
+    return cond;
 }
 
-void colloquation_to_lr(const multi_array<double,2>& f_I, multi_array<double,2>& f_J, const multi_array<Index,1>& I, lr2<double>& f, Matrix::blas_ops& blas) {
-    colloquation_to_lr(f_I, f_J, I, f.X, f.V, blas);
+double  colloquation_to_lr(const multi_array<double,2>& f_I, multi_array<double,2>& f_J, const multi_array<Index,1>& I, lr2<double>& f, Matrix::blas_ops& blas) {
+    double cond = colloquation_to_lr(f_I, f_J, I, f.X, f.V, blas);
 
     orthogonalize ortho(&blas);
     multi_array<double,2> R({f.rank(),f.rank()});
     ortho(f.V, f.S, 1.0);
     Matrix::transpose_inplace(f.S);
+    return cond;
 }
 
 }

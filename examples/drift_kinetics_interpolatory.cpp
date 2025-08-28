@@ -206,6 +206,7 @@ int main(int argc, char** argv) {
   Index n = 0;
   Index num_steps = int(ceil(final_time/deltat));
   ofstream fs("evolution.data");
+  double cond = 0.0;
   while(t<final_time && !final_step) {
       gt::start("timestep");
 
@@ -235,15 +236,15 @@ int main(int argc, char** argv) {
       cout << "\r" << std::setw(30) << "";
       cout << "\rt=" << t << "\t" << abs(mass-mass0)/mass0 << endl;
 
-      fs << t << "\t" << ee << "\t" << mass << "\t" << abs(mass-mass0)/mass0 << endl;
+      fs << t << "\t" << ee << "\t" << mass << "\t" << abs(mass-mass0)/mass0 << "\t" << cond << endl;
 
       gt::start("rk4");
       if(spaced == "cd2") {
-        rk4(deltat, gi, f, rhs_driftkinetic_cd2, potential, blas);
+        cond = rk4(deltat, gi, f, rhs_driftkinetic_cd2, potential, blas);
       } else if(spaced == "cd4") {
-        rk4(deltat, gi, f, rhs_driftkinetic_cd4, potential, blas);
+        cond = rk4(deltat, gi, f, rhs_driftkinetic_cd4, potential, blas);
       } else if(spaced == "upwind3") {
-        rk4(deltat, gi, f, rhs_driftkinetic_upwind3, potential, blas);
+        cond = rk4(deltat, gi, f, rhs_driftkinetic_upwind3, potential, blas);
       } else {
         cout << "ERROR: space discretization " << spaced << " not found." << endl;
         exit(1);

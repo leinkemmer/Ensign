@@ -464,10 +464,6 @@ void compute_stage(double dt, const grid_info& gi, const mat& X0, const mat& L0,
   gt::start("compute_E_from_pot");
   vec potential_r({gi.N_x}), potential_theta({gi.N_x});
   potential_deriv(potential, potential_r, potential_theta, gi);
-  lr2<double> f(gi.r, {gi.N_x, gi.N_v});
-  save_lr("test_r.nc", f, potential_r, gi);
-  save_lr("test_t.nc", f, potential_theta, gi);
-  //exit(1);
   gt::stop("compute_E_from_pot");
 
   gt::start("rk4_rhs_J");
@@ -516,7 +512,7 @@ void compute_stage(double dt, const grid_info& gi, const mat& X0, const mat& L0,
 }
 
 template<class RHS>
-void rk4(double dt, const grid_info& gi, lr2<double>& f, RHS rhs, const multi_array<double,1>& potential, blas_ops& blas) {
+double rk4(double dt, const grid_info& gi, lr2<double>& f, RHS rhs, const multi_array<double,1>& potential, blas_ops& blas) {
   indices I({gi.r_over}), J({gi.r_over});
   deim_ext(f.X, gi.r_over, I);
   deim_ext(f.V, gi.r_over, J);
@@ -536,22 +532,24 @@ void rk4(double dt, const grid_info& gi, lr2<double>& f, RHS rhs, const multi_ar
   f_J.sadd(1.0/3.0, f_J_stage);
 
   // second stage of RK4
-  colloquation_to_lr(f_I_stage, f_J_stage, I, X, L, blas);
+  double cond1 = colloquation_to_lr(f_I_stage, f_J_stage, I, X, L, blas);
   compute_stage(0.5*dt, gi, f.X, L0, 1.0, X, L, I, J, rhs, potential, f_I_stage, f_J_stage);
   f_I.sadd(2.0/3.0, f_I_stage);
   f_J.sadd(2.0/3.0, f_J_stage);
   
   // third stage of RK4
-  colloquation_to_lr(f_I_stage, f_J_stage, I, X, L, blas);
+  double cond2 = colloquation_to_lr(f_I_stage, f_J_stage, I, X, L, blas);
   compute_stage(dt, gi, f.X, L0, 1.0, X, L, I, J, rhs, potential, f_I_stage, f_J_stage);
   f_I.sadd(1.0/3.0, f_I_stage);
   f_J.sadd(1.0/3.0, f_J_stage);
 
   // fourth stage of RK4
-  colloquation_to_lr(f_I_stage, f_J_stage, I, X, L, blas);
+  double cond3 = colloquation_to_lr(f_I_stage, f_J_stage, I, X, L, blas);
   compute_stage(0.5*dt, gi, f.X, L0, -1.0, X, L, I, J, rhs, potential, f_I_stage, f_J_stage);
   f_I.sadd(1.0/3.0, f_I_stage);
   f_J.sadd(1.0/3.0, f_J_stage);
 
-  colloquation_to_lr(f_I, f_J, I, f, blas);
+  double cond4 = colloquation_to_lr(f_I, f_J, I, f, blas);
+
+  return std::max({cond1, cond2, cond3, cond4});
 }
