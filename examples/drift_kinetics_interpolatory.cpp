@@ -56,14 +56,16 @@ double electric_energy(const vec& potential, const grid_info& gi) {
   return sqrt(ee);
 }
 
-double diagnostics(const lr2<double>& f, const grid_info& gi, const blas_ops& blas) {
-  vec V_int({gi.r});
+void diagnostics(const lr2<double>& f, const vec& potential, double& mass, double& energy, const grid_info& gi, const blas_ops& blas) {
+  vec V_int({gi.r}), Vvsq_int({gi.r});
   V_int.set_zero();
+  Vvsq_int.set_zero();
   for(Index ir=0;ir<gi.r;ir++) {
     for(Index k=0;k<gi.n_v[1];k++) {
       for(Index j=0;j<gi.n_v[0];j++) {
         Index idx = gi.lin_idx_v({j, k});
         V_int(ir) += f.V(idx, ir)*gi.h_v[0]*gi.h_v[1];
+        Vvsq_int(ir) += 0.5*pow(gi.vpar(j),2)*f.V(idx, ir)*gi.h_v[0]*gi.h_v[1];
       }
     }
   }
@@ -71,20 +73,22 @@ double diagnostics(const lr2<double>& f, const grid_info& gi, const blas_ops& bl
   mat K({gi.N_x,gi.r});
   blas.matmul(f.X, f.S, K);
 
-  double mass = 0.0;
-  #pragma omp parallel for collapse(2) reduction(+:mass)
+  mass = 0.0;
+  double kin = 0.0, ee = 0.0;
+  #pragma omp parallel for collapse(2) reduction(+:mass,kin,ee)
   for(Index ir=0;ir<gi.r;ir++) {
     for(Index k=0;k<gi.n_x[2];k++) {
       for(Index j=0;j<gi.n_x[1];j++) {
         for(Index i=0;i<gi.n_x[0];i++) {
           Index idx = gi.lin_idx_x({i,j,k});
           mass += gi.rvar(i)*K(idx, ir)*V_int(ir)*gi.h_x[0]*gi.h_x[1]*gi.h_x[2];
+          kin += gi.rvar(i)*K(idx, ir)*Vvsq_int(ir)*gi.h_x[0]*gi.h_x[1]*gi.h_x[2];
+          ee += gi.rvar(i)*potential(idx)*K(idx, ir)*V_int(ir)*gi.h_x[0]*gi.h_x[1]*gi.h_x[2];
         }
       }
     }
   }
-  
-  return mass;
+  energy = kin + ee;
 }
 
 
@@ -198,14 +202,19 @@ int main(int argc, char** argv) {
   vec potential({gi.N_x});
   mat L({gi.N_v, gi.r});
   quasi_neutrality_solver qns(gi);
+  blas.matmul_transb(f.V, f.S, L);
+  qns.compute_rhs(f.X, L);
+  qns.solve(potential);
 
-  double mass0 = diagnostics(f, gi, blas);
+  double mass0, energy0;
+  diagnostics(f, potential, mass0, energy0, gi, blas);
 
   double t = 0.0;
   bool final_step = false;
   Index n = 0;
   Index num_steps = int(ceil(final_time/deltat));
   ofstream fs("evolution.data");
+  fs << "# [1]time [2]electric_energy [3]mass [4]energy [5]rel. mass error [6]rel. energy error [7]condition_number" << endl;
   double cond = 0.0;
   while(t<final_time && !final_step) {
       gt::start("timestep");
@@ -231,12 +240,13 @@ int main(int argc, char** argv) {
       }
 
       double ee = electric_energy(potential, gi);
-      double mass = diagnostics(f, gi, blas);
+      double mass, energy;
+      diagnostics(f, potential, mass, energy, gi, blas);
 
       cout << "\r" << std::setw(30) << "";
       cout << "\rt=" << t << "\t" << abs(mass-mass0)/mass0 << endl;
 
-      fs << t << "\t" << ee << "\t" << mass << "\t" << abs(mass-mass0)/mass0 << "\t" << cond << endl;
+      fs << t << "\t" << ee << "\t" << mass << "\t" << "\t" << energy << "\t" << abs(mass-mass0)/mass0 << "\t" << abs(energy-energy0)/energy0 << "\t" << cond << endl;
 
       gt::start("rk4");
       if(spaced == "cd2") {
