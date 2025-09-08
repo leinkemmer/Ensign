@@ -18,6 +18,7 @@ int main(int argc, char** argv) {
   ("r_e,rank_electrons", "Rank of the electrons", cxxopts::value<int>()->default_value("10"))
   ("n", "Number of grid points (as a whitespace separated list)", cxxopts::value<string>()->default_value("1152 512 512"))
   ("mass_ratio", "Ion mass divided by the electron mass", cxxopts::value<double>()->default_value("25.0"))
+  ("alpha", "Strength of the initial perturbation", cxxopts::value<double>()->default_value("2e-4"))
   ("snapshots", "Number of files written to disk", cxxopts::value<int>()->default_value("0"))
   ("h,help", "Help message")
   ;
@@ -36,6 +37,7 @@ int main(int argc, char** argv) {
   mind<3> N = parse<3>(result["n"].as<string>());
   Index snapshots = result["snapshots"].as<int>();
   double mass_ratio = result["mass_ratio"].as<double>();
+  double alpha = result["alpha"].as<double>();
 
   // parameters for the simulation
   Index n_x = N[0]; 
@@ -43,13 +45,13 @@ int main(int argc, char** argv) {
   mfp<3> a_e, b_e, a_i, b_i;
   if(domain_size == "half") {
     // smaller domain
-    a_e = {0.0, -0.5*1.125, -0.5*1.128};
-    b_e = {1.414, 0.5*1.125, 0.5*1.122};
+    a_e = {0.0, -0.5*1.125*sqrt(mass_ratio/25.0), -0.5*1.125*sqrt(mass_ratio/25.0)};
+    b_e = {1.414, 0.5*1.125*sqrt(mass_ratio/25.0), 0.5*1.125*sqrt(mass_ratio/25.0)};
     a_i = {0.0, -0.5*0.225, -0.0375};
     b_i = {1.414, 0.5*0.225, 0.1875};
   } else if(domain_size == "full") {
-    a_e = {0.0, -1.125, -1.128};
-    b_e = {1.414, 1.125, 1.122};
+    a_e = {0.0, -1.125*sqrt(mass_ratio/25.0), -1.125*sqrt(mass_ratio/25.0)};
+    b_e = {1.414, 1.125*sqrt(mass_ratio/25.0), 1.125*sqrt(mass_ratio/25.0)};
     a_i = {0.0, -0.225, -0.15};
     b_i = {1.414, 0.225, 0.30};
   } else {
@@ -60,9 +62,8 @@ int main(int argc, char** argv) {
   double B = 1.0;
   double m_i = 1.0;
   double m_e = 1.0/mass_ratio;
-  double Omega_e = 2.5;
   double Omega_i = 0.1;
-  double alpha = 2e-4;
+  double Omega_e = Omega_i*mass_ratio;
   double T_e = 6.25e-4;
   double T_i = T_e;
 
