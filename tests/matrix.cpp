@@ -443,6 +443,30 @@ TEST_CASE( "matrix basic operations", "[matrix]" ) {
 
   }
 
+  SECTION("LU based linear solve"){
+
+    lu_solver<complex<double>> lu(3);
+    lu.A(0,0) = complex<double>(2.0, 0.0); lu.A(0,1) = complex<double>(3.0, 0.0); lu.A(0,2) = complex<double>(2.0, 0.0);
+    lu.A(1,0) = complex<double>(0.0, 1.0); lu.A(1,1) = complex<double>(4.0, 1.0); lu.A(1,2) = complex<double>(3.0, -1.0);
+    lu.A(2,0) = complex<double>(2.0, 0.0); lu.A(2,1) = complex<double>(2.0, 0.0); lu.A(2,2) = complex<double>(-1.0, 0.0);
+
+    lu.lu();
+
+    multi_array<complex<double>,1> x({3});
+    x(0) = complex<double>(0.0, 1.0); x(1) = complex<double>(1.0, 0.0); x(2) = complex<double>(1.0, 1.0);
+    lu.solve(x);
+
+    multi_array<complex<double>,1> x_exact({3});
+    x_exact(0) = complex<double>(-202.0/325.0, 264.0/325.0);
+    x_exact(1) = complex<double>(266.0/325.0, -87/325.0);
+    x_exact(2) = complex<double>(-197.0/325.0, 29.0/325.0);
+
+    for(Index i=0;i<3;i++) {
+      REQUIRE(abs(x(i)-x_exact(i)) < 1e-13);
+    }
+
+  }
+
   #ifdef __CUDACC__
   SECTION("At*Bt multiplication on GPU"){
     multi_array<double,2> A({3,2},stloc::device);

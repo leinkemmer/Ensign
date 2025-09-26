@@ -75,6 +75,12 @@ struct blas_ops {
   template<class T>
   void matvec_trans(const multi_array<T,2>& a, const multi_array<T,1>& b, multi_array<T,1>& c) const;
 
+  /* Transpose a matrix
+  */
+  template<class T>
+  void transpose(const multi_array<T,2>& in, multi_array<T,2>& out) const;
+
+
   bool gpu;
   #ifdef __CUDACC__
   cublasHandle_t  handle;
@@ -104,6 +110,28 @@ private:
 */
 template<class T>
 void svd(const multi_array<T,2>& input, multi_array<T,2>& U, multi_array<T,2>& V, multi_array<T,1>& sigma_diag, const blas_ops& blas);
+
+
+/* Linear solver based on a LU decomposition.
+*/
+template<class T>
+struct lu_solver {
+  multi_array<T,2> A;
+
+  lu_solver(Index n) : A({n, n}), ipiv(n) {
+  }
+
+  void lu();
+  void solve(multi_array<T,1>& xb); // solves Ax=b, lu needs to be called first
+
+private:
+  #ifdef __MKL__
+  vector<MKL_INT> ipiv;
+  #else
+  vector<int> ipiv;
+  #endif
+};
+
 
 } // namespace Matrix
 
