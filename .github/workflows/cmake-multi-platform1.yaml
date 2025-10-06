@@ -2,9 +2,9 @@ name: Build and Test (Multi-Platform)
 
 on:
   push:
-    branches: [ "master", "development" ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ "master", "development" ]
+    branches: [ main, master ]
 
 jobs:
   build:
@@ -37,28 +37,24 @@ jobs:
             fc: gfortran
 
           # --- Windows ---
+          # MSVC + GFortran (unsupported combo in many mixed C/Fortran builds, may fail)
           - os: windows-latest
             cc: cl
             cxx: cl
             fc: gfortran
 
+          # MinGW (gcc + gfortran) — build in MSYS2 shell
           - os: windows-latest
             cc: gcc
             cxx: g++
             fc: gfortran
+            use_msys2: true
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Set up Fortran (gfortran)
-        if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          install: mingw-w64-x86_64-gcc-fortran
-          msystem: MINGW64
-          update: true
-
+      # --- Linux/macOS Fortran setup ---
       - name: Set up Fortran (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
@@ -71,7 +67,32 @@ jobs:
             fi
           fi
 
+      # --- Windows: MSYS2 environment for MinGW builds ---
+      - name: Set up MSYS2 (Windows + GCC)
+        if: runner.os == 'Windows' && matrix.use_msys2 == true
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-gcc-fortran
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-make
+
+      - name: Build and test (MSYS2)
+        if: runner.os == 'Windows' && matrix.use_msys2 == true
+        shell: msys2 {0}
+        run: |
+          cmake -S . -B build \
+            -G "MinGW Makefiles" \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+
+      # --- Regular builds (Linux, macOS, Windows+MSVC) ---
       - name: Configure environment variables
+        if: runner.os != 'Windows' || matrix.use_msys2 != true
         shell: bash
         run: |
           echo "CC=${{ matrix.cc }}" >> $GITHUB_ENV
@@ -79,6 +100,7 @@ jobs:
           echo "FC=${{ matrix.fc }}" >> $GITHUB_ENV
 
       - name: Configure (CMake)
+        if: runner.os != 'Windows' || matrix.use_msys2 != true
         run: |
           cmake -S . -B build \
             -DCMAKE_C_COMPILER=${{ matrix.cc }} \
@@ -87,7 +109,9 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
+        if: runner.os != 'Windows' || matrix.use_msys2 != true
         run: cmake --build build --parallel
 
       - name: Run tests
+        if: runner.os != 'Windows' || matrix.use_msys2 != true
         run: ctest --test-dir build --output-on-failure
