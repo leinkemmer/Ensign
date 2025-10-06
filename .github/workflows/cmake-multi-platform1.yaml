@@ -1,0 +1,93 @@
+name: Build and Test (Multi-Platform)
+
+on:
+  push:
+    branches: [ "master", "development" ]
+  pull_request:
+    branches: [ "master", "development" ]
+
+jobs:
+  build:
+    name: ${{ matrix.os }} / ${{ matrix.cc }} + ${{ matrix.fc }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # --- Linux (Ubuntu) ---
+          - os: ubuntu-latest
+            cc: gcc
+            cxx: g++
+            fc: gfortran
+
+          - os: ubuntu-latest
+            cc: clang
+            cxx: clang++
+            fc: gfortran
+
+          # --- macOS ---
+          - os: macos-latest
+            cc: gcc
+            cxx: g++
+            fc: gfortran
+
+          - os: macos-latest
+            cc: clang
+            cxx: clang++
+            fc: gfortran
+
+          # --- Windows ---
+          - os: windows-latest
+            cc: cl
+            cxx: cl
+            fc: gfortran
+
+          - os: windows-latest
+            cc: gcc
+            cxx: g++
+            fc: gfortran
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Fortran (gfortran)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          install: mingw-w64-x86_64-gcc-fortran
+          msystem: MINGW64
+          update: true
+
+      - name: Set up Fortran (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          if ! command -v gfortran &> /dev/null; then
+            if [ "${{ runner.os }}" = "Linux" ]; then
+              sudo apt-get update
+              sudo apt-get install -y gfortran
+            elif [ "${{ runner.os }}" = "macOS" ]; then
+              brew install gcc
+            fi
+          fi
+
+      - name: Configure environment variables
+        shell: bash
+        run: |
+          echo "CC=${{ matrix.cc }}" >> $GITHUB_ENV
+          echo "CXX=${{ matrix.cxx }}" >> $GITHUB_ENV
+          echo "FC=${{ matrix.fc }}" >> $GITHUB_ENV
+
+      - name: Configure (CMake)
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DCMAKE_Fortran_COMPILER=${{ matrix.fc }} \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
