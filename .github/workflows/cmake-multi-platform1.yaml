@@ -30,20 +30,14 @@ jobs:
             cc: gcc
             cxx: g++
             fc: gfortran
+            use_homebrew_gcc: true
 
           - os: macos-latest
             cc: clang
             cxx: clang++
             fc: gfortran
 
-          # --- Windows ---
-          # MSVC + GFortran (unsupported combo in many mixed C/Fortran builds, may fail)
-          - os: windows-latest
-            cc: cl
-            cxx: cl
-            fc: gfortran
-
-          # MinGW (gcc + gfortran) — build in MSYS2 shell
+          # --- Windows (MinGW only; skip MSVC + gfortran) ---
           - os: windows-latest
             cc: gcc
             cxx: g++
@@ -54,20 +48,36 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      # --- Linux/macOS Fortran setup ---
-      - name: Set up Fortran (Linux/macOS)
-        if: runner.os != 'Windows'
+      # --- Linux: install gfortran ---
+      - name: Set up Fortran (Linux)
+        if: runner.os == 'Linux'
         run: |
-          if ! command -v gfortran &> /dev/null; then
-            if [ "${{ runner.os }}" = "Linux" ]; then
-              sudo apt-get update
-              sudo apt-get install -y gfortran
-            elif [ "${{ runner.os }}" = "macOS" ]; then
-              brew install gcc
-            fi
-          fi
+          sudo apt-get update
+          sudo apt-get install -y gfortran
 
-      # --- Windows: MSYS2 environment for MinGW builds ---
+      # --- macOS: GCC + GFortran via Homebrew ---
+      - name: Set up Fortran (macOS Homebrew GCC)
+        if: runner.os == 'macOS' && matrix.use_homebrew_gcc == true
+        run: |
+          brew update
+          brew install gcc
+          GCC_VERSION=$(brew list --versions gcc | awk '{print $2}')
+          echo "Using GCC version: $GCC_VERSION"
+          echo "CC=gcc-${GCC_VERSION%%.*}" >> $GITHUB_ENV
+          echo "CXX=g++-${GCC_VERSION%%.*}" >> $GITHUB_ENV
+          echo "FC=gfortran-${GCC_VERSION%%.*}" >> $GITHUB_ENV
+          which gcc-${GCC_VERSION%%.*}
+          gcc-${GCC_VERSION%%.*} --version
+          gfortran-${GCC_VERSION%%.*} --version
+
+      # --- macOS: Clang + GFortran ---
+      - name: Set up Fortran (macOS Clang)
+        if: runner.os == 'macOS' && matrix.use_homebrew_gcc != true
+        run: |
+          brew install gcc
+          echo "FC=gfortran" >> $GITHUB_ENV
+
+      # --- Windows: MinGW-w64 (MSYS2) setup ---
       - name: Set up MSYS2 (Windows + GCC)
         if: runner.os == 'Windows' && matrix.use_msys2 == true
         uses: msys2/setup-msys2@v2
@@ -90,23 +100,23 @@ jobs:
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure
 
-      # --- Regular builds (Linux, macOS, Windows+MSVC) ---
-      - name: Configure environment variables
-        if: runner.os != 'Windows' || matrix.use_msys2 != true
-        shell: bash
-        run: |
-          echo "CC=${{ matrix.cc }}" >> $GITHUB_ENV
-          echo "CXX=${{ matrix.cxx }}" >> $GITHUB_ENV
-          echo "FC=${{ matrix.fc }}" >> $GITHUB_ENV
-
+      # --- Standard builds (Linux + macOS) ---
       - name: Configure (CMake)
         if: runner.os != 'Windows' || matrix.use_msys2 != true
         run: |
+          LINK_FLAGS=""
+          # Add linker flags for Clang + GFortran on Linux
+          if [ "${{ runner.os }}" = "Linux" ] && [ "${{ matrix.cc }}" = "clang" ] && [ "${{ matrix.fc }}" = "gfortran" ]; then
+            LINK_FLAGS="-DCMAKE_EXE_LINKER_FLAGS='-lgfortran -lquadmath -lm'"
+          fi
+
+          echo "Configuring with CC=${{ env.CC || matrix.cc }}, FC=${{ env.FC || matrix.fc }}"
           cmake -S . -B build \
-            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
-            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
-            -DCMAKE_Fortran_COMPILER=${{ matrix.fc }} \
-            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_C_COMPILER=${{ env.CC || matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ env.CXX || matrix.cxx }} \
+            -DCMAKE_Fortran_COMPILER=${{ env.FC || matrix.fc }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            $LINK_FLAGS
 
       - name: Build
         if: runner.os != 'Windows' || matrix.use_msys2 != true
