@@ -615,73 +615,8 @@ template void initialize(lr2<double>& lr, vector<const double*> X, vector<const 
 template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, double* inner_product_X, double* inner_product_V, const Ensign::Matrix::blas_ops& blas);
 //template void initialize(lr2<float>& lr, vector<const float*> X, vector<const float*> V, std::function<float(float*,float*)> inner_product_X, std::function<float(float*,float*)> inner_product_V, const Ensign::Matrix::blas_ops& blas);
 
-template<class T, class IP>
-void initialize(lr2_reserve<T>& lr, vector<const T*> X, vector<const T*> V, IP inner_product_X, IP inner_product_V, const Ensign::Matrix::blas_ops& blas) {
-
-  int n_b = X.size();
-  Index r = lr.rank();
-
-  std::default_random_engine generator(1234);
-  std::normal_distribution<double> distribution(0.0,1.0);
-
-  for(Index k=0;k<r;k++) {
-    if(k < n_b){
-      #ifdef __OPENMP__
-      #pragma omp parallel for
-      #endif
-      for(Index i=0;i<lr.size_X();i++) {
-        lr.X(i, k) = X[k][i];
-      }
-      #ifdef __OPENMP__
-      #pragma omp parallel for
-      #endif
-      for(Index i=0;i<lr.size_V();i++) {
-        lr.V(i, k) = V[k][i];
-      }
-    }
-    else{
-      #ifdef __OPENMP__
-      #pragma omp parallel for
-      #endif
-      for(Index i=0;i<lr.size_X();i++) {
-        lr.X(i, k) = distribution(generator);
-      }
-      #ifdef __OPENMP__
-      #pragma omp parallel for
-      #endif
-      for(Index i=0;i<lr.size_V();i++) {
-        lr.V(i, k) = distribution(generator);
-      }
-    }
-    }
-
-  multi_array<T, 2> X_R(lr.S.shape()), V_R(lr.S.shape());
-
-  orthogonalize gs(&blas);
-  gs(lr.X, X_R, inner_product_X);
-  gs(lr.V, V_R, inner_product_V);
-
-  for(int j = n_b; j < r; j++){
-    for(int i = 0; i < r; i++){
-      X_R(i,j) = T(0.0);
-    }
-  }
-
-  for(int j = n_b; j < r; j++){
-    for(int i = 0; i < r; i++){
-      V_R(i,j) = T(0.0);
-    }
-  }
-
-  blas.matmul_transb(X_R, V_R, lr.S);
-
-};
-template void initialize(lr2_reserve<double>& lr, vector<const double*> X, vector<const double*> V, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const Ensign::Matrix::blas_ops& blas);
-template void initialize(lr2_reserve<double>& lr, vector<const double*> X, vector<const double*> V, double inner_product_X, double inner_product_V, const Ensign::Matrix::blas_ops& blas);
-template void initialize(lr2_reserve<double>& lr, vector<const double*> X, vector<const double*> V, double* inner_product_X, double* inner_product_V, const Ensign::Matrix::blas_ops& blas);
-
 template<class T>
-void initialize(lr2_reserve<T>& lr, vector<const T*> X, vector<const T*> V, array<double,3> h_xx, array<double,3> h_vv, const Ensign::Matrix::blas_ops& blas) {
+void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, array<double,3> h_xx, array<double,3> h_vv, const Ensign::Matrix::blas_ops& blas) {
 
   int n_b = X.size();
   Index r = lr.rank();
@@ -744,7 +679,7 @@ void initialize(lr2_reserve<T>& lr, vector<const T*> X, vector<const T*> V, arra
   blas.matmul_transb(X_R, V_R, lr.S);
 
 };
-template void initialize(lr2_reserve<double>& lr, vector<const double*> X, vector<const double*> V,array<double,3> h_xx, array<double,3> h_vv, const Ensign::Matrix::blas_ops& blas);
+template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V,array<double,3> h_xx, array<double,3> h_vv, const Ensign::Matrix::blas_ops& blas);
 
 template<class T, class IP>
 void lr_add(vector<const lr2<T>*> A, const vector<T>& alpha, lr2<T>& out,

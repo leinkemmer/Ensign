@@ -65,8 +65,6 @@ __global__ void setmultadd_rk4_k(int n, double* A,  double* B, double t, double*
 
 __global__ void finstage_rk4_k(int n, double* A,  double* B, double* C, double* D, double* E, double tau);
 
-__global__ void orthcol_k(int n, double* A, Index nx, Index ny, Index nz, double hx, double hy, double hz, double ax, double ay, double az, double bx, double by, double bz, Index alpha);
-
 template<class T>
 __global__ void transpose_inplace_k(int n, T* A);
 

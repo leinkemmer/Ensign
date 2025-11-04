@@ -118,10 +118,6 @@ array<mat,3> initialize_mat_array(stloc sl) {
   return {mat(sl), mat(sl), mat(sl)};
 }
 
-array<cmat,3> create_cmat_array(mind<2> dim, stloc sl) {
-  return {cmat(dim,sl), cmat(dim,sl), cmat(dim,sl)};
-}
-
 array<cmat,3> initialize_cmat_array(stloc sl) {
   return {cmat(sl), cmat(sl), cmat(sl)};
 }
@@ -927,11 +923,11 @@ private:
   std::unique_ptr<vec> d_lim_vv;
 };
 
-void mgs_orthcol_cpu(multi_array<double,2>& X, std::function<double(double*,double*)> inner_product) {
+void mgs_orthcol_cpu(multi_array<double,2>& X, double w) {
+
   array<Index,2> dims = X.shape();
   Index rk = dims[1];
-  double r;
-  
+
   std::default_random_engine generator(1234);
   std::normal_distribution<double> distribution(0.0,1.0);
   #ifdef __OPENMP__
@@ -941,68 +937,12 @@ void mgs_orthcol_cpu(multi_array<double,2>& X, std::function<double(double*,doub
     X(i,rk-1) = distribution(generator);
   }
   for(Index k=0;k<(rk-1);k++) {
-    r = inner_product(X.extract({rk-1}), X.extract({k}));
-    cblas_daxpy(dims[0], -r, X.extract({k}), 1, X.extract({rk-1}),1);
+    cblas_daxpy(dims[0], -w*cblas_ddot(dims[0],&X(0,rk-1),1,&X(0,k),1), X.extract({k}), 1, X.extract({rk-1}),1);
   }
-    double ip = inner_product(X.extract({rk-1}),X.extract({rk-1}));
 
-      cblas_dscal(dims[0],1.0/sqrt(ip),X.extract({rk-1}),1);
+      cblas_dscal(dims[0],1.0/sqrt(w*cblas_ddot(dims[0],&X(0,rk-1),1,&X(0,rk-1),1)),X.extract({rk-1}),1);
 }
 
-void mgs_orthcol_XV_cpu(multi_array<double,2>& X, multi_array<double,2>& V, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, grid_info_reserve<3>& gi) {
-  array<Index,2> dims_X = X.shape();
-  array<Index,2> dims_V = V.shape();
-  Index rk = dims_X[1];
-  double r;
-
-  Index nx = gi.N_xx[0];
-  Index ny = gi.N_xx[1];
-  Index nz = gi.N_xx[2];
-  #ifdef __OPENMP__
-  #pragma omp parallel for
-  #endif
-  for(Index ii = 0; ii < dims_X[0]; ii++){
-    Index i = ii % nx;
-    Index j = (ii / nx) % ny;
-    Index k = ii / (nx*ny);
-    double x = gi.lim_xx[0] + i*gi.h_xx[0];
-    double y = gi.lim_xx[2] + j*gi.h_xx[1];
-    double z = gi.lim_xx[4] + k*gi.h_xx[2];
-    X(ii, rk-1) = sin((rk-1)*2.0*M_PI*(x-gi.lim_xx[0])/(gi.lim_xx[1]-gi.lim_xx[0]))*
-                  sin((rk-1)*2.0*M_PI*(y-gi.lim_xx[2])/(gi.lim_xx[3]-gi.lim_xx[2]))*
-                  sin((rk-1)*2.0*M_PI*(z-gi.lim_xx[4])/(gi.lim_xx[5]-gi.lim_xx[4]));
-  }
-  for(Index k=0;k<(rk-1);k++) {
-    r = inner_product_X(X.extract({rk-1}), X.extract({k}));
-    cblas_daxpy(dims_X[0], -r, X.extract({k}), 1, X.extract({rk-1}),1);
-  }
-    double ip = inner_product_X(X.extract({rk-1}),X.extract({rk-1}));
-    cblas_dscal(dims_X[0],1.0/sqrt(ip),X.extract({rk-1}),1);
-  
-  Index nv = gi.N_vv[0];
-  Index nw = gi.N_vv[1];
-  Index nu = gi.N_vv[2];
-  #ifdef __OPENMP__
-  #pragma omp parallel for
-  #endif
-  for(Index ii = 0; ii < dims_V[0]; ii++){
-    Index i = ii % nv;
-    Index j = (ii / nv) % nw;
-    Index k = ii / (nv*nw);
-    double v = gi.lim_vv[0] + i*gi.h_vv[0];
-    double w = gi.lim_vv[2] + j*gi.h_vv[1];
-    double u = gi.lim_vv[4] + k*gi.h_vv[2];
-    V(ii, rk-1) = sin((rk-1)*2.0*M_PI*(v-gi.lim_vv[0])/(gi.lim_vv[1]-gi.lim_vv[0]))*
-                 sin((rk-1)*2.0*M_PI*(w-gi.lim_vv[2])/(gi.lim_vv[3]-gi.lim_vv[2]))*
-                 sin((rk-1)*2.0*M_PI*(u-gi.lim_vv[4])/(gi.lim_vv[5]-gi.lim_vv[4]));
-  }
-  for(Index k=0;k<(rk-1);k++) {
-    r = inner_product_V(V.extract({rk-1}), V.extract({k}));
-    cblas_daxpy(dims_V[0], -r, V.extract({k}), 1, V.extract({rk-1}),1);
-  }
-    ip = inner_product_V(V.extract({rk-1}),V.extract({rk-1}));
-    cblas_dscal(dims_V[0],1.0/sqrt(ip),V.extract({rk-1}),1);
-}
 
 #ifdef __CUDA__
   void mgs_orthcol_gpu(multi_array<double,2>& X, double w, const blas_ops& blas) {
@@ -1033,74 +973,6 @@ void mgs_orthcol_XV_cpu(multi_array<double,2>& X, multi_array<double,2>& V, std:
     curandDestroyGenerator(gen);
   }
 
-  void mgs_orthcol_XV_gpu(multi_array<double,2>& X, multi_array<double,2>& V, double w_x, double w_v, const blas_ops& blas, grid_info_reserve<3>& gi) {
-    array<Index,2> dims_X = X.shape();
-    array<Index,2> dims_V = V.shape();
-    Index rk = dims_X[1];
-    Index nn_x = dims_X[0];
-    double* r;
-    cudaMalloc((void**)&r,sizeof(double));
-
-    Index nx = gi.N_xx[0];
-    Index ny = gi.N_xx[1];
-    Index nz = gi.N_xx[2];
-    double hx = gi.h_xx[0];
-    double hy = gi.h_xx[1];
-    double hz = gi.h_xx[2];
-    double ax = gi.lim_xx[0];
-    double ay = gi.lim_xx[2];
-    double az = gi.lim_xx[4];
-    double bx = gi.lim_xx[1];
-    double by = gi.lim_xx[3];
-    double bz = gi.lim_xx[5];
-    Index alpha = rk-1;
-
-    orthcol_k<<<(nn_x+n_threads-1)/n_threads,n_threads>>>(nn_x,&X(0,rk-1),nx,ny,nz,hx,hy,hz,ax,ay,az,bx,by,bz,alpha);
-    cudaDeviceSynchronize();
-
-    for(Index k=0;k<(rk-1);k++) {
-      cublasDdot(blas.handle_devres, nn_x, &X(0,rk-1), 1, &X(0,k), 1, r);
-      scale_unique<<<1,1>>>(r,w_x);
-      cudaDeviceSynchronize();
-      dmaxpy<<<(nn_x+n_threads-1)/n_threads,n_threads>>>(nn_x, r, &X(0,k), &X(0,rk-1));
-      cudaDeviceSynchronize();
-    }
-    cublasDdot(blas.handle_devres, nn_x, &X(0,rk-1), 1, &X(0,rk-1), 1, r);
-    scale_sqrt_unique<<<1,1>>>(r,w_x);
-    cudaDeviceSynchronize();
-    ptw_div_gs<<<(nn_x+n_threads-1)/n_threads,n_threads>>>(nn_x, &X(0,rk-1), r);
-    cudaDeviceSynchronize();
-    
-    Index nv = gi.N_vv[0];
-    Index nw = gi.N_vv[1];
-    Index nu = gi.N_vv[2];
-    double hv = gi.h_vv[0];
-    double hw = gi.h_vv[1];
-    double hu = gi.h_vv[2];
-    double av = gi.lim_vv[0];
-    double aw = gi.lim_vv[2];
-    double au = gi.lim_vv[4];
-    double bv = gi.lim_vv[1];
-    double bw = gi.lim_vv[3];
-    double bu = gi.lim_vv[5];
-    Index nn_v = dims_V[0];
-
-    orthcol_k<<<(nn_v+n_threads-1)/n_threads,n_threads>>>(nn_v,&V(0,rk-1),nv,nw,nu,hv,hw,hu,av,aw,au,bv,bw,bu,alpha);
-    cudaDeviceSynchronize();
-
-    for(Index k=0;k<(rk-1);k++) {
-      cublasDdot(blas.handle_devres, nn_v, &V(0,rk-1), 1, &V(0,k), 1, r);
-      scale_unique<<<1,1>>>(r,w_v);
-      cudaDeviceSynchronize();
-      dmaxpy<<<(nn_v+n_threads-1)/n_threads,n_threads>>>(nn_v, r, &V(0,k), &V(0,rk-1));
-      cudaDeviceSynchronize();
-    }
-    cublasDdot(blas.handle_devres, nn_v, &V(0,rk-1), 1, &V(0,rk-1), 1, r);
-    scale_sqrt_unique<<<1,1>>>(r,w_v);
-    cudaDeviceSynchronize();
-    ptw_div_gs<<<(nn_v+n_threads-1)/n_threads,n_threads>>>(nn_v, &V(0,rk-1), r);
-    cudaDeviceSynchronize();
-  }
 #endif
 
 double electric_energy(array<vec,3>& E, grid_info_reserve<3>& gi, const blas_ops& blas){
@@ -1142,18 +1014,13 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
   //orthogonalize hh(&blas);
   orthogonalize gs(&blas);
 
-  std::function<double(double*,double*)> ip_xx = inner_product_from_const_weight(gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2], gi.dxx_mult);
-  std::function<double(double*,double*)> ip_vv = inner_product_from_const_weight(gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2], gi.dvv_mult);
-
   // Initialization
-  lr2_reserve<double> lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, sl);
+  lr2<double> lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, sl);
 
   if(sl == stloc::host) {
-    //initialize(lr_sol, X0, V0, ip_xx, ip_vv, blas);
     initialize(lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
   } else {
-    lr2_reserve<double> h_lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
-    //initialize(h_lr_sol, X0, V0, ip_xx, ip_vv, blas);
+    lr2<double> h_lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
     initialize(h_lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
     lr_sol = h_lr_sol;
   }
@@ -1228,7 +1095,6 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
     K_step_rk4(tau, Xn, E, C1, C2, nsteps_int);
     gt::start("gs K step");
     if(Xn.sl == stloc::host){
-      //gs(Xn, Sn, ip_xx); // Xn the new X
       gs(Xn, Sn, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]); // Xn the new X
     } else{
       gs(Xn, Sn, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]);
@@ -1252,7 +1118,6 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
     
     
     if(Vn.sl == stloc::host){
-      //gs(Vn, Sn, ip_vv);
       gs(Vn, Sn, gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
     }else{
       gs(Vn, Sn, gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
@@ -1310,12 +1175,10 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
 
           gt::start("Reject: increase rank (gram schmidt)");
           if(lr_sol.X.sl == stloc::host){
-            //mgs_orthcol_XV_cpu(lr_sol.X,lr_sol.V,ip_xx,ip_vv,gi);
-            mgs_orthcol_cpu(lr_sol.X,ip_xx);
-            mgs_orthcol_cpu(lr_sol.V,ip_vv);
+            mgs_orthcol_cpu(lr_sol.X,gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]);
+            mgs_orthcol_cpu(lr_sol.V,gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
           } else {
             #ifdef __CUDA__
-              //mgs_orthcol_XV_gpu(lr_sol.X, lr_sol.V, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2], gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2],blas, gi);
               mgs_orthcol_gpu(lr_sol.X,gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2],blas);
               mgs_orthcol_gpu(lr_sol.V,gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2],blas);
             #endif
@@ -1524,12 +1387,10 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
 
           gt::start("Reject: increase rank (gram schmidt)");
           if(lr_sol.X.sl == stloc::host){
-            //mgs_orthcol_XV_cpu(lr_sol.X,lr_sol.V,ip_xx,ip_vv,gi);
-            mgs_orthcol_cpu(lr_sol.X,ip_xx);
-            mgs_orthcol_cpu(lr_sol.V,ip_vv);
+            mgs_orthcol_cpu(lr_sol.X,gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]);
+            mgs_orthcol_cpu(lr_sol.V,gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
           } else {
             #ifdef __CUDA__
-              //mgs_orthcol_XV_gpu(lr_sol.X, lr_sol.V, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2], gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2],blas, gi);
               mgs_orthcol_gpu(lr_sol.X,gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2],blas);
               mgs_orthcol_gpu(lr_sol.V,gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2],blas);
             #endif

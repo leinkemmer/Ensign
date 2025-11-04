@@ -22,10 +22,18 @@ struct lr2 {
 
   lr2(Index r, array<Index,2> N, stloc sl=stloc::host) : S({r,r},sl), X({N[0],r},sl), V({N[1],r},sl) {}
 
+  lr2(Index r, Index r_max, array<Index,2> N, stloc sl=stloc::host) : S({r,r},sl), X({N[0],r_max},{N[0],r},sl), V({N[1],r_max},{N[1],r},sl) {}
+
   void resize(Index r, array<Index,2> N) {
     S.resize({r,r});
     X.resize({N[0],r});
     V.resize({N[1],r});
+  }
+
+  void update_info(Index r) {
+    X.update_shape({X.shape()[0],r});
+    S.resize_ad({r,r});
+    V.update_shape({V.shape()[0],r});
   }
 
   Index size_X() const {
@@ -52,33 +60,6 @@ struct lr2 {
     return out;
   }
 };
-
-template<class T>
-struct lr2_reserve {
-  multi_array<T, 2> X;
-  multi_array<T, 2> S;
-  multi_array<T, 2> V;
-
-  lr2_reserve(Index r, Index r_max, array<Index,2> N, stloc sl=stloc::host) : S({r,r},sl), X({N[0],r_max},{N[0],r},sl), V({N[1],r_max},{N[1],r},sl) {}
-
-  void update_info(Index r) {
-    X.update_shape({X.shape()[0],r});
-    S.resize_ad({r,r});
-    V.update_shape({V.shape()[0],r});
-  }
-
-  Index size_X() const {
-    return X.shape()[0];
-  }
-  Index size_V() const {
-    return V.shape()[0];
-  }
-  Index rank() const {
-    return S.shape()[0];
-  }
-
-};
-
 
 /*  Add two low-rank representations together.
 *
@@ -153,14 +134,10 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V,
                 IP inner_product_V,
                 const Ensign::Matrix::blas_ops& blas);
 
-template<class T, class IP>
-void initialize(lr2_reserve<T>& lr, vector<const T*> X, vector<const T*> V,
-                IP inner_product_X,
-                IP inner_product_V,
-                const Ensign::Matrix::blas_ops& blas);
-
 template<class T>
-void initialize(lr2_reserve<T>& lr, vector<const T*> X, vector<const T*> V, array<double,3> h_xx, array<double,3> h_vv, const Ensign::Matrix::blas_ops& blas);
+void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V,
+                array<double,3> h_xx, array<double,3> h_vv,
+                const Ensign::Matrix::blas_ops& blas);
 
 /* Return an inner product function object for use in, e.g., in gram_schmidt.
 */

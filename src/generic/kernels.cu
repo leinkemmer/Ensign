@@ -313,23 +313,6 @@ __global__ void finstage_rk4_k(int n, double* A, double* B, double* C, double* D
   }
 }
 
-__global__ void orthcol_k(int n, double* A, Index nx, Index ny, Index nz, double hx, double hy, double hz, double ax, double ay, double az, double bx, double by, double bz, Index alpha){
-  int idx = threadIdx.x + blockDim.x * blockIdx.x;
-
-  while(idx < n){
-    Index i = idx % nx;
-    Index j = (idx / nx) % ny;
-    Index k = idx / (nx*ny);
-    double x = ax + i*hx;
-    double y = ay + j*hy;
-    double z = az + k*hz;
-    A[idx] = sin(alpha*2.0*M_PI*(x-ax)/(bx-ax))*
-             sin(alpha*2.0*M_PI*(y-ay)/(by-ay))*
-             sin(alpha*2.0*M_PI*(z-az)/(bz-az));
-    idx += blockDim.x * gridDim.x;
-  }
-}
-
 template<class T>
 __global__ void transpose_inplace_k(int n, T* A){
 
