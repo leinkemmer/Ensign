@@ -9,6 +9,8 @@ namespace Matrix {
 extern "C" {
   extern void dgees_(char*,char*,void*,int*,double*,int*, int*, double*, double*, double*, int*, double*, int*, bool*,int*);
   extern void dgesvd_(char*,char*,int*,int*,double*,int*,double*,double*,int*,double*,int*,double*,int*,int*);
+  extern void dgeqrf_(int*,int*,double*,int*,double*,double*,int*,int*);
+  extern void dorgqr_(int*,int*,int*,double*,int*,double*,double*,int*,int*);
 }
 #endif
 
@@ -763,6 +765,71 @@ void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_arr
   }
   // Computed V^T and not V
   transpose_inplace(V);
+}
+
+template<> 
+void qr(const multi_array<double,2>& Q, multi_array<double,2>& R) {
+  // Pay attention, input overwritten
+  if(Q.sl == stloc::host){
+    #ifdef __MKL__
+    MKL_INT work_query = -1;
+    MKL_INT m = Q.shape()[0];
+    MKL_INT n = Q.shape()[1];
+    MKL_INT size;
+    MKL_INT info;
+    #else
+    int work_query = -1;
+    int m = Q.shape()[0];
+    int n = Q.shape()[1];
+    int size;
+    int info;
+    #endif
+    multi_array<double,1> tau({n},Q.sl);
+
+    vector<double> work(1);
+    dgeqrf_(&m, &n, Q.data(), &m, tau.data(), work.data(), &work_query, &info);
+
+    size = work[0];
+    work.resize(size);
+    dgeqrf_(&m, &n, Q.data(), &m, tau.data(), work.data(), &size, &info);
+    
+    ofstream tmpf("check.data");
+    tmpf.precision(16);
+    for(int i = 0; i < Q.shape()[0]; i++){
+      for(int j = 0; j < Q.shape()[1]; j++){
+        tmpf << Q(i,j) << " ";
+      }
+      tmpf << endl;
+    }
+    
+    ofstream tmpf2("check2.data");
+    tmpf2.precision(16);
+    for(int i = 0; i < n; i++){
+        tmpf2 << tau(i) << endl;
+    }
+
+
+    #ifdef __OPENMP__
+    #pragma omp parallel for
+    #endif
+    for(Index j = 0; j < n; j++){
+      for(Index i = 0; i < j; i++){
+        R(i,j) = Q(i,j);
+        R(j,i) = 0.0;
+      }
+      R(j,j) = Q(j,j);
+    }
+
+    //dorgqr_(&m, &n, &n, Q.data(), &m, tau.data(), work.data(), &work_query, &info);
+    //size = work[0];
+    //work.resize({(size_t)size});
+    dorgqr_(&m, &n, &n, Q.data(), &m, tau.data(), work.data(), &size, &info);
+
+  } else {
+    #ifdef __CUDA__
+    // TODO
+    #endif
+  }
 }
 
 template<>

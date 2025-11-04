@@ -30,6 +30,7 @@ void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, const multi_arr
   }else{
     #ifdef __CUDA__
       ptw_mult_row_k<<<(b.num_elements()+n_threads-1)/n_threads,n_threads>>>(b.num_elements(), b.shape()[0], b.begin(), w.begin(), tmp.begin());
+      cudaDeviceSynchronize();
     #else
       cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
       << __LINE__ << endl;

@@ -159,6 +159,9 @@ void initialize(lr2_reserve<T>& lr, vector<const T*> X, vector<const T*> V,
                 IP inner_product_V,
                 const Ensign::Matrix::blas_ops& blas);
 
+template<class T>
+void initialize(lr2_reserve<T>& lr, vector<const T*> X, vector<const T*> V, array<double,3> h_xx, array<double,3> h_vv, const Ensign::Matrix::blas_ops& blas);
+
 /* Return an inner product function object for use in, e.g., in gram_schmidt.
 */
 template<class T>
