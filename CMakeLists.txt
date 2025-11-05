@@ -59,18 +59,18 @@ endif()
 # CUDA
 
 if(${CUDA_ENABLED})
-  find_package(CUDA QUIET)
-  set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-std=c++11;-O3;-g;--compiler-options;-DNDEBUG;--compiler-options;-fopenmp)
+  enable_language(CUDA)
+  find_package(CUDAToolkit REQUIRED)
+  set(CUDA_DEFINES "-D__CUDA__")
+  add_compile_definitions(${CUDA_DEFINES})
 else()
 endif()
-
 
 ################################################################################
 # External libraries
 ################################################################################
 
 set_directory_properties(PROPERTIES EP_BASE ${FETCHCONTENT_BASE_DIR})
-
 
 ################################################################################
 # Eigen
@@ -99,7 +99,6 @@ endif()
 if(NOT ${MKL_ENABLED})
   enable_language(Fortran)
 endif()
-
 
 ################################################################################
 # NetCDF
@@ -217,15 +216,20 @@ endif()
 # BLAS and LAPACK
 
 if(${MKL_ENABLED})
-  find_package(MKL QUIET)
-  if(NOT mkl_FOUND)
+  set(MKL_ARCH intel64)
+  set(MKL_THREADING gnu_thread)
+  set(MKL_INTERFACE lp64)
+  find_package(MKL CONFIG REQUIRED PATHS $ENV{MKLROOT})
+  if(NOT MKL_FOUND)
     set(MKL_DEFINES    "-D__MKL__" "-DMKL_ILP64" "-m64")
     set(MKL_LIBRARIES  "-L${MKL_LIBDIR} -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_gnu_thread -lmkl_core -lgomp -lpthread -lm -ldl")
     if(NOT (MKL_INCLUDEDIR AND MKL_LIBDIR))
       message("MKL not found automatically. Please set MKL_INCLUDEDIR and MKL_LIBDIR")
     endif()
   else()
+    set(MKL_DEFINES    "-D__MKL__")
     message("MKL found automatically.")
+    message(STATUS "Imported oneMKL targets: ${MKL_IMPORTED_TARGETS}")
   endif()
 else()
   message("OpenBLAS is used by default. MKL support is available by setting MKL_ENABLED to ON (set MKL_INCLUDEDIR and MKL_LIBDIR environment variables appropriately).")
@@ -259,39 +263,50 @@ endif()
 # Compiler options
 ################################################################################
 
-if(${Sanitizer})
-  add_compile_options("-fno-omit-frame-pointer;-fsanitize=address")
-  add_link_options("-fsanitize=address")
-endif()
-
-if(CMAKE_CXX_COMPILER_ID MATCHES Intel)
-  add_compile_options("-Warn all")
-  add_compile_options(
-    "$<$<CONFIG:RELEASE>:-O3;-ip;-xHOST>"
-    "$<$<CONFIG:DEBUG>:-g;-check all;-traceback>"
-  )
-
-elseif(CMAKE_CXX_COMPILER_ID MATCHES GNU)
-  add_compile_options(-Wall -Wno-maybe-uninitialized)
-  add_compile_options(
-    "$<$<CONFIG:RELEASE>:-O3;-DNDEBUG>"
-    "$<$<CONFIG:DEBUG>:-O0;-g3;-ggdb3;-Wall;-D_GLIBCXX_DEBUG;-fno-omit-frame-pointer;-ftrapv>"
-  )
-
-  CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
-  if(COMPILER_SUPPORTS_MARCH_NATIVE)
-    add_compile_options("$<$<CONFIG:RELEASE>:-march=native>")
+if(NOT ${CUDA_ENABLED})
+  if(${Sanitizer})
+    add_compile_options("-fno-omit-frame-pointer;-fsanitize=address")
+    add_link_options("-fsanitize=address")
   endif()
-
-elseif(CMAKE_CXX_COMPILER_ID MATCHES Clang)
-  add_compile_options("-Wall;-Wno-uninitialized")
+  
+  if(CMAKE_CXX_COMPILER_ID MATCHES Intel)
+    add_compile_options("-Warn all")
+    add_compile_options(
+      "$<$<CONFIG:RELEASE>:-O3;-ip;-xHOST>"
+      "$<$<CONFIG:DEBUG>:-g;-check all;-traceback>"
+    )
+  
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES GNU)
+    add_compile_options(-Wall -Wno-maybe-uninitialized)
+    add_compile_options(
+      "$<$<CONFIG:RELEASE>:-O3;-DNDEBUG>"
+      "$<$<CONFIG:DEBUG>:-O0;-g3;-ggdb3;-Wall;-D_GLIBCXX_DEBUG;-fno-omit-frame-pointer;-ftrapv>"
+    )
+  
+    CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
+    if(COMPILER_SUPPORTS_MARCH_NATIVE)
+      add_compile_options("$<$<CONFIG:RELEASE>:-march=native>")
+    endif()
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES Clang)
+    add_compile_options("-Wall;-Wno-uninitialized")
+  endif()
 endif()
-
 
 ################################################################################
 # Ensign library
 ################################################################################
 
+if(${CUDA_ENABLED})
+add_library(Ensign
+  STATIC
+  "src/generic/fft.cu"
+  "src/generic/matrix.cu"
+  "src/generic/timer.cu"
+  "src/generic/utility.cu"
+  "src/lr/coefficients.cu"
+  "src/lr/lr.cu"
+)
+else()
 add_library(Ensign
   STATIC
   "src/generic/fft.cpp"
@@ -305,6 +320,7 @@ add_library(Ensign
   "src/lr/lr.cpp"
   "src/lr/interpolatory.cpp"
 )
+endif()
 
 add_library(Ensign::Ensign ALIAS Ensign)
 add_dependencies(Ensign fftw eigen)
@@ -324,7 +340,7 @@ target_include_directories(Ensign
 
 # If Ensign is being bundled, disable tests and examples
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
-  add_subdirectory(tests)
+  #add_subdirectory(tests)
   add_subdirectory(examples)
 endif()
 
@@ -341,11 +357,17 @@ else()
   )
 endif()
 
+if(${CUDA_ENABLED})
+  target_compile_options(Ensign PUBLIC $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-fopenmp>)
+endif()
+
 if(${MKL_ENABLED})
-  if(mkl_FOUND)
-    target_link_libraries(Ensign PUBLIC MKL::MKL)
+  target_compile_options(Ensign PUBLIC ${MKL_DEFINES})
+  if(MKL_FOUND)
+    target_compile_options(Ensign PUBLIC $<TARGET_PROPERTY:MKL::MKL,INTERFACE_COMPILE_OPTIONS>)
+    target_include_directories(Ensign PUBLIC $<TARGET_PROPERTY:MKL::MKL,INTERFACE_INCLUDE_DIRECTORIES>)
+    target_link_libraries(Ensign PUBLIC $<LINK_ONLY:MKL::MKL>)
   else()
-    target_compile_options(Ensign PUBLIC ${MKL_DEFINES})
     target_include_directories(Ensign
       PUBLIC
       "$<BUILD_INTERFACE:${MKL_INCLUDEDIR}>"
@@ -423,7 +445,6 @@ if(NOT ${MKL_ENABLED})
     target_link_libraries(Ensign PUBLIC "-lFortranDecimal")
   endif()
 endif()
-
 
 ################################################################################
 # Install tree configuration

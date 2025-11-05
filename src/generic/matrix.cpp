@@ -9,6 +9,8 @@ namespace Matrix {
 extern "C" {
   extern void dgees_(char*,char*,void*,int*,double*,int*, int*, double*, double*, double*, int*, double*, int*, bool*,int*);
   extern void dgesvd_(char*,char*,int*,int*,double*,int*,double*,double*,int*,double*,int*,double*,int*,int*);
+  extern void dgeqrf_(int*,int*,double*,int*,double*,double*,int*,int*);
+  extern void dorgqr_(int*,int*,int*,double*,int*,double*,double*,int*,int*);
   extern void dgetrf_(int*, int*, double*, int*, int*, int*);
   extern void zgetrf_(int*, int*, complex<double>*, int*, int*, int*);
   extern void dgetrs_(char*, int*, int*, double*, int*, int*, double*, int*, int*);
@@ -22,7 +24,7 @@ void set_zero(multi_array<T,2>& a) {
   if(a.sl == stloc::host) {
     fill(a.begin(), a.end(), T(0.0));
   } else {
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     multi_array<T,2> _a(a.shape());
     fill(_a.begin(), _a.end(), T(0.0));
     a = _a;
@@ -48,7 +50,7 @@ void set_identity(multi_array<T,2>& a){
       a(i,i) = T(1.0);
     }
   } else {
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     multi_array<T,2> _a(a.shape());
     set_zero(_a);
     #ifdef __OPENMP__
@@ -73,7 +75,7 @@ void set_const(multi_array<T,d>& a,T alpha) {
   if(a.sl == stloc::host) {
     fill(a.begin(), a.end(), alpha);
   } else {
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
       fill_gpu<<<(a.num_elements()+n_threads-1)/n_threads,n_threads>>>(a.num_elements(),a.begin(),alpha);
     #else
     cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
@@ -108,7 +110,7 @@ void ptw_mult_row(const multi_array<T,2>& a, const multi_array<T,1>& w, multi_ar
     }
     #endif
   }else{
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     if(std::is_same<T, double>::value) {
       ptw_mult_row_k<<<(a.num_elements()+n_threads-1)/n_threads,n_threads>>>(a.num_elements(),a.shape()[0],a.begin(),w.begin(),out.begin());
     } else if(std::is_same<T, complex<double>>::value) {
@@ -148,8 +150,8 @@ void transpose_inplace(multi_array<T,2>& a){
     }
   }
   } else if (a.sl == stloc::device){
-    #ifdef __CUDACC__
-    transpose_inplace<<<a.num_elements(),1>>>(a.shape()[0],a.begin()); 
+    #ifdef __CUDA__
+    transpose_inplace_k<<<a.num_elements(),1>>>(a.shape()[0],a.begin()); 
     #else
       cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
       << __LINE__ << endl;
@@ -169,7 +171,7 @@ template void transpose_inplace(multi_array<double,2>&);
 
 
 blas_ops::blas_ops(bool _gpu) : gpu(_gpu) {
-#ifdef __CUDACC__
+#ifdef __CUDA__
   handle = 0;
   handle_devres = 0;
   handle_cusolver = 0;
@@ -194,7 +196,7 @@ blas_ops::blas_ops(bool _gpu) : gpu(_gpu) {
 }
 
 blas_ops::~blas_ops() {
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
   if(handle)
       cublasDestroy(handle);
  
@@ -216,7 +218,7 @@ void blas_ops::matmul(const multi_array<double,2>& a, const multi_array<double,2
       b.begin(), a.shape()[1], 0.0,
       c.begin(), a.shape()[0]);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       double alpha = 1.0;
       double beta = 0.0;
 
@@ -251,7 +253,7 @@ void blas_ops::matmul(const multi_array<complex<double>,2>& a, const multi_array
       c.begin(), a.shape()[0]);
   }
   else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cuDoubleComplex one = make_cuDoubleComplex(1.0, 0.0);
     cuDoubleComplex zero = make_cuDoubleComplex(0.0, 0.0);
 
@@ -283,7 +285,7 @@ void blas_ops::matmul(const multi_array<float,2>& a, const multi_array<float,2>&
       b.begin(), a.shape()[1], 0.0,
       c.begin(), a.shape()[0]);
   }else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     float alpha = 1.0;
     float beta = 0.0;
 
@@ -306,7 +308,7 @@ void blas_ops::matmul(const multi_array<float,2>& a, const multi_array<float,2>&
 }
 
 
-#ifdef __CUDACC__
+#ifdef __CUDA__
 template<>
 void blas_ops::matmul(const multi_array<cuDoubleComplex,2>& a, const multi_array<cuDoubleComplex,2>& b, multi_array<cuDoubleComplex,2>& c) const {
 
@@ -331,7 +333,7 @@ void blas_ops::matmul_transa(const multi_array<double,2>& a, const multi_array<d
       b.begin(), a.shape()[0], 0.0,
       c.begin(), a.shape()[1]);
   } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     double alpha = 1.0;
     double beta = 0.0;
 
@@ -361,7 +363,7 @@ void blas_ops::matmul_transa(const multi_array<float,2>& a, const multi_array<fl
       b.begin(), a.shape()[0], 0.0,
       c.begin(), a.shape()[1]);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       float alpha = 1.0;
       float beta = 0.0;
 
@@ -393,7 +395,7 @@ void blas_ops::matmul_transb(const multi_array<double,2>& a, const multi_array<d
       b.begin(), b.shape()[0], 0.0,
       c.begin(), a.shape()[0]);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       double alpha = 1.0;
       double beta = 0.0;
 
@@ -423,7 +425,7 @@ void blas_ops::matmul_transb(const multi_array<float,2>& a, const multi_array<fl
       b.begin(), b.shape()[0], 0.0,
       c.begin(), a.shape()[0]);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       float alpha = 1.0;
       float beta = 0.0;
 
@@ -457,7 +459,7 @@ void blas_ops::matmul_transb(const multi_array<complex<double>,2>& a, const mult
       b.begin(), b.shape()[0], &zero,
       c.begin(), a.shape()[0]);
   } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       cuDoubleComplex one = make_cuDoubleComplex(1.0, 0.0);
       cuDoubleComplex zero = make_cuDoubleComplex(0.0, 0.0);
 
@@ -479,7 +481,7 @@ void blas_ops::matmul_transb(const multi_array<complex<double>,2>& a, const mult
 
 }
 
-#ifdef __CUDACC__
+#ifdef __CUDA__
 template<>
 void blas_ops::matmul_transb(const multi_array<cuDoubleComplex,2>& a, const multi_array<cuDoubleComplex,2>& b, multi_array<cuDoubleComplex,2>& c) const {
         cuDoubleComplex one = make_cuDoubleComplex(1.0, 0.0);
@@ -503,7 +505,7 @@ void blas_ops::matmul_transab(const multi_array<double,2>& a, const multi_array<
       b.begin(), b.shape()[0], 0.0,
       c.begin(), a.shape()[1]);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       double alpha = 1.0;
       double beta = 0.0;
 
@@ -534,7 +536,7 @@ void blas_ops::matmul_transab(const multi_array<float,2>& a, const multi_array<f
       b.begin(), b.shape()[0], 0.0,
       c.begin(), a.shape()[1]);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       float alpha = 1.0;
       float beta = 0.0;
 
@@ -565,7 +567,7 @@ void blas_ops::matvec(const multi_array<double,2>& a, const multi_array<double,1
       b.begin(), 1, 0.0,
       c.begin(), 1);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       double alpha = 1.0;
       double beta = 0.0;
 
@@ -597,7 +599,7 @@ void blas_ops::matvec_trans(const multi_array<double,2>& a, const multi_array<do
       b.begin(), 1, 0.0,
       c.begin(), 1);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       double alpha = 1.0;
       double beta = 0.0;
 
@@ -629,7 +631,7 @@ void blas_ops::matvec_trans(const multi_array<float,2>& a, const multi_array<flo
       b.begin(), 1, 0.0,
       c.begin(), 1);
     } else if ((a.sl == stloc::device) && (b.sl == stloc::device) && (c.sl == stloc::device)){ //everything on GPU
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       float alpha = 1.0;
       float beta = 0.0;
 
@@ -809,39 +811,136 @@ template void lu_solver<complex<double>>::solve(multi_array<complex<double>,1>&)
 
 template<> 
 void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_array<double,2>& V, multi_array<double,1>& sigma_diag, const blas_ops& blas) {
+  if(input.sl == stloc::host){
+    #ifdef __MKL__
+    MKL_INT work_query = -1;
+    MKL_INT info;
+    MKL_INT size;
+    char mode = 'S';
+    MKL_INT m = input.shape()[0];
+    MKL_INT n = input.shape()[1];
+    MKL_INT m_U = U.shape()[0];
+    MKL_INT m_V = V.shape()[0];
+    #else
+    int work_query = -1;
+    int info;
+    int size;
+    char mode = 'S';
+    int m = input.shape()[0];
+    int n = input.shape()[1];
+    int m_U = U.shape()[0];
+    int m_V = V.shape()[0];
+    #endif
+
+    multi_array<double,2> input_copy = input; // Lapack overwrites the input data
+
+    vector<double> work({1});
+    dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &work_query, &info);
+
+    size = work[0];
+    
+    work.resize({(size_t)size});
+    dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &size, &info);
+  } else {
+    #ifdef __CUDA__
+      int m = input.shape()[0];
+      int n = input.shape()[1];
+      int lwork;
+
+      cusolverDnDgesvd_bufferSize(blas.handle_cusolver,m,n,&lwork);
+
+      signed char mode = 'S';
+      multi_array<double,2> input_copy = input;
+      int m_U = U.shape()[0];
+      int m_V = V.shape()[0];
+      multi_array<double,1> work({lwork}, input.sl);
+      double *rwork = nullptr;
+      int *devInfo = nullptr;
+      cudaMalloc(reinterpret_cast<void **>(&devInfo), sizeof(int));
+      cusolverDnDgesvd(blas.handle_cusolver,mode,mode,m,n,input_copy.data(),m,sigma_diag.data(),U.data(),m_U,V.data(),m_V,work.data(),lwork,rwork,devInfo);
+      cudaFree(devInfo);
+    #endif
+  }
+  // Computed V^T and not V
+  transpose_inplace(V);
+}
+
+template<> 
+void qr(const multi_array<double,2>& Q, multi_array<double,2>& R) {
+  // Pay attention, input overwritten
+  if(Q.sl == stloc::host){
+    #ifdef __MKL__
+    MKL_INT work_query = -1;
+    MKL_INT m = Q.shape()[0];
+    MKL_INT n = Q.shape()[1];
+    MKL_INT size;
+    MKL_INT info;
+    #else
+    int work_query = -1;
+    int m = Q.shape()[0];
+    int n = Q.shape()[1];
+    int size;
+    int info;
+    #endif
+    multi_array<double,1> tau({n},Q.sl);
+
+    vector<double> work(1);
+    dgeqrf_(&m, &n, Q.data(), &m, tau.data(), work.data(), &work_query, &info);
+
+    size = work[0];
+    work.resize(size);
+    dgeqrf_(&m, &n, Q.data(), &m, tau.data(), work.data(), &size, &info);
+
+    #ifdef __OPENMP__
+    #pragma omp parallel for
+    #endif
+    for(Index j = 0; j < n; j++){
+      for(Index i = 0; i < j; i++){
+        R(i,j) = Q(i,j);
+        R(j,i) = 0.0;
+      }
+      R(j,j) = Q(j,j);
+    }
+
+    //dorgqr_(&m, &n, &n, Q.data(), &m, tau.data(), work.data(), &work_query, &info);
+    //size = work[0];
+    //work.resize({(size_t)size});
+    dorgqr_(&m, &n, &n, Q.data(), &m, tau.data(), work.data(), &size, &info);
+
+  } else {
+    #ifdef __CUDA__
+    // TODO
+    #endif
+  }
+}
+
+template<>
+void svd_diag(const multi_array<double,2>& input, multi_array<double,1>& sigma_diag, const blas_ops& blas) {
   #ifdef __MKL__
   MKL_INT work_query = -1;
   MKL_INT info;
   MKL_INT size;
-  char mode = 'S';
+  char mode = 'N';
   MKL_INT m = input.shape()[0];
   MKL_INT n = input.shape()[1];
-  MKL_INT m_U = U.shape()[0];
-  MKL_INT m_V = V.shape()[1];
   #else
   int work_query = -1;
   int info;
   int size;
-  char mode = 'S';
+  char mode = 'N';
   int m = input.shape()[0];
   int n = input.shape()[1];
-  int m_U = U.shape()[0];
-  int m_V = V.shape()[1];
   #endif
 
   multi_array<double,2> input_copy = input; // Lapack overwrites the input data
 
   multi_array<double,2> VV({V.shape()[1], V.shape()[0]});
   vector<double> work({1});
-  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, VV.data(), &m_V, work.data(), &work_query, &info);
+  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), nullptr, &m, nullptr, &n, work.data(), &work_query, &info);
 
   size = work[0];
   work.resize({(size_t)size});
-  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, VV.data(), &m_V, work.data(), &size, &info);
-
-  // lapack actually computes V^T and not V
-  //transpose_inplace(V);
-  blas.transpose(VV, V);
+  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), nullptr, &m, nullptr, &n, work.data(), &size, &info);
 }
 
 } // namespace Matrix

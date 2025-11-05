@@ -319,7 +319,7 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
   #endif
   //// FOR GPU ////
 
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
 
   // To be substituted if we initialize in GPU
 
@@ -1024,7 +1024,7 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
 
     #endif
 
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
 
     /* K step */
 
@@ -1377,19 +1377,19 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
     #ifdef __CPU__
     cout << "Electric energy: " << el_energy << endl;
     #endif
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cout << "Electric energy GPU: " << d_el_energy_CPU << endl;
     #endif
     #ifdef __CPU__
     cout << "Error in mass: " << err_mass << endl;
     #endif
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cout << "Error in mass GPU: " << err_mass_CPU << endl;
     #endif
     #ifdef __CPU__
     cout << "Error in energy: " << err_energy << endl;
     #endif
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cout << "Error in energy GPU: " << err_energy_CPU << endl;
     #endif
 
@@ -1399,7 +1399,7 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
   err_massf.close();
   err_energyf.close();
   #endif
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
   destroy_plans(plans_d_e);
   destroy_plans(d_plans_xx);
   destroy_plans(d_plans_vv);
@@ -1409,7 +1409,7 @@ lr2<double> integration_first_order(array<Index,2> N_xx,array<Index,2> N_vv, int
   err_energyGPUf.close();
   #endif
 
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
   lr_sol.X = d_lr_sol.X;
   lr_sol.S = d_lr_sol.S;
   lr_sol.V = d_lr_sol.V;
@@ -1734,7 +1734,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
   //// FOR GPU ////
 
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
 
   // To be substituted if we initialize in GPU
 
@@ -3159,7 +3159,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
 
     err_energyf << err_energy << endl;
     #endif
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
 
     // Lie splitting to obtain the electric field
 
@@ -3997,19 +3997,19 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
     #ifdef __CPU__
     cout << "Electric energy: " << el_energy << endl;
     #endif
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cout << "Electric energy GPU: " << d_el_energy_CPU << endl;
     #endif
     #ifdef __CPU__
     cout << "Error in mass: " << err_mass << endl;
     #endif
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cout << "Error in mass GPU: " << err_mass_CPU << endl;
     #endif
     #ifdef __CPU__
     cout << "Error in energy: " << err_energy << endl;
     #endif
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cout << "Error in energy GPU: " << err_energy_CPU << endl;
     #endif
 
@@ -4019,7 +4019,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
   err_massf.close();
   err_energyf.close();
   #endif
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
 
   destroy_plans(plans_d_e);
   destroy_plans(d_plans_xx);
@@ -4031,7 +4031,7 @@ lr2<double> integration_second_order(array<Index,2> N_xx,array<Index,2> N_vv, in
   #endif
 
   //lr_sol = d_lr_sol;
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
   lr_sol.X = d_lr_sol.X;
   lr_sol.S = d_lr_sol.S;
   lr_sol.V = d_lr_sol.V;

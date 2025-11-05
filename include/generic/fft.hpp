@@ -12,21 +12,24 @@ template<size_t d, size_t dim>
 struct fft {
 
     fft(array<Index,dim> dims_, multi_array<double,d>& real, multi_array<complex<double>,d>& freq);
+    fft(array<Index,dim> dims_, multi_array<double,d>& real, multi_array<complex<double>,d>& freq,bool adapt);
     ~fft();
 
     void forward(multi_array<double,d>& real, multi_array<complex<double>,d>& freq); 
+    void forward(double* real, complex<double>* freq, stloc sl); 
     void backward(multi_array<complex<double>,d>& freq, multi_array<double,d>& real);
+    void backward(complex<double>* freq, double* real, stloc sl); 
 
 private:
     array<fftw_plan,2> plans;
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     array<cufftHandle,2> cuda_plans;
     #endif
 
     void set_null() {
       plans[0] = 0;
       plans[1] = 0;
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       cuda_plans[0] = 0;
       cuda_plans[1] = 0;
       #endif
@@ -57,13 +60,14 @@ array<fftw_plan,2> create_plans_2d(array<Index,2> dims_, multi_array<double,2>& 
 */
 array<fftw_plan,2> create_plans_3d(array<Index,3> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq);
 array<fftw_plan,2> create_plans_3d(array<Index,3> dims_, multi_array<double,1>& real, multi_array<complex<double>,1>& freq);
+array<fftw_plan,2> create_plans_3d_adapt(array<Index,3> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq);
 
 /* Helper function to destroy FFTW plans
 */
 void destroy_plans(array<fftw_plan,2>& plans);
 
 
-#ifdef __CUDACC__
+#ifdef __CUDA__
 /* Helper routines to create cuFFT plans for 1d transforms.
 */
 array<cufftHandle,2> create_plans_1d(Index dims_, int howmany);
@@ -75,6 +79,8 @@ array<cufftHandle,2> create_plans_2d(array<Index,2> dims_, int howmany);
 /* Helper routines to create cuFFT plans for 3d transforms.
 */
 array<cufftHandle,2> create_plans_3d(array<Index,3> dims_, int howmany);
+
+array<cufftHandle,2> create_plans_3d_adapt(array<Index,3> dims_);
 
 /* Helper function to destroy cuFFT plans
 */

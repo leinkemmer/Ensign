@@ -1,6 +1,6 @@
 #include <generic/kernels.hpp>
 
-#ifdef __CUDACC__
+#ifdef __CUDA__
 
 namespace Ensign {
 
@@ -281,12 +281,40 @@ __global__ void rk4_finalcomb(int n, double* A, double t, double* M1, double* M2
   int idx = threadIdx.x + blockDim.x * blockIdx.x;
 
   while(idx < n){
-    A[idx] += ((t/6.0) * (M1[idx]+2.0*M2[idx]+2.0*M3[idx]+M4[idx]-M5[idx]));
+    A[idx] += ((t/6.0) * (M1[idx]+2.0*M2[idx]+2.0*M3[idx]+M4[idx]-M5[idx])); // is minus coming from the call outside?
     idx += blockDim.x * gridDim.x;
   }
 }
 
-__global__ void transpose_inplace(int n, double* A){
+__global__ void addsub_rhs_k(int n, double* A, double* B, double* C){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    A[idx] += (B[idx] - C[idx]);
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+__global__ void setmultadd_rk4_k(int n, double* A, double* B, double t, double* C){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    A[idx] = B[idx] + t*C[idx];
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+__global__ void finstage_rk4_k(int n, double* A, double* B, double* C, double* D, double* E, double tau){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    A[idx] += (tau/6.0)*(B[idx]+2.0*(C[idx]+D[idx])+E[idx]);
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+template<class T>
+__global__ void transpose_inplace_k(int n, T* A){
 
   int i = blockIdx.x % n ; // n number of rows
   int j = blockIdx.x / n;
@@ -297,6 +325,7 @@ __global__ void transpose_inplace(int n, double* A){
     A[j+i*n] = tmp;
   }
 }
+template __global__ void transpose_inplace_k(int, double*);
 
 __global__ void der_fourier_2d(int N, int nx, int ny, cuDoubleComplex* A, double* lims, double nxx, cuDoubleComplex* B,cuDoubleComplex* C){
   int idx = threadIdx.x + blockDim.x * blockIdx.x;

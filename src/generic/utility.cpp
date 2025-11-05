@@ -2,7 +2,7 @@
 
 namespace Ensign {
 
-#ifdef __CUDACC__
+#ifdef __CUDA__
 void* gpu_malloc(size_t size) {
     void *p;
     if(cudaMalloc(&p, size) == cudaErrorMemoryAllocation) {

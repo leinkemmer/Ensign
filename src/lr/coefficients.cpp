@@ -8,7 +8,7 @@ void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, T w, multi_arra
   if(a.sl == stloc::host){
     out *=  w;
   }else{
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
       ptw_mult_scal<<<(out.num_elements()+n_threads-1)/n_threads,n_threads>>>(out.num_elements(), out.begin(), w);
     #else
       cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
@@ -28,8 +28,9 @@ void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, const multi_arr
   if(b.sl == stloc::host){
     Ensign::Matrix::ptw_mult_row(b,w,tmp);
   }else{
-    #ifdef __CUDACC__
-      Ensign::Matrix::ptw_mult_row_k<<<(b.num_elements()+n_threads-1)/n_threads,n_threads>>>(b.num_elements(), b.shape()[0], b.begin(), w.begin(), tmp.begin());
+    #ifdef __CUDA__
+      ptw_mult_row_k<<<(b.num_elements()+n_threads-1)/n_threads,n_threads>>>(b.num_elements(), b.shape()[0], b.begin(), w.begin(), tmp.begin());
+      cudaDeviceSynchronize();
     #else
       cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
       << __LINE__ << endl;

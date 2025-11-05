@@ -373,7 +373,7 @@ int main(){
   //el_energyf << tstar << endl;
   //el_energyf << tau << endl;
 
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
 
   array<cufftHandle,2> plans_d_e = create_plans_3d(N_xx,1);
   array<cufftHandle,2> d_plans_xx = create_plans_3d(N_xx, r);
@@ -1014,7 +1014,7 @@ int main(){
   //  err_energyf << err_energy << endl;
 
     gt::stop("Quantities CPU");
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
 
     // K step
 
@@ -1536,17 +1536,17 @@ int main(){
     #endif
 
     cout << "Electric energy: " << el_energy << endl;
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cout << "Electric energy GPU: " << d_el_energy_CPU << endl;
     #endif
 
     cout << "Error in mass: " << err_mass << endl;
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cout << "Error in mass GPU: " << err_mass_CPU << endl;
     #endif
 
     cout << "Error in energy: " << err_energy << endl;
-    #ifdef __CUDACC__
+    #ifdef __CUDA__
     cout << "Error in energy GPU: " << err_energy_CPU << endl;
     #endif
 
@@ -1561,7 +1561,7 @@ int main(){
   //err_massf.close();
   //err_energyf.close();
 
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
   destroy_plans(plans_d_e);
   destroy_plans(d_plans_xx);
   destroy_plans(d_plans_vv);
