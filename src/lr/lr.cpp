@@ -210,44 +210,6 @@ void householder_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, double 
   R *= fact;
 }
 
-void orthogonalize_householder_constw(multi_array<double,2>& Q, multi_array<double,2>& R, double w) { //Removed blas argument because not needed
-  array<Index,2> dims = Q.shape();
-
-  using namespace Eigen;
-  MatrixXd A(dims[0], dims[1]);
-  for(Index j=0;j<dims[1];j++) {
-    for(Index i=0;i<dims[0];i++) {
-      A(i,j) = Q(i,j);
-    }
-  }
-
-  HouseholderQR<MatrixXd> qr(A.rows(), A.cols());
-  qr.compute(A);
-  MatrixXd q = qr.householderQ()*MatrixXd::Identity(A.rows(), A.cols());
-  MatrixXd temp = qr.matrixQR().triangularView<Upper>();
-
-  MatrixXd RR(A.cols(), A.cols());
-  RR.setZero();
-  for(Index j=0;j<std::min(A.cols(),temp.cols());j++)
-    for(Index i=0;i<std::min(A.cols(),temp.rows());i++)
-      RR(i,j) = temp(i,j);
-
-  for(Index j=0;j<dims[1];j++) {
-    for(Index i=0;i<dims[0];i++) {
-      Q(i,j) = q(i,j);
-    }
-  }
-
-  for(Index j=0;j<dims[1];j++)
-    for(Index i=0;i<dims[0];i++)
-      Q(i,j) /= sqrt(w);
-
-  for(Index j=0;j<dims[1];j++)
-    for(Index i=0;i<dims[1];i++)
-      R(i,j) = sqrt(w)*RR(i,j);
-
-}
-
 
 void orthogonalize_householder_vecw(multi_array<double,2>& Q, multi_array<double,2>& R, double* w) { //Removed blas argument because not needed
   array<Index,2> dims = Q.shape();
@@ -397,30 +359,6 @@ void gram_schmidt_can_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, do
   cudaFree(nrm);
 };
 
-// STILL TO BE TESTED
-/*
-void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double* w) { //with non-constant weight for inner product. Still to be tested
-
-  Index n = Q.shape()[0];
-  int r = Q.shape()[1];
-  multi_array<double,1> tmp({n},stloc::device);
-
-  for(Index j=0;j<r;j++) {
-    for(Index k=0;k<j;k++) {
-      ptw_mult<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j),w,tmp.begin());
-      cublasDdot (handle_devres, n, tmp.begin(), 1, &Q(0,k), 1,&R(k,j));
-      cudaDeviceSynchronize();
-      dmaxpy<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &R(k,j), &Q(0,k), &Q(0,j));
-      scale_unique<<<1,1>>>(&R(j,k),0.0);
-    }
-      ptw_mult<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j),w,tmp.begin());
-      cublasDdot (handle_devres, n, &Q(0,j), 1, tmp.begin(), 1,&R(j,j));
-      cudaDeviceSynchronize();
-      ptw_div_gs<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j), &R(j,j));
-
-  }
-};
-*/
 
 
 void orthogonalize_householder_constw_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, cusolverDnHandle_t handle_cusolver) {
