@@ -503,7 +503,10 @@ void orthogonalize::operator()(multi_array<double,2>& Q, multi_array<double,2>& 
   if(Q.sl == stloc::host) {
     //householder_cpu(Q, R, w);
     //gram_schmidt_can_cpu(Q, R, w);
-    gram_schmidt_cpu(Q, R, w);
+    //gram_schmidt_cpu(Q, R, w);
+    Ensign::Matrix::qr(Q, R);
+    Q /= sqrt(w);
+    R *= sqrt(w);
   } else {
     #ifdef __CUDA__
     gram_schmidt_gpu(Q, R, w, gen, blas->handle_devres);

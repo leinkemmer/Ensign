@@ -792,22 +792,6 @@ void qr(const multi_array<double,2>& Q, multi_array<double,2>& R) {
     size = work[0];
     work.resize(size);
     dgeqrf_(&m, &n, Q.data(), &m, tau.data(), work.data(), &size, &info);
-    
-    ofstream tmpf("check.data");
-    tmpf.precision(16);
-    for(int i = 0; i < Q.shape()[0]; i++){
-      for(int j = 0; j < Q.shape()[1]; j++){
-        tmpf << Q(i,j) << " ";
-      }
-      tmpf << endl;
-    }
-    
-    ofstream tmpf2("check2.data");
-    tmpf2.precision(16);
-    for(int i = 0; i < n; i++){
-        tmpf2 << tau(i) << endl;
-    }
-
 
     #ifdef __OPENMP__
     #pragma omp parallel for
