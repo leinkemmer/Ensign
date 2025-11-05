@@ -13,7 +13,7 @@ include(ExternalProject)
 include(FetchContent)
 include(GNUInstallDirs)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake-modules")
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -318,6 +318,7 @@ add_library(Ensign
   "src/generic/utility.cpp"
   "src/lr/coefficients.cpp"
   "src/lr/lr.cpp"
+  "src/lr/interpolatory.cpp"
 )
 endif()
 

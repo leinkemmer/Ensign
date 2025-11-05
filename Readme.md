@@ -4,6 +4,9 @@ The **Ensign** software framework facilitates the efficient implementation of dy
 
 [F. Cassini, L. Einkemmer. Efficient 6D Vlasov simulation using the dynamical low-rank framework Ensign.](https://arxiv.org/abs/2110.13481)
 
+
+## Build instructions
+
 First clone the repository
 
     git clone https://github.com/leinkemmer/Ensign.git
@@ -29,9 +32,9 @@ If you prefer to use Intel MKL as the BLAS and LAPACK backend set
     cmake -DMKL_ENABLED=ON -DCUDA_ENABLED=ON ..
     make
 
-## MacOS
+### MacOS
 
-### OpenBLAS
+#### OpenBLAS
 If OpenBLAS is used as a BLAS backend, a Fortran compiler has to be installed. Since Apple Clang, the native compiler collection of MacOS, does not ship a Fortran compiler, one has to install a Fortran compiler manually. To obtain `gfortran-14`, the Fortran compiler of GCC, install `gcc-14` via brew (see also next section).
 
 If CMake does not find the Fortran compiler automatically, you have to set the `FC` environment variable accordingly:

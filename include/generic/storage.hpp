@@ -7,6 +7,8 @@
 
 namespace Ensign {
 
+
+
 template<class T, size_t d>
 struct multi_array {
   array<Index,d> e;
@@ -434,6 +436,19 @@ struct multi_array {
       return true;
     }
   }
+
+  void sadd(const T scalar, const multi_array& ma) {
+    if(sl == stloc::host && ma.sl == stloc::host) {
+      Index num_elements = prod(e);
+      for(Index i=0;i<num_elements;i++) {
+        v[i] += scalar*ma.v[i];
+      }
+    } else {
+      cout << "ERROR: multi_array::sadd is not implemented for GPUs" << endl;
+      exit(1);
+    }
+  }
+
 
 private:
   #ifdef __CUDA__

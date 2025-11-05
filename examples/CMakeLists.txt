@@ -58,6 +58,13 @@ if(NOT ${CUDA_ENABLED})
   target_link_libraries(lhd_instability Ensign::Ensign cxxopts)
 endif()
 
+# Drift-kinetics example
+add_executable(drift_kinetics drift_kinetics_interpolatory.cpp)
+add_dependencies(drift_kinetics Ensign)
+
+target_link_libraries(drift_kinetics Ensign::Ensign cxxopts)
+
+
 if(cxxopts_FOUND)
   #target_link_libraries(linear_landau_3d cxxopts::cxxopts)
   target_link_libraries(vlasov_poisson cxxopts::cxxopts)
