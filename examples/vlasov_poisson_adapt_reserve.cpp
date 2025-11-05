@@ -923,6 +923,79 @@ private:
   std::unique_ptr<vec> d_lim_vv;
 };
 
+struct BUG_S_step_adapt {
+
+  BUG_S_step_adapt(stloc _sl, grid_info_reserve<3> _gi, const blas_ops* _blas)
+    : sl(_sl), gi(_gi), blas(_blas), tmpSS(_sl), tmpS(_sl), tmpS2(_sl) {
+
+      tmpSS.resize({2*gi.r,2*gi.r});
+      tmpS.resize({2*gi.r,2*gi.r});
+      tmpS2.resize({2*gi.r,2*gi.r});
+      SS = create_rk4_array({2*gi.r,2*gi.r}, sl);
+  }
+
+  void rk4_S_rhs(mat& U, const array<mat,3>& C1, const array<mat,3>& C2, const array<mat,3>& D1, const array<mat,3>& D2, mat& out){
+
+    blas->matmul(D2[0],U,tmpS);
+    blas->matmul_transb(tmpS,C1[0],out);
+    blas->matmul(D2[1],U,tmpS);
+    blas->matmul_transb(tmpS,C1[1],tmpS2);
+    out += tmpS2;
+    blas->matmul(D2[2],U,tmpS);
+    blas->matmul_transb(tmpS,C1[2],tmpS2);
+    out += tmpS2;
+    blas->matmul(D1[0],U,tmpS);
+    blas->matmul_transb(tmpS,C2[0],tmpS2);
+    out -= tmpS2;
+    blas->matmul(D1[1],U,tmpS);
+    blas->matmul_transb(tmpS,C2[1],tmpS2);
+    out -= tmpS2;
+    blas->matmul(D1[2],U,tmpS);
+    blas->matmul_transb(tmpS,C2[2],tmpS2);
+    out -= tmpS2;
+    out *= -1;
+  }
+
+  void rk4_S(mat& U, Index n, double tau, const array<mat,3>& C1, const array<mat,3>& C2, const array<mat,3>& D1,const array<mat,3>& D2){
+    //Input overwritten
+    for(Index i = 0; i < n; i++){
+      rk4_S_rhs(U, C1, C2, D1, D2, SS[0]);
+      setmultadd_rk4(tmpSS,U,tau/2.0, SS[0]);
+      rk4_S_rhs(tmpSS, C1, C2, D1, D2, SS[1]);
+      setmultadd_rk4(tmpSS,U,tau/2.0,SS[1]);
+      rk4_S_rhs(tmpSS, C1, C2, D1, D2, SS[2]);
+      setmultadd_rk4(tmpSS,U,tau,SS[2]);
+      rk4_S_rhs(tmpSS, C1, C2, D1, D2, SS[3]);
+      finstage_rk4(U,SS[0],SS[1],SS[2],SS[3],tau);
+    }
+  }
+
+  void operator()(double tau, mat& S, const array<mat,3>& C1, const array<mat,3>& C2, const array<mat,3>& D1, const array<mat,3>& D2, const blas_ops& blas, Index nsteps_int=1) {
+
+    rk4_S(S, nsteps_int, tau/nsteps_int, C1, C2, D1, D2);
+  }
+
+  void update_info(Index nr){
+    gi.update_rank(nr);
+    tmpSS.resize_ad({2*gi.r,2*gi.r});
+    tmpS.resize_ad({2*gi.r,2*gi.r});
+    tmpS2.resize_ad({2*gi.r,2*gi.r});
+    for(int i=0; i<4; i++){
+      SS[i].resize_ad({2*gi.r,2*gi.r});
+    }
+
+  }
+
+private:
+  grid_info_reserve<3> gi;
+  stloc sl;
+  const blas_ops* blas;
+
+  mat tmpSS, tmpS, tmpS2;
+  array<mat,4> SS;
+
+};
+
 void mgs_orthcol_cpu(multi_array<double,2>& X, double w) {
 
   array<Index,2> dims = X.shape();
@@ -1539,6 +1612,209 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
 
 }
 
+void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol1, double tol2, Index min_r, Index max_r, string ec, Index snapshots, const blas_ops& blas){
+
+  gt::start("Initialization");
+  stloc sl = (CPU) ? stloc::host : stloc::device;
+
+  orthogonalize gs(&blas);
+
+  // Initialization
+  lr2<double> lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, sl);
+
+  if(sl == stloc::host) {
+    initialize(lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
+  } else {
+    lr2<double> h_lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
+    initialize(h_lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
+    lr_sol = h_lr_sol;
+  }
+  ofstream el_energyf("evolution.data");
+  ofstream contf("contf.data");
+  el_energyf.precision(16);
+  double t = 0.0;
+  Index n_steps = ceil(final_time/tau);
+
+  vector<int> h_rank(n_steps);
+
+  array<vec,3> E = create_vec_array(gi.dxx_mult, sl);
+  array<vec,3> Etmp = create_vec_array(gi.dxx_mult, sl);
+
+  PS_K_step_adapt K_step_rk4(sl, gi, &blas);
+  PS_L_step_adapt L_step_rk4(sl, gi, &blas);
+  BUG_S_step_adapt S_step_rk4(sl, gi, &blas);
+
+  mat Xn({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
+  mat Vn({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r}, sl);
+
+  ////
+  mat Stmp({2*gi.r,2*gi.r}, sl);
+  mat Mhat({gi.rmax,gi.rmax},{2*gi.r,gi.r}, sl);
+  mat Nhat({gi.rmax,gi.rmax},{2*gi.r,gi.r}, sl);
+  mat Shat({2*gi.r,2*gi.r}, sl);
+  ////
+
+  electric_field efield(sl, gi);
+
+  coeff_C compute_C(sl, gi);
+  coeff_D compute_D(sl, gi);
+
+  array<mat, 3> C1 = create_mat_array({gi.r,gi.r}, sl);
+  array<mat, 3> C2 = create_mat_array({gi.r,gi.r}, sl);
+
+  array<mat, 3> D1   = create_mat_array({gi.r,gi.r}, sl);
+  array<mat, 3> D2   = create_mat_array({gi.r,gi.r}, sl);
+
+  // needed for error control
+  mat UUs({2*gi.r,2*gi.r}, sl);
+  mat VVs({2*gi.r,2*gi.r}, sl);
+  vec sigma({2*gi.r}, sl);
+
+  Index newr;
+  gt::stop("Initialization");
+
+  cout.precision(5);
+  gt::start("Main loop");
+  for(Index kk=0; kk<n_steps; kk++){
+
+    cout << "Step " << kk << " of " << n_steps << endl;
+
+    h_rank[kk] = (int)gi.r;
+
+    gt::start("K step");
+    // Compute K
+    blas.matmul(lr_sol.X,lr_sol.S,Xn); // Xn is K
+    gt::stop("K step");
+
+    gt::start("Electric field");
+    // Electric field
+    efield(Xn, lr_sol.V, E, blas);
+    gt::stop("Electric field");
+    gt::start("Electric energy");
+    double el_energy = electric_energy(E, gi, &blas);
+    gt::stop("Electric energy");
+    cout << el_energy << endl;
+
+    // ---- K step ----
+    gt::start("C coeffs");
+    compute_C(lr_sol.V, C1, C2, blas);
+    gt::stop("C coeffs");
+
+    gt::start("K step");
+    K_step_rk4(tau, Xn, E, C1, C2, nsteps_int);
+    gt::stop("K step");
+
+    // HERE AUGMENTATION K
+    gt::start("K step aug");
+    Xn.update_shape({gi.dxx_mult,2*gi.r});
+    #ifdef __OPENMP__
+    #pragma omp parallel for
+    #endif
+    for(Index i = gi.dxx_mult*gi.r; i < gi.dxx_mult*(2*gi.r); i++){
+      Index rr = i%gi.dxx_mult;
+      Index cc = i/gi.dxx_mult;
+      Xn(rr,cc) = lr_sol.X(rr,cc-gi.r);
+    }
+    
+    gs(Xn, Stmp, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]);
+    blas.matmul_transa(Xn,lr_sol.X,Mhat);
+    Mhat *= gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2];
+    gt::stop("K step aug");
+
+    // ---- L step ----
+    gt::start("D coeffs");
+    compute_D(lr_sol.X, E, D1, D2, blas);
+    gt::stop("D coeffs");
+
+    gt::start("L step");
+    blas.matmul_transb(lr_sol.V,lr_sol.S,Vn); // Vn is L
+    L_step_rk4(tau, Vn, D1, D2, nsteps_int);
+    gt::stop("L step");
+
+    // HERE AUGMENTATION L
+    gt::start("L step aug");
+    Vn.update_shape({gi.dvv_mult,2*gi.r});
+    #ifdef __OPENMP__
+    #pragma omp parallel for
+    #endif
+    for(Index i = gi.dvv_mult*gi.r; i < gi.dvv_mult*(2*gi.r);i++){
+      Index rr = i%gi.dvv_mult;
+      Index cc = i/gi.dvv_mult;
+      Vn(rr,cc) = lr_sol.V(rr,cc-gi.r);
+    }
+    gs(Vn, Stmp, gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
+    blas.matmul_transa(Vn,lr_sol.V,Nhat);
+    Nhat *= gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2];
+    gt::stop("L step aug");
+
+    // ---- S step ----
+    Stmp.resize({2*gi.r,gi.r});
+    blas.matmul(Mhat,lr_sol.S,Stmp);
+    blas.matmul_transb(Stmp,Nhat,Shat);
+
+    // Recompute C and D coeffs, fixed electric field
+    for(int ii = 0; ii < 3; ii++){
+      C1[ii].resize({2*gi.r,2*gi.r});
+      C2[ii].resize({2*gi.r,2*gi.r});
+      D1[ii].resize({2*gi.r,2*gi.r});
+      D2[ii].resize({2*gi.r,2*gi.r});
+    }
+    compute_C(Vn, C1, C2, blas);
+    compute_D(Xn, E, D1, D2, blas);
+
+    gt::start("S step");
+    S_step_rk4(tau, Shat, C1, C2, D1, D2, nsteps_int);
+    gt::stop("S step");
+
+    // Determine new rank
+    gt::start("SVD decomposition");
+    svd(Shat, UUs, VVs, sigma, blas);
+    gt::stop("SVD decomposition");
+
+    for(Index idx = 0; idx < 2*gi.r; idx++){
+      double psum = 0;
+      for(Index ii = idx; ii < 2*gi.r; ii++){
+        psum += sigma(ii)*sigma(ii);
+      }
+      if (sqrt(psum) <= tol1){
+        newr = idx+1;
+        break;
+      }
+    }
+
+    // Now truncate and do all the updates
+    gi.update_rank(newr);
+    lr_sol.update_info(gi.r);
+    #ifdef __OPENMP__
+    #pragma omp parallel for
+    #endif
+    for(Index i=0; i < lr_sol.S.num_elements(); i++){
+      Index idx_r = i%gi.r;
+      Index idx_c = i/gi.r;
+      if(idx_r == idx_c){
+        lr_sol.S(idx_r,idx_c) = sigma(idx_r);
+      } else {
+        lr_sol.S(idx_r,idx_c) = 0.0;
+      }
+    }
+    UUs.update_shape({gi.dxx_mult,gi.r});
+    VVs.update_shape({gi.dvv_mult,gi.r});
+    blas.matmul(Xn,UUs,lr_sol.X);
+    blas.matmul(Vn,VVs,lr_sol.V);
+    print(lr_sol.S);
+    exit(1);
+
+
+  }
+  gt::stop("Main loop");
+
+  ofstream h_rank_f("h_rank.data");
+  for(Index i = 0; i < h_rank.size(); i++){
+    h_rank_f << h_rank[i] << endl;
+  }
+}
+
+
 int main(int argc, char** argv){
 
   cxxopts::Options options("vlasov_poisson", "3+3 dimensional dynamical low-rank Vlasov--Poisson solver");
@@ -1549,7 +1825,7 @@ int main(int argc, char** argv){
   ("nv", "Number of grid points in velocity (as a whitespace separated list)", cxxopts::value<string>()->default_value("16 16 16"))
   ("final_time", "Time to which the simulation is run", cxxopts::value<double>()->default_value("40.0"))
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("0.02"))
-  ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("20"))
+  ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("30"))
   ("r_min", "Minimum rank of the simulation", cxxopts::value<int>()->default_value("10"))
   ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("100"))
   ("err", "Error control", cxxopts::value<string>()->default_value("ee"))
@@ -1655,7 +1931,8 @@ int main(int argc, char** argv){
     cout << "Tolerance : " << tol1 << endl;
     cout << "Initial rank: " << gi.r << endl;
 
-    integration_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
+    //integration_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
+    BUG_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
 
     //cout << gt::sorted_output() << endl;
   } else {
