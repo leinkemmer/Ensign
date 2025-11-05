@@ -340,7 +340,7 @@ target_include_directories(Ensign
 
 # If Ensign is being bundled, disable tests and examples
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
-  #add_subdirectory(tests)
+  add_subdirectory(tests)
   add_subdirectory(examples)
 endif()
 

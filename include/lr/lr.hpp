@@ -32,7 +32,7 @@ struct lr2 {
 
   void update_info(Index r) {
     X.update_shape({X.shape()[0],r});
-    S.resize_ad({r,r});
+    S.resize({r,r});
     V.update_shape({V.shape()[0],r});
   }
 

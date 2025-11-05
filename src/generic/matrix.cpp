@@ -820,7 +820,7 @@ void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_arr
     MKL_INT m = input.shape()[0];
     MKL_INT n = input.shape()[1];
     MKL_INT m_U = U.shape()[0];
-    MKL_INT m_V = V.shape()[0];
+    MKL_INT m_V = V.shape()[1];
     #else
     int work_query = -1;
     int info;
@@ -829,22 +829,30 @@ void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_arr
     int m = input.shape()[0];
     int n = input.shape()[1];
     int m_U = U.shape()[0];
-    int m_V = V.shape()[0];
-    #endif
-
+    int m_V = V.shape()[1];
+    #endif 
+  
     multi_array<double,2> input_copy = input; // Lapack overwrites the input data
-
+  
+    multi_array<double,2> VV({V.shape()[1], V.shape()[0]});
     vector<double> work({1});
-    dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &work_query, &info);
-
-    size = work[0];
-    
+    dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, VV.data(), &m_V, work.data(), &work_query, &info);
+      
+    size = work[0]; 
     work.resize({(size_t)size});
-    dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, V.data(), &m_V, work.data(), &size, &info);
+    dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), U.data(), &m_U, VV.data(), &m_V, work.data(), &size, &info);
+      
+    // lapack actually computes V^T and not V
+    //transpose_inplace(V);
+    blas.transpose(VV, V);
   } else {
     #ifdef __CUDA__
       int m = input.shape()[0];
       int n = input.shape()[1];
+      if(m != n) {
+          cout << "ERROR: svd with m not equal to n is not yet implemented on the GPU" << endl;
+          exit(1);
+      }
       int lwork;
 
       cusolverDnDgesvd_bufferSize(blas.handle_cusolver,m,n,&lwork);
@@ -859,10 +867,10 @@ void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_arr
       cudaMalloc(reinterpret_cast<void **>(&devInfo), sizeof(int));
       cusolverDnDgesvd(blas.handle_cusolver,mode,mode,m,n,input_copy.data(),m,sigma_diag.data(),U.data(),m_U,V.data(),m_V,work.data(),lwork,rwork,devInfo);
       cudaFree(devInfo);
+    // Computed V^T and not V
+    transpose_inplace(V);
     #endif
   }
-  // Computed V^T and not V
-  transpose_inplace(V);
 }
 
 template<> 
@@ -912,35 +920,6 @@ void qr(const multi_array<double,2>& Q, multi_array<double,2>& R) {
     // TODO
     #endif
   }
-}
-
-template<>
-void svd_diag(const multi_array<double,2>& input, multi_array<double,1>& sigma_diag, const blas_ops& blas) {
-  #ifdef __MKL__
-  MKL_INT work_query = -1;
-  MKL_INT info;
-  MKL_INT size;
-  char mode = 'N';
-  MKL_INT m = input.shape()[0];
-  MKL_INT n = input.shape()[1];
-  #else
-  int work_query = -1;
-  int info;
-  int size;
-  char mode = 'N';
-  int m = input.shape()[0];
-  int n = input.shape()[1];
-  #endif
-
-  multi_array<double,2> input_copy = input; // Lapack overwrites the input data
-
-  multi_array<double,2> VV({V.shape()[1], V.shape()[0]});
-  vector<double> work({1});
-  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), nullptr, &m, nullptr, &n, work.data(), &work_query, &info);
-
-  size = work[0];
-  work.resize({(size_t)size});
-  dgesvd_(&mode, &mode, &m, &n, input_copy.data(), &m, sigma_diag.data(), nullptr, &m, nullptr, &n, work.data(), &size, &info);
 }
 
 } // namespace Matrix

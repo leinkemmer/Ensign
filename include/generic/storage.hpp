@@ -21,16 +21,16 @@ struct multi_array {
     fill(emax.begin(), emax.end(), 0);
   }
 
-  multi_array(array<Index,d> _e, stloc _sl=stloc::host) : sl(_sl) {
+  multi_array(array<Index,d> _e, stloc _sl=stloc::host) : sl(_sl), v(nullptr) {
     resize(_e);
   }
   
-  multi_array(array<Index,d> _emax, array<Index,d> _e, stloc _sl=stloc::host) : sl(_sl) {
+  multi_array(array<Index,d> _emax, array<Index,d> _e, stloc _sl=stloc::host) : sl(_sl), v(nullptr) {
     reserve(_emax,_e);
   }
 
   // copy constructor
-  multi_array(const multi_array& ma) {
+  multi_array(const multi_array& ma) : v(nullptr) {
     sl = ma.sl;
     resize(ma.e);
     if(sl == stloc::host) {
@@ -85,9 +85,15 @@ struct multi_array {
     emax = _e;
     Index num_elements = prod(e);
     if(sl == stloc::host) {
+      if(v != nullptr) {
+          free(v);
+      }
       v = (T*)malloc(sizeof(T)*num_elements);
     } else {
       #ifdef __CUDA__
+      if(v != nullptr) {
+        cudaFree(v);
+      }
       v = (T*)gpu_malloc(sizeof(T)*num_elements);
       #else
       cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
@@ -96,44 +102,22 @@ struct multi_array {
       #endif
     }
   }
- 
-  // PROBABLY NOT NEEDED, TO BE REMOVED
-  void resize_ad(array<Index,d> _e) {
-    e = _e;
-    emax = _e;
-    Index num_elements = prod(e);
-    if(sl == stloc::host) {
-      free(v);
-      v = (T*)malloc(sizeof(T)*num_elements);
-    } else {
-      #ifdef __CUDA__
-      cudaFree(v);
-      v = (T*)gpu_malloc(sizeof(T)*num_elements);
-      #else
-      cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
-      << __LINE__ << endl;
-      exit(1);
-      #endif
-    }
-  }
-
+  
   void reserve(array<Index,d> _emax, array<Index,d> _e) {
     // Reserve memory for emax for a multiarray of actual size e
     e = _e;
     emax = _emax;
     Index num_elements = prod(emax);
     if(sl == stloc::host) {
-      v = (T*)malloc(sizeof(T)*num_elements);
-      /*
-      // FOR LAZY MANAGEMENT OF MEMORY TO CHECK ACTUAL MEMORY
-     
-     #pragma omp parallel for
-      for(Index iii = 0; iii < num_elements; iii++){
-        v[iii] = double(0.0);
+      if(v != nullptr) {
+          free(v);
       }
-     */
+      v = (T*)malloc(sizeof(T)*num_elements);
     } else {
       #ifdef __CUDA__
+      if(v != nullptr) {
+          cudaFree(v);
+      }
       v = (T*)gpu_malloc(sizeof(T)*num_elements);
       #else
       cout << "ERROR: compiled without GPU support" << __FILE__ << ":"

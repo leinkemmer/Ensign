@@ -418,7 +418,7 @@ struct electric_field {
 
   void update_info(Index nr){
     gi.update_rank(nr);
-    int_V.resize_ad({gi.r});
+    int_V.resize({gi.r});
   }
 
   void operator()(const mat& K, const mat& V, array<vec,3>& E, const blas_ops& blas) {
@@ -764,11 +764,11 @@ struct PS_S_step_adapt {
 
   void update_info(Index nr){
     gi.update_rank(nr);
-    tmpSS.resize_ad({gi.r,gi.r});
-    tmpS.resize_ad({gi.r,gi.r});
-    tmpS2.resize_ad({gi.r,gi.r});
+    tmpSS.resize({gi.r,gi.r});
+    tmpS.resize({gi.r,gi.r});
+    tmpS2.resize({gi.r,gi.r});
     for(int i=0; i<4; i++){
-      SS[i].resize_ad({gi.r,gi.r});
+      SS[i].resize({gi.r,gi.r});
     }
 
   }
@@ -977,11 +977,11 @@ struct BUG_S_step_adapt {
 
   void update_info(Index nr){
     gi.update_rank(nr);
-    tmpSS.resize_ad({2*gi.r,2*gi.r});
-    tmpS.resize_ad({2*gi.r,2*gi.r});
-    tmpS2.resize_ad({2*gi.r,2*gi.r});
+    tmpSS.resize({2*gi.r,2*gi.r});
+    tmpS.resize({2*gi.r,2*gi.r});
+    tmpS2.resize({2*gi.r,2*gi.r});
     for(int i=0; i<4; i++){
-      SS[i].resize_ad({2*gi.r,2*gi.r});
+      SS[i].resize({2*gi.r,2*gi.r});
     }
 
   }
@@ -1287,18 +1287,18 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
                 }
               }
           }
-          Sn.resize_ad({gi.r,gi.r});
+          Sn.resize({gi.r,gi.r});
           
           for(int ii = 0; ii < 3; ii++){
-            C1[ii].resize_ad({gi.r,gi.r});
-            C2[ii].resize_ad({gi.r,gi.r});
-            D1[ii].resize_ad({gi.r,gi.r});
-            D2[ii].resize_ad({gi.r,gi.r});
+            C1[ii].resize({gi.r,gi.r});
+            C2[ii].resize({gi.r,gi.r});
+            D1[ii].resize({gi.r,gi.r});
+            D2[ii].resize({gi.r,gi.r});
           }
-          UUs.resize_ad({gi.r,gi.r});
-          VVs.resize_ad({gi.r,gi.r});
-          tmps.resize_ad({gi.r,gi.r});
-          sigma.resize_ad({gi.r});
+          UUs.resize({gi.r,gi.r});
+          VVs.resize({gi.r,gi.r});
+          tmps.resize({gi.r,gi.r});
+          sigma.resize({gi.r});
 
           Kad.update_shape({gi.dxx_mult,gi.r});
           efield.update_info(gi.r);
@@ -1350,18 +1350,18 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
                   #endif
                 }
             }
-            Sn.resize_ad({gi.r,gi.r});
+            Sn.resize({gi.r,gi.r});
 
             for(int ii = 0; ii < 3; ii++){
-              C1[ii].resize_ad({gi.r,gi.r});
-              C2[ii].resize_ad({gi.r,gi.r});
-              D1[ii].resize_ad({gi.r,gi.r});
-              D2[ii].resize_ad({gi.r,gi.r});
+              C1[ii].resize({gi.r,gi.r});
+              C2[ii].resize({gi.r,gi.r});
+              D1[ii].resize({gi.r,gi.r});
+              D2[ii].resize({gi.r,gi.r});
             }
-            UUs.resize_ad({gi.r,gi.r});
-            VVs.resize_ad({gi.r,gi.r});
-            tmps.resize_ad({gi.r,gi.r});
-            sigma.resize_ad({gi.r});
+            UUs.resize({gi.r,gi.r});
+            VVs.resize({gi.r,gi.r});
+            tmps.resize({gi.r,gi.r});
+            sigma.resize({gi.r});
 
             Kad.update_shape({gi.dxx_mult,gi.r});
             efield.update_info(gi.r);
@@ -1498,18 +1498,18 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
                 }
               }
           }
-          Sn.resize_ad({gi.r,gi.r});
+          Sn.resize({gi.r,gi.r});
           
           for(int ii = 0; ii < 3; ii++){
-            C1[ii].resize_ad({gi.r,gi.r});
-            C2[ii].resize_ad({gi.r,gi.r});
-            D1[ii].resize_ad({gi.r,gi.r});
-            D2[ii].resize_ad({gi.r,gi.r});
+            C1[ii].resize({gi.r,gi.r});
+            C2[ii].resize({gi.r,gi.r});
+            D1[ii].resize({gi.r,gi.r});
+            D2[ii].resize({gi.r,gi.r});
           }
-          UUs.resize_ad({gi.r,gi.r});
-          VVs.resize_ad({gi.r,gi.r});
-          tmps.resize_ad({gi.r,gi.r});
-          sigma.resize_ad({gi.r});
+          UUs.resize({gi.r,gi.r});
+          VVs.resize({gi.r,gi.r});
+          tmps.resize({gi.r,gi.r});
+          sigma.resize({gi.r});
 
           Kad.update_shape({gi.dxx_mult,gi.r});
           efield.update_info(gi.r);
@@ -1561,18 +1561,18 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
                   #endif
                 }
             }
-            Sn.resize_ad({gi.r,gi.r});
+            Sn.resize({gi.r,gi.r});
 
             for(int ii = 0; ii < 3; ii++){
-              C1[ii].resize_ad({gi.r,gi.r});
-              C2[ii].resize_ad({gi.r,gi.r});
-              D1[ii].resize_ad({gi.r,gi.r});
-              D2[ii].resize_ad({gi.r,gi.r});
+              C1[ii].resize({gi.r,gi.r});
+              C2[ii].resize({gi.r,gi.r});
+              D1[ii].resize({gi.r,gi.r});
+              D2[ii].resize({gi.r,gi.r});
             }
-            UUs.resize_ad({gi.r,gi.r});
-            VVs.resize_ad({gi.r,gi.r});
-            tmps.resize_ad({gi.r,gi.r});
-            sigma.resize_ad({gi.r});
+            UUs.resize({gi.r,gi.r});
+            VVs.resize({gi.r,gi.r});
+            tmps.resize({gi.r,gi.r});
+            sigma.resize({gi.r});
 
             Kad.update_shape({gi.dxx_mult,gi.r});
             efield.update_info(gi.r);
@@ -1931,8 +1931,8 @@ int main(int argc, char** argv){
     cout << "Tolerance : " << tol1 << endl;
     cout << "Initial rank: " << gi.r << endl;
 
-    //integration_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
-    BUG_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
+    integration_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
+    //BUG_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
 
     //cout << gt::sorted_output() << endl;
   } else {
