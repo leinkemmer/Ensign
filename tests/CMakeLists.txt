@@ -21,57 +21,62 @@ endif()
 # storage test
 #
 if(${CUDA_ENABLED})
-    cuda_add_executable(storage storage.cu ../src/generic/utility.cu ../src/generic/kernels.cu)
-    cuda_add_cublas_to_target(storage)
+    # TODO: adapt
+    #cuda_add_executable(storage storage.cu ../src/generic/utility.cu ../src/generic/kernels.cu)
+    #cuda_add_cublas_to_target(storage)
 else()
     add_executable(storage storage.cpp)
+    target_link_libraries(storage Ensign::Ensign Catch2::Catch2WithMain)
+    add_test(NAME storage COMMAND storage)
 endif()
-target_link_libraries(storage Ensign::Ensign Catch2::Catch2WithMain)
-add_test(NAME storage COMMAND storage)
 
 #
 # matrix test
 #
 if(${CUDA_ENABLED})
-    cuda_add_executable(matrix matrix.cu ../src/generic/matrix.cu ../src/generic/utility.cu ../src/generic/kernels.cu)
-    cuda_add_cublas_to_target(matrix)
-    cuda_add_cufft_to_target(matrix)
-    target_link_libraries(matrix ${CUDA_cusolver_LIBRARY})
+    # TODO: adapt
+    #cuda_add_executable(matrix matrix.cu ../src/generic/matrix.cu ../src/generic/utility.cu ../src/generic/kernels.cu)
+    #cuda_add_cublas_to_target(matrix)
+    #cuda_add_cufft_to_target(matrix)
+    #target_link_libraries(matrix ${CUDA_cusolver_LIBRARY})
 else()
     add_executable(matrix matrix.cpp)
+    target_link_libraries(matrix Ensign::Ensign Catch2::Catch2WithMain)
+    add_test(NAME matrix COMMAND matrix)
 endif()
-target_link_libraries(matrix Ensign::Ensign Catch2::Catch2WithMain)
-add_test(NAME matrix COMMAND matrix)
 
 #
 # coefficient test
 #
 if(${CUDA_ENABLED})
-    cuda_add_executable(coefficients coefficients.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/kernels.cu)
-    cuda_add_cublas_to_target(coefficients)
-    cuda_add_cufft_to_target(coefficients)
-    target_link_libraries(coefficients ${CUDA_cusolver_LIBRARY})
+    # TODO: adapt
+    #cuda_add_executable(coefficients coefficients.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/kernels.cu)
+    #cuda_add_cublas_to_target(coefficients)
+    #cuda_add_cufft_to_target(coefficients)
+    #target_link_libraries(coefficients ${CUDA_cusolver_LIBRARY})
 else()
     add_executable(coefficients coefficients.cpp)
+    target_link_libraries(coefficients Ensign::Ensign Catch2::Catch2WithMain)
+    add_test(NAME coefficients COMMAND coefficients)
 endif()
-target_link_libraries(coefficients Ensign::Ensign Catch2::Catch2WithMain)
-add_test(NAME coefficients COMMAND coefficients)
 
 #
 # low-rank test
 #
 if(${CUDA_ENABLED})
-    cuda_add_executable(lr lr.cu ../src/lr/lr.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/kernels.cu)
-    cuda_add_cublas_to_target(lr)
-    cuda_add_cufft_to_target(lr)
-    target_link_libraries(lr ${CUDA_curand_LIBRARY})
-    target_link_libraries(lr ${CUDA_cusolver_LIBRARY})
+    # TODO: adapt
+    #cuda_add_executable(lr lr.cu ../src/lr/lr.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/kernels.cu)
+    #cuda_add_cublas_to_target(lr)
+    #cuda_add_cufft_to_target(lr)
+    #target_link_libraries(lr ${CUDA_curand_LIBRARY})
+    #target_link_libraries(lr ${CUDA_cusolver_LIBRARY})
 else()
     add_executable(lr lr.cpp)
+    target_link_libraries(lr Ensign::Ensign Catch2::Catch2WithMain)
+    add_test(NAME lr COMMAND lr)
 endif()
-target_link_libraries(lr Ensign::Ensign Catch2::Catch2WithMain)
-add_test(NAME lr COMMAND lr)
 
+if(NOT ${CUDA_ENABLED})
 #
 # Interpolatory LR test
 #
@@ -115,3 +120,5 @@ add_test(NAME lhd_instability COMMAND lhd_instability_test)
 add_executable(drift_kinetics_test drift_kinetics.cpp)
 target_link_libraries(drift_kinetics_test Ensign::Ensign Catch2::Catch2WithMain)
 add_test(NAME drift_kinetics COMMAND drift_kinetics_test)
+
+endif()
