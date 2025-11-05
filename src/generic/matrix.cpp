@@ -759,7 +759,11 @@ void lu_solver<T>::lu() {
     if constexpr(std::is_same_v<T, double>) {
       dgetrf_(&n, &n, A.data(), &n, ipiv.data(), &info);
     } else if constexpr(std::is_same_v<T, complex<double>>) {
+      #ifdef __MKL__
+      zgetrf_(&n, &n, (MKL_Complex16*)A.data(), &n, ipiv.data(), &info);
+      #else
       zgetrf_(&n, &n, A.data(), &n, ipiv.data(), &info);
+      #endif
     }
     if(info != 0) {
       cout << "getrf failed with info = " << info << endl;
@@ -781,7 +785,7 @@ void lu_solver<T>::solve(multi_array<T,1>& xb) {
     char trans = 'N';
     #ifdef __MKL__
     MKL_INT n = A.shape()[0];
-    MKL_INT rhs = 1;
+    MKL_INT nrhs = 1;
     MKL_INT info;
     #else
     int n = A.shape()[0];
@@ -792,7 +796,11 @@ void lu_solver<T>::solve(multi_array<T,1>& xb) {
     if constexpr(std::is_same_v<T, double>) {
       dgetrs_(&trans, &n, &nrhs, A.data(), &n, ipiv.data(), xb.data(), &n, &info);
     } else if constexpr(std::is_same_v<T, complex<double>>) {
+      #ifdef __MKL__
+      zgetrs_(&trans, &n, &nrhs, (const MKL_Complex16*)A.data(), &n, ipiv.data(), (MKL_Complex16*)xb.data(), &n, &info);
+      #else
       zgetrs_(&trans, &n, &nrhs, A.data(), &n, ipiv.data(), xb.data(), &n, &info);
+      #endif
     }
     if(info != 0) {
       cout << "getrs failed with info = " << info << endl;
