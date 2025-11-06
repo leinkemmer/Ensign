@@ -1138,6 +1138,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
   gt::stop("Initialization");
 
   Index kk = 1;
+  cout.precision(8);
   gt::start("Main loop");
   while(kk<=n_steps){
 
@@ -1157,7 +1158,6 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
     gt::start("Electric energy");
     double el_energy = electric_energy(E, gi, &blas);
     gt::stop("Electric energy");
-    cout.precision(16);
     cout << el_energy << endl;
 
     // ---- K step ----
@@ -1649,8 +1649,8 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
 
   ////
   mat Stmp({2*gi.r,2*gi.r}, sl);
-  mat Mhat({gi.rmax,gi.rmax},{2*gi.r,gi.r}, sl);
-  mat Nhat({gi.rmax,gi.rmax},{2*gi.r,gi.r}, sl);
+  mat Mhat({2*gi.r,gi.r}, sl);
+  mat Nhat({2*gi.r,gi.r}, sl);
   mat Shat({2*gi.r,2*gi.r}, sl);
   ////
 
@@ -1673,11 +1673,11 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
   Index newr;
   gt::stop("Initialization");
 
-  cout.precision(5);
+  cout.precision(8);
   gt::start("Main loop");
   for(Index kk=0; kk<n_steps; kk++){
 
-    cout << "Step " << kk << " of " << n_steps << endl;
+    cout << "Step " << kk+1 << " of " << n_steps << endl;
 
     h_rank[kk] = (int)gi.r;
 
@@ -1694,6 +1694,7 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
     double el_energy = electric_energy(E, gi, &blas);
     gt::stop("Electric energy");
     cout << el_energy << endl;
+    el_energyf << t << " " << el_energy << endl;
 
     // ---- K step ----
     gt::start("C coeffs");
@@ -1703,6 +1704,7 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
     gt::start("K step");
     K_step_rk4(tau, Xn, E, C1, C2, nsteps_int);
     gt::stop("K step");
+
 
     // HERE AUGMENTATION K
     gt::start("K step aug");
@@ -1720,6 +1722,7 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
     blas.matmul_transa(Xn,lr_sol.X,Mhat);
     Mhat *= gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2];
     gt::stop("K step aug");
+   
 
     // ---- L step ----
     gt::start("D coeffs");
@@ -1747,6 +1750,7 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
     Nhat *= gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2];
     gt::stop("L step aug");
 
+
     // ---- S step ----
     Stmp.resize({2*gi.r,gi.r});
     blas.matmul(Mhat,lr_sol.S,Stmp);
@@ -1759,13 +1763,15 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
       D1[ii].resize({2*gi.r,2*gi.r});
       D2[ii].resize({2*gi.r,2*gi.r});
     }
+    compute_C.update_info(2*gi.r);
+    compute_D.update_info(2*gi.r);
     compute_C(Vn, C1, C2, blas);
     compute_D(Xn, E, D1, D2, blas);
 
     gt::start("S step");
     S_step_rk4(tau, Shat, C1, C2, D1, D2, nsteps_int);
     gt::stop("S step");
-
+   
     // Determine new rank
     gt::start("SVD decomposition");
     svd(Shat, UUs, VVs, sigma, blas);
@@ -1780,6 +1786,11 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
         newr = idx+1;
         break;
       }
+    }
+
+    if (newr > gi.rmax/2){
+      cout << "Rank can't exceed maxrank, setting rank=rmax/2" << endl;
+      newr = gi.rmax/2;
     }
 
     // Now truncate and do all the updates
@@ -1797,13 +1808,36 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
         lr_sol.S(idx_r,idx_c) = 0.0;
       }
     }
-    UUs.update_shape({gi.dxx_mult,gi.r});
-    VVs.update_shape({gi.dvv_mult,gi.r});
+    UUs.update_shape({2*gi.r,gi.r});
+    VVs.update_shape({2*gi.r,gi.r});
     blas.matmul(Xn,UUs,lr_sol.X);
     blas.matmul(Vn,VVs,lr_sol.V);
-    print(lr_sol.S);
-    exit(1);
 
+    K_step_rk4.update_info(gi.r);
+    S_step_rk4.update_info(gi.r);
+    L_step_rk4.update_info(gi.r);
+    Xn.update_shape({gi.dxx_mult,gi.r});
+    Vn.update_shape({gi.dvv_mult,gi.r});
+
+    Stmp.resize({2*gi.r,2*gi.r});
+    Mhat.resize({2*gi.r,gi.r});
+    Nhat.resize({2*gi.r,gi.r});
+    Shat.resize({2*gi.r,2*gi.r});
+
+    efield.update_info(gi.r);
+    compute_C.update_info(gi.r);
+    compute_D.update_info(gi.r);
+    for(int ii = 0; ii < 3; ii++){
+      C1[ii].resize({gi.r,gi.r});
+      C2[ii].resize({gi.r,gi.r});
+      D1[ii].resize({gi.r,gi.r});
+      D2[ii].resize({gi.r,gi.r});
+    }
+    UUs.resize({2*gi.r,2*gi.r});
+    VVs.resize({2*gi.r,2*gi.r});
+    sigma.resize({2*gi.r});
+
+    t += tau;
 
   }
   gt::stop("Main loop");
@@ -1825,12 +1859,12 @@ int main(int argc, char** argv){
   ("nv", "Number of grid points in velocity (as a whitespace separated list)", cxxopts::value<string>()->default_value("16 16 16"))
   ("final_time", "Time to which the simulation is run", cxxopts::value<double>()->default_value("40.0"))
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("0.02"))
-  ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("30"))
+  ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("10"))
   ("r_min", "Minimum rank of the simulation", cxxopts::value<int>()->default_value("10"))
-  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("100"))
-  ("err", "Error control", cxxopts::value<string>()->default_value("ee"))
+  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("200"))
+  ("err", "Error control", cxxopts::value<string>()->default_value("bug"))
   ("tol_inc", "Tolerance for error control", cxxopts::value<double>()->default_value("0.00001"))
-  ("tol_dec", "Tolerance for error control", cxxopts::value<double>()->default_value("0.000000001"))
+  ("tol_dec", "Tolerance for error control", cxxopts::value<double>()->default_value("0.00000001"))
   ("omp_threads", "Number of OpenMP threads used in CPU parallelization (by default half the number of processes reported by the operating system are used)", cxxopts::value<int>()->default_value("-1"))
   ("snapshots", "Number of files written to disk", cxxopts::value<int>()->default_value("0"))
   ("h,help", "Help message")
@@ -1931,9 +1965,14 @@ int main(int argc, char** argv){
     cout << "Tolerance : " << tol1 << endl;
     cout << "Initial rank: " << gi.r << endl;
 
-    integration_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
-    //BUG_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
-
+    if (ec == "bug"){
+      BUG_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
+    } else if (ec == "ee" || ec == "f"){
+      integration_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
+    } else {
+    cout << "Error control not known." << endl;
+    exit(1);
+    }
     //cout << gt::sorted_output() << endl;
   } else {
     cout << "ERROR: problem with name " << problem << " is not supported" << endl;
