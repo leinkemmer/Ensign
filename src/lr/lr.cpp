@@ -33,10 +33,6 @@ template<>
 std::function<double(double*,double*)> inner_product_from_const_weight(double w, Index N) {
   return [w,N](double* a, double*b) {
     double result = cblas_ddot(N, a, 1, b, 1);
-    //double result=0.0;
-    //for(Index i=0;i<N;i++){
-    //  result += a[i]*b[i];
-    //}
     result *= w;
     return result;
   };
@@ -149,18 +145,18 @@ double ddot(Index n, double* v, int a, double* w, int b){
 }
 
 void daxpy(Index n, double alpha, double* v, int a, double* w, int b){
-  //#ifdef __OPENMP__
-  //#pragma omp parallel for
-  //#endif
+  #ifdef __OPENMP__
+  #pragma omp parallel for
+  #endif
   for(Index i = 0; i < n; i++){
     w[i] = alpha*v[i]+w[i];
   }
 }
 
 void dscal(Index n, double alpha, double* v, int b){
-  //#ifdef __OPENMP__
-  //#pragma omp parallel for
-  //#endif
+  #ifdef __OPENMP__
+  #pragma omp parallel for
+  #endif
   for(Index i = 0; i < n; i++){
     v[i] = v[i]*alpha;
   }
@@ -365,11 +361,10 @@ void orthogonalize_householder_constw_gpu(multi_array<double,2>& Q, multi_array<
 
   int m = Q.shape()[0];   // also lda
   int n = Q.shape()[1];
-  
 
   // allocate memory for tau, work and device info
   double *devTau, *work;
-	int szWork;
+  int szWork;
 
   cudaMalloc((void**)&devTau, n * sizeof(double));
 
@@ -387,8 +382,8 @@ void orthogonalize_householder_constw_gpu(multi_array<double,2>& Q, multi_array<
 
   // copy data from Q to our multi_array R (only upper tridiagonal part of A is R, rest is 0) (R should already be nxn)
   // in our function we already multiply by sqrt(w)
-
   copy_R<<<n,n>>>(m, n, &Q(0,0), &R(0,0), w);
+  cudaDeviceSynchronize();
 
   // we don't allocate extra memory for our second usage of cuSolver, because szwork2 < szwork
   // calculate the orthogonal matrix Q
@@ -396,9 +391,11 @@ void orthogonalize_householder_constw_gpu(multi_array<double,2>& Q, multi_array<
   cudaDeviceSynchronize();
 
   // divide Q by sqrt(w)
+  Q *= (1.0/sqrt(w));
 
-  div_Q<<<m,n>>>(m, n, &Q(0,0), w);
-
+  cudaFree(devTau);
+  cudaFree(work);
+  cudaFree(devInfo);
 }
 
 
@@ -447,9 +444,9 @@ void orthogonalize::operator()(multi_array<double,2>& Q, multi_array<double,2>& 
     R *= sqrt(w);
   } else {
     #ifdef __CUDA__
-    gram_schmidt_gpu(Q, R, w, gen, blas->handle_devres);
+    //gram_schmidt_gpu(Q, R, w, gen, blas->handle_devres);
     //gram_schmidt_can_gpu(Q, R, w, blas->handle_devres);
-    //orthogonalize_householder_constw_gpu(Q, R, w, blas->handle_cusolver);
+    orthogonalize_householder_constw_gpu(Q, R, w, blas->handle_cusolver);
     #else
     cout << "ERROR: orthogonalize_gpu called but no GPU support available." << endl;
     exit(1);

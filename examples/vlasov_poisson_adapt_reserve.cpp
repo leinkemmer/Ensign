@@ -757,7 +757,7 @@ struct PS_S_step_adapt {
     }
   }
 
-  void operator()(double tau, mat& S, const array<mat,3>& C1, const array<mat,3>& C2, const array<mat,3>& D1, const array<mat,3>& D2, const blas_ops& blas, Index nsteps_int=1) {
+  void operator()(double tau, mat& S, const array<mat,3>& C1, const array<mat,3>& C2, const array<mat,3>& D1, const array<mat,3>& D2, Index nsteps_int=1) {
 
     rk4_S(S, nsteps_int, tau/nsteps_int, C1, C2, D1, D2);
   }
@@ -1084,7 +1084,6 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
   gt::start("Initialization");
   stloc sl = (CPU) ? stloc::host : stloc::device;
 
-  //orthogonalize hh(&blas);
   orthogonalize gs(&blas);
 
   // Initialization
@@ -1125,8 +1124,8 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
   array<mat, 3> C1 = create_mat_array({gi.r,gi.r}, sl);
   array<mat, 3> C2 = create_mat_array({gi.r,gi.r}, sl);
 
-  array<mat, 3> D1   = create_mat_array({gi.r,gi.r}, sl);
-  array<mat, 3> D2   = create_mat_array({gi.r,gi.r}, sl);
+  array<mat, 3> D1 = create_mat_array({gi.r,gi.r}, sl);
+  array<mat, 3> D2 = create_mat_array({gi.r,gi.r}, sl);
 
   // needed for error control
   mat Kad({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
@@ -1156,8 +1155,9 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
     efield(Xn, lr_sol.V, E, blas);
     gt::stop("Electric field");
     gt::start("Electric energy");
-    double el_energy = electric_energy(E, gi, &blas);
+    double el_energy = electric_energy(E, gi, blas);
     gt::stop("Electric energy");
+
     cout << el_energy << endl;
 
     // ---- K step ----
@@ -1167,14 +1167,9 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
     gt::start("K step");
     K_step_rk4(tau, Xn, E, C1, C2, nsteps_int);
     gt::start("gs K step");
-    if(Xn.sl == stloc::host){
-      gs(Xn, Sn, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]); // Xn the new X
-    } else{
-      gs(Xn, Sn, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]);
-    }
+    gs(Xn, Sn, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]); // Xn the new X
     gt::stop("gs K step");
     gt::stop("K step");
-    
  
     // ---- S step ----
     gt::start("D coeffs");
@@ -1183,18 +1178,12 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
     gt::start("S step");
     S_step_rk4(tau, Sn, C1, C2, D1, D2, nsteps_int);
     gt::stop("S step");
-
-    gt::start("L step");
+    
     // ---- L step ----
+    gt::start("L step");
     blas.matmul_transb(lr_sol.V,Sn,Vn); // Vn is L
     L_step_rk4(tau, Vn, D1, D2, nsteps_int);
-    
-    
-    if(Vn.sl == stloc::host){
-      gs(Vn, Sn, gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
-    }else{
-      gs(Vn, Sn, gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
-    }
+    gs(Vn, Sn, gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
     transpose_inplace(Sn);
     gt::stop("L step");
 
@@ -1316,6 +1305,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
             lr_sol.X.swap(Xn);
             lr_sol.V.swap(Vn);
             lr_sol.S.swap(Sn);
+
             gt::stop("Accept but min rank: swap");
 
           } else {
@@ -1391,7 +1381,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
       blas.matmul(Xn,Sn,Kad);
       efield(Kad, Vn, Etmp, blas);
 
-      double el_energy_new = electric_energy(Etmp, gi, &blas);
+      double el_energy_new = electric_energy(Etmp, gi, blas);
       gt::stop("NEW el en (matmul, efield, ee)");
       gt::start("SVD decomposition");
       svd(Sn, UUs, VVs, sigma, blas);
@@ -1417,7 +1407,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
       blas.matmul(Xn,VVs,Kad);
       efield(Kad, Vn, Etmp, blas);
 
-      double el_energy_cut = electric_energy(Etmp, gi, &blas);
+      double el_energy_cut = electric_energy(Etmp, gi, blas);
       gt::stop("CUT el en (pmr, matmul, efield, ee)");
 
       double err_el_energy = abs(el_energy_new-el_energy_cut);
@@ -1472,7 +1462,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
 
           gt::start("Reject: increase rank (some resizes rxr)");
 
-          // This could directly become a kernel, but s times s so we'll see
+          // This could directly become a kernel, but r times r so we'll see
           #ifdef __OPENMP__
           #pragma omp parallel for
           #endif
@@ -1499,7 +1489,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
               }
           }
           Sn.resize({gi.r,gi.r});
-          
+
           for(int ii = 0; ii < 3; ii++){
             C1[ii].resize({gi.r,gi.r});
             C2[ii].resize({gi.r,gi.r});
@@ -1605,10 +1595,10 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
   }
   gt::stop("Main loop");
 
-    ofstream h_rank_f("h_rank.data");
-    for(Index i = 0; i < h_rank.size(); i++){
-      h_rank_f << h_rank[i] << endl;
-    }
+  ofstream h_rank_f("h_rank.data");
+  for(Index i = 0; i < h_rank.size(); i++){
+    h_rank_f << h_rank[i] << endl;
+  }
 
 }
 
@@ -1691,7 +1681,7 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
     efield(Xn, lr_sol.V, E, blas);
     gt::stop("Electric field");
     gt::start("Electric energy");
-    double el_energy = electric_energy(E, gi, &blas);
+    double el_energy = electric_energy(E, gi, blas);
     gt::stop("Electric energy");
     cout << el_energy << endl;
     el_energyf << t << " " << el_energy << endl;
@@ -1859,10 +1849,10 @@ int main(int argc, char** argv){
   ("nv", "Number of grid points in velocity (as a whitespace separated list)", cxxopts::value<string>()->default_value("16 16 16"))
   ("final_time", "Time to which the simulation is run", cxxopts::value<double>()->default_value("40.0"))
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("0.02"))
-  ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("10"))
+  ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("30"))
   ("r_min", "Minimum rank of the simulation", cxxopts::value<int>()->default_value("10"))
-  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("200"))
-  ("err", "Error control", cxxopts::value<string>()->default_value("bug"))
+  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("100"))
+  ("err", "Error control", cxxopts::value<string>()->default_value("ee"))
   ("tol_inc", "Tolerance for error control", cxxopts::value<double>()->default_value("0.00001"))
   ("tol_dec", "Tolerance for error control", cxxopts::value<double>()->default_value("0.00000001"))
   ("omp_threads", "Number of OpenMP threads used in CPU parallelization (by default half the number of processes reported by the operating system are used)", cxxopts::value<int>()->default_value("-1"))
