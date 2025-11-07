@@ -107,6 +107,8 @@ __global__ void copy_R(int m, int n, T* Q, T* R, T w);
 template<class T>
 __global__ void div_Q(int m, int n, T* Q, T w);
 
+template<class T>
+__global__ void diag_S(int n, T* S, T* sigma);
 } // namespace Ensign
 
 #endif

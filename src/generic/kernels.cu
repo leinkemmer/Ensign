@@ -28,6 +28,19 @@ template __global__ void div_Q(int, int, double*, double);
 template __global__ void div_Q(int, int, float*, float);
 
 template<class T>
+__global__ void diag_S(int n, T* S, T* sigma) {
+  int i = threadIdx.x;
+  int j = blockIdx.x;
+
+  if(i==j)
+    S[i + j*n] = sigma[i];
+  else
+    S[i + j*n] = 0.0;
+}
+template __global__ void diag_S(int, double*, double*);
+template __global__ void diag_S(int, float*, float*);
+
+template<class T>
 __global__ void fill_gpu(int n, T* v, T alpha){
   int idx = threadIdx.x + blockDim.x * blockIdx.x;
 

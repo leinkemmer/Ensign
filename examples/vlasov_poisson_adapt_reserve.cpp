@@ -1652,14 +1652,16 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
   array<mat, 3> C1 = create_mat_array({gi.r,gi.r}, sl);
   array<mat, 3> C2 = create_mat_array({gi.r,gi.r}, sl);
 
-  array<mat, 3> D1   = create_mat_array({gi.r,gi.r}, sl);
-  array<mat, 3> D2   = create_mat_array({gi.r,gi.r}, sl);
+  array<mat, 3> D1 = create_mat_array({gi.r,gi.r}, sl);
+  array<mat, 3> D2 = create_mat_array({gi.r,gi.r}, sl);
 
   // needed for error control
   mat UUs({2*gi.r,2*gi.r}, sl);
   mat VVs({2*gi.r,2*gi.r}, sl);
   vec sigma({2*gi.r}, sl);
-
+  #ifdef __CUDA__
+  vec sigma_h({2*gi.r}, stloc::host);
+  #endif
   Index newr;
   gt::stop("Initialization");
 
@@ -1699,20 +1701,20 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
     // HERE AUGMENTATION K
     gt::start("K step aug");
     Xn.update_shape({gi.dxx_mult,2*gi.r});
-    #ifdef __OPENMP__
-    #pragma omp parallel for
-    #endif
-    for(Index i = gi.dxx_mult*gi.r; i < gi.dxx_mult*(2*gi.r); i++){
-      Index rr = i%gi.dxx_mult;
-      Index cc = i/gi.dxx_mult;
-      Xn(rr,cc) = lr_sol.X(rr,cc-gi.r);
+    if(Xn.sl == stloc::host){
+      std::copy(lr_sol.X.data(), lr_sol.X.data()+lr_sol.X.num_elements(), Xn.data()+lr_sol.X.num_elements());
+    } else {
+      #ifdef __CUDA__
+      cudaMemcpy(Xn.data()+lr_sol.X.num_elements(), lr_sol.X.data(), sizeof(double)*lr_sol.X.num_elements(),cudaMemcpyDeviceToDevice);
+      #endif
     }
-    
+
     gs(Xn, Stmp, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]);
+
+
     blas.matmul_transa(Xn,lr_sol.X,Mhat);
     Mhat *= gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2];
     gt::stop("K step aug");
-   
 
     // ---- L step ----
     gt::start("D coeffs");
@@ -1727,25 +1729,26 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
     // HERE AUGMENTATION L
     gt::start("L step aug");
     Vn.update_shape({gi.dvv_mult,2*gi.r});
-    #ifdef __OPENMP__
-    #pragma omp parallel for
-    #endif
-    for(Index i = gi.dvv_mult*gi.r; i < gi.dvv_mult*(2*gi.r);i++){
-      Index rr = i%gi.dvv_mult;
-      Index cc = i/gi.dvv_mult;
-      Vn(rr,cc) = lr_sol.V(rr,cc-gi.r);
+    if(Vn.sl == stloc::host){
+      std::copy(lr_sol.V.data(), lr_sol.V.data()+lr_sol.V.num_elements(), Vn.data()+lr_sol.V.num_elements());
+    } else {
+      #ifdef __CUDA__
+      cudaMemcpy(Vn.data()+lr_sol.V.num_elements(), lr_sol.V.data(), sizeof(double)*lr_sol.V.num_elements(),cudaMemcpyDeviceToDevice);
+      #endif
     }
     gs(Vn, Stmp, gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
     blas.matmul_transa(Vn,lr_sol.V,Nhat);
     Nhat *= gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2];
     gt::stop("L step aug");
 
-
     // ---- S step ----
+    gt::start("S step");
     Stmp.resize({2*gi.r,gi.r});
     blas.matmul(Mhat,lr_sol.S,Stmp);
     blas.matmul_transb(Stmp,Nhat,Shat);
+    gt::stop("S step");
 
+    gt::start("S step new C D coeffs");
     // Recompute C and D coeffs, fixed electric field
     for(int ii = 0; ii < 3; ii++){
       C1[ii].resize({2*gi.r,2*gi.r});
@@ -1757,46 +1760,74 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
     compute_D.update_info(2*gi.r);
     compute_C(Vn, C1, C2, blas);
     compute_D(Xn, E, D1, D2, blas);
+    gt::stop("S step new C D coeffs");
 
     gt::start("S step");
     S_step_rk4(tau, Shat, C1, C2, D1, D2, nsteps_int);
     gt::stop("S step");
-   
+    
     // Determine new rank
     gt::start("SVD decomposition");
     svd(Shat, UUs, VVs, sigma, blas);
     gt::stop("SVD decomposition");
+    
+    gt::start("Choosing new rank");
+    if(Shat.sl == stloc::host){
+      for(Index idx = 0; idx < 2*gi.r; idx++){
+        double psum = 0;
+        for(Index ii = idx; ii < 2*gi.r; ii++){
+          psum += sigma(ii)*sigma(ii);
+        }
+        if (sqrt(psum) <= tol1){
+          newr = idx+1;
+          break;
+        }
+      }
+    } else {
+      #ifdef __CUDA__
+      cudaMemcpy(sigma_h.data(), sigma.data(), sizeof(double)*(2*gi.r),cudaMemcpyDeviceToHost);
 
-    for(Index idx = 0; idx < 2*gi.r; idx++){
-      double psum = 0;
-      for(Index ii = idx; ii < 2*gi.r; ii++){
-        psum += sigma(ii)*sigma(ii);
+      for(Index idx = 0; idx < 2*gi.r; idx++){
+        double psum = 0;
+        for(Index ii = idx; ii < 2*gi.r; ii++){
+          psum += sigma_h(ii)*sigma_h(ii);
+        }
+        if (sqrt(psum) <= tol1){
+          newr = idx+1;
+          break;
+        }
       }
-      if (sqrt(psum) <= tol1){
-        newr = idx+1;
-        break;
-      }
+      #endif
     }
 
     if (newr > gi.rmax/2){
       cout << "Rank can't exceed maxrank, setting rank=rmax/2" << endl;
       newr = gi.rmax/2;
     }
+    gt::stop("Choosing new rank");
 
+    gt::start("Truncate and updates");
     // Now truncate and do all the updates
     gi.update_rank(newr);
     lr_sol.update_info(gi.r);
-    #ifdef __OPENMP__
-    #pragma omp parallel for
-    #endif
-    for(Index i=0; i < lr_sol.S.num_elements(); i++){
-      Index idx_r = i%gi.r;
-      Index idx_c = i/gi.r;
-      if(idx_r == idx_c){
-        lr_sol.S(idx_r,idx_c) = sigma(idx_r);
-      } else {
-        lr_sol.S(idx_r,idx_c) = 0.0;
+    if (lr_sol.S.sl == stloc::host){
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
+      for(Index i=0; i < lr_sol.S.num_elements(); i++){
+        Index idx_r = i%gi.r;
+        Index idx_c = i/gi.r;
+        if(idx_r == idx_c){
+          lr_sol.S(idx_r,idx_c) = sigma(idx_r);
+        } else {
+          lr_sol.S(idx_r,idx_c) = 0.0;
+        }
       }
+    } else {
+      #ifdef __CUDA__
+      diag_S<<<gi.r,gi.r>>>(gi.r,lr_sol.S.data(),sigma.data());
+      cudaDeviceSynchronize();
+      #endif
     }
     UUs.update_shape({2*gi.r,gi.r});
     VVs.update_shape({2*gi.r,gi.r});
@@ -1826,6 +1857,10 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
     UUs.resize({2*gi.r,2*gi.r});
     VVs.resize({2*gi.r,2*gi.r});
     sigma.resize({2*gi.r});
+    #ifdef __CUDA__
+    sigma_h.resize({2*gi.r});
+    #endif
+    gt::stop("Truncate and updates");
 
     t += tau;
 
@@ -1851,7 +1886,7 @@ int main(int argc, char** argv){
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("0.02"))
   ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("30"))
   ("r_min", "Minimum rank of the simulation", cxxopts::value<int>()->default_value("10"))
-  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("100"))
+  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("200"))
   ("err", "Error control", cxxopts::value<string>()->default_value("ee"))
   ("tol_inc", "Tolerance for error control", cxxopts::value<double>()->default_value("0.00001"))
   ("tol_dec", "Tolerance for error control", cxxopts::value<double>()->default_value("0.00000001"))
