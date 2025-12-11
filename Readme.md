@@ -41,7 +41,9 @@ If CMake does not find the Fortran compiler automatically, you have to set the `
 
     export FC=/path/to/fortran/compiler
 
-Additionally, you might also have to set the CMake cache entry `CMAKE_Fortran_COMPILER` to the full path of the Fortran compiler.
+Additionally, you might also have to add the location of `libgfortran` to your `LIBRARY_PATH` via
+
+    export LIBRARY_PATH="$LIBRARY_PATH:/path/to/folder/containing/libgfortran"
 
 #### OpenMP
 Moreover, Apple Clang does not officially support OpenMP. Therefore, you have to use instead a different compiler collection, for example GCC. Install `gcc-14` again via brew:
