@@ -355,7 +355,38 @@ void gram_schmidt_can_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, do
   cudaFree(nrm);
 };
 
+void orthogonalize_householder_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, cusolverDnHandle_t handle_cusolver) {
 
+  int m = Q.shape()[0];
+  int n = Q.shape()[1];
+
+  double *devTau, *work;
+  int *devInfo;
+  int szWork;
+  int szWork1;
+  int szWork2;
+
+  cudaMalloc((void**)&devTau, n * sizeof(double));
+  cudaMalloc((void **)&devInfo, sizeof(int));
+
+  cusolverDnDgeqrf_bufferSize(handle_cusolver, m, n, &Q(0,0), m, &szWork1);
+  cusolverDnDorgqr_bufferSize(handle_cusolver, m, n, n, &Q(0,0), m, devTau, &szWork2);
+  szWork = max(szWork1,szWork2);
+
+  cudaMalloc((void**)&work, szWork * sizeof(double));
+
+  cusolverDnDgeqrf(handle_cusolver, m, n, &Q(0,0), m, devTau, work, szWork, devInfo); 
+
+  copy_R_QR<<<(R.num_elements()+n_threads-1)/n_threads,n_threads>>>(R.num_elements(), n, m, Q.begin(), R.begin(), w);
+
+  cusolverDnDorgqr(handle_cusolver, m, n, n, &Q(0,0), m, devTau, work, szWork, devInfo);
+
+  Q *= (1.0/sqrt(w));
+
+  cudaFree(devTau);
+  cudaFree(work);
+  cudaFree(devInfo);
+}
 
 void orthogonalize_householder_constw_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, cusolverDnHandle_t handle_cusolver) {
 
@@ -446,7 +477,8 @@ void orthogonalize::operator()(multi_array<double,2>& Q, multi_array<double,2>& 
     #ifdef __CUDA__
     //gram_schmidt_gpu(Q, R, w, gen, blas->handle_devres);
     //gram_schmidt_can_gpu(Q, R, w, blas->handle_devres);
-    orthogonalize_householder_constw_gpu(Q, R, w, blas->handle_cusolver);
+    //orthogonalize_householder_constw_gpu(Q, R, w, blas->handle_cusolver);
+    orthogonalize_householder_gpu(Q, R, w, blas->handle_cusolver);
     #else
     cout << "ERROR: orthogonalize_gpu called but no GPU support available." << endl;
     exit(1);

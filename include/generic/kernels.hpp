@@ -105,6 +105,9 @@ template<class T>
 __global__ void copy_R(int m, int n, T* Q, T* R, T w);
 
 template<class T>
+__global__ void copy_R_QR(int n, int r, int m, T* Q, T* R, T w);
+
+template<class T>
 __global__ void div_Q(int m, int n, T* Q, T w);
 
 template<class T>

@@ -3,6 +3,25 @@
 #ifdef __CUDA__
 
 namespace Ensign {
+template<class T>
+__global__ void copy_R_QR(int n, int r, int m, T* Q, T* R, T w) {
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+  // r number of rows of R
+  // m number of rows of Q
+  while(idx < n){
+    int i = idx % r;
+    int j = idx / r;
+    if(j>=i){
+      R[idx] = Q[i + j*m] * sqrt(w);
+    }
+    else {
+      R[idx] = 0.0;
+    }
+    idx += blockDim.x * gridDim.x;
+  }
+}
+template __global__ void copy_R_QR(int, int, int, double*, double*, double);
+template __global__ void copy_R_QR(int, int, int, float*, float*, float);
 
 template<class T>
 __global__ void copy_R(int m, int n, T* Q, T* R, T w) {

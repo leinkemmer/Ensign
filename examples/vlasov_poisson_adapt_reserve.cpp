@@ -1001,8 +1001,10 @@ void mgs_orthcol_cpu(multi_array<double,2>& X, double w) {
   array<Index,2> dims = X.shape();
   Index rk = dims[1];
 
+  gt::start("RANDOM CPU");
   std::default_random_engine generator(1234);
   std::normal_distribution<double> distribution(0.0,1.0);
+  gt::stop("RANDOM CPU");
   #ifdef __OPENMP__
   #pragma omp parallel for
   #endif
@@ -1025,9 +1027,11 @@ void mgs_orthcol_cpu(multi_array<double,2>& X, double w) {
     double* r;
     cudaMalloc((void**)&r,sizeof(double));
 
+    gt::start("RANDOM GPU");
     curandGenerator_t gen;
     curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
     curandSetPseudoRandomGeneratorSeed(gen,1234);
+    gt::stop("RANDOM GPU");
 
     curandGenerateNormalDouble(gen,&X(0,rk-1),n, 0.0, 1.0);
   
@@ -1880,10 +1884,10 @@ int main(int argc, char** argv){
   options.add_options()
   ("device", "Device the simulation is run on (can be either cpu or gpu)", cxxopts::value<string>()->default_value("cpu"))
   ("problem", "Initial value that is used in the simulation (either ll or ts)", cxxopts::value<string>()->default_value("ts"))
-  ("nx", "Number of grid points in space (as a whitespace separated list)", cxxopts::value<string>()->default_value("16 16 16"))
-  ("nv", "Number of grid points in velocity (as a whitespace separated list)", cxxopts::value<string>()->default_value("16 16 16"))
+  ("nx", "Number of grid points in space (as a whitespace separated list)", cxxopts::value<string>()->default_value("32 32 32"))
+  ("nv", "Number of grid points in velocity (as a whitespace separated list)", cxxopts::value<string>()->default_value("32 32 32"))
   ("final_time", "Time to which the simulation is run", cxxopts::value<double>()->default_value("40.0"))
-  ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("0.02"))
+  ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("0.04"))
   ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("30"))
   ("r_min", "Minimum rank of the simulation", cxxopts::value<int>()->default_value("10"))
   ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("200"))
@@ -1922,7 +1926,6 @@ int main(int argc, char** argv){
   int num_threads = result["omp_threads"].as<int>();
   if(num_threads == -1)
     num_threads = omp_get_num_procs()/2;
-    //num_threads = 1;
   omp_set_num_threads(num_threads);
 
   #pragma omp parallel
@@ -1998,7 +2001,7 @@ int main(int argc, char** argv){
     cout << "Error control not known." << endl;
     exit(1);
     }
-    //cout << gt::sorted_output() << endl;
+    cout << gt::sorted_output() << endl;
   } else {
     cout << "ERROR: problem with name " << problem << " is not supported" << endl;
     exit(1);
