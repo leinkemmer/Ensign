@@ -1883,17 +1883,17 @@ int main(int argc, char** argv){
   cxxopts::Options options("vlasov_poisson", "3+3 dimensional dynamical low-rank Vlasov--Poisson solver");
   options.add_options()
   ("device", "Device the simulation is run on (can be either cpu or gpu)", cxxopts::value<string>()->default_value("cpu"))
-  ("problem", "Initial value that is used in the simulation (either ll or ts)", cxxopts::value<string>()->default_value("ts"))
+  ("problem", "Initial value that is used in the simulation (either ll or ts)", cxxopts::value<string>()->default_value("ll"))
   ("nx", "Number of grid points in space (as a whitespace separated list)", cxxopts::value<string>()->default_value("32 32 32"))
-  ("nv", "Number of grid points in velocity (as a whitespace separated list)", cxxopts::value<string>()->default_value("32 32 32"))
+  ("nv", "Number of grid points in velocity (as a whitespace separated list)", cxxopts::value<string>()->default_value("64 64 64"))
   ("final_time", "Time to which the simulation is run", cxxopts::value<double>()->default_value("40.0"))
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("0.04"))
-  ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("30"))
+  ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("25"))
   ("r_min", "Minimum rank of the simulation", cxxopts::value<int>()->default_value("10"))
-  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("200"))
+  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("65"))
   ("err", "Error control", cxxopts::value<string>()->default_value("ee"))
-  ("tol_inc", "Tolerance for error control", cxxopts::value<double>()->default_value("0.00001"))
-  ("tol_dec", "Tolerance for error control", cxxopts::value<double>()->default_value("0.00000001"))
+  ("tol_inc", "Tolerance for error control", cxxopts::value<double>()->default_value("0.001"))
+  ("tol_dec", "Tolerance for error control", cxxopts::value<double>()->default_value("0.000001"))
   ("omp_threads", "Number of OpenMP threads used in CPU parallelization (by default half the number of processes reported by the operating system are used)", cxxopts::value<int>()->default_value("-1"))
   ("snapshots", "Number of files written to disk", cxxopts::value<int>()->default_value("0"))
   ("h,help", "Help message")
@@ -2001,11 +2001,154 @@ int main(int argc, char** argv){
     cout << "Error control not known." << endl;
     exit(1);
     }
-    cout << gt::sorted_output() << endl;
+  } else if (problem == "ll") {
+    //
+    // Linear Landau damping
+    //
+    mfp<6> lim_xx = {0.0,4.0*M_PI,0.0,4.0*M_PI,0.0,4.0*M_PI};
+    mfp<6> lim_vv = {-6.0,6.0,-6.0,6.0,-6.0,6.0};
+    grid_info_reserve<3> gi(max_r,r, N_xx, N_vv, lim_xx, lim_vv); 
+
+    vec xx({gi.dxx_mult});
+    componentwise_vec_omp(gi.N_xx, [&xx, &gi](Index idx, array<Index,3> i) {
+      double alpha1 = 0.01, alpha2 = 0.01, alpha3 = 0.01;
+      double kappa1 = 0.5, kappa2 = 0.5, kappa3 = 0.5;
+      mfp<3> x  = gi.x(i);
+      xx(idx) = 1.0 + alpha1*cos(kappa1*x[0]) + alpha2*cos(kappa2*x[1]) + alpha3*cos(kappa3*x[2]);
+    });
+
+    vec vv({gi.dvv_mult});
+    componentwise_vec_omp(gi.N_vv, [&vv, &gi](Index idx, array<Index,3> i) {
+        mfp<3> v  = gi.v(i);
+        vv(idx) = (1.0/(sqrt(pow(2*M_PI,3)))) * exp(-(pow(v[0],2)+pow(v[1],2)+pow(v[2],2))/2.0);
+    });
+
+    vector<const double*> X, V;
+    X.push_back(xx.begin());
+    V.push_back(vv.begin());
+
+    #ifdef __CUDA__
+    cout << "GPU SIMULATION" << endl;
+    #endif
+    #ifdef __MKL__
+    cout << "MKL ENABLED" << endl;
+    #endif
+    cout << "Simulation: " << problem << endl;
+    cout << "Dof in space: " << gi.N_xx[0] << " " << gi.N_xx[1] << " " << gi.N_xx[2] << " " << endl;
+    cout << "Dof in velocity: " << gi.N_vv[0] << " " << gi.N_vv[1] << " " << gi.N_vv[2] << " " << endl;
+    cout << "Error control: " << ec << endl;
+    cout << "Tolerance : " << tol1 << endl;
+    cout << "Initial rank: " << gi.r << endl;
+
+    if (ec == "bug"){
+      BUG_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
+    } else if (ec == "ee" || ec == "f"){
+      integration_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
+    } else {
+    cout << "Error control not known." << endl;
+    exit(1);
+    }
+  } else if (problem == "nll") {
+    //
+    // Nonlinear Landau
+    //
+    mfp<6> lim_xx = {0.0,4.0*M_PI,0.0,4.0*M_PI,0.0,4.0*M_PI};
+    mfp<6> lim_vv = {-6.0,6.0,-6.0,6.0,-6.0,6.0};
+    grid_info_reserve<3> gi(max_r,r, N_xx, N_vv, lim_xx, lim_vv); 
+
+    vec xx({gi.dxx_mult});
+    componentwise_vec_omp(gi.N_xx, [&xx, &gi](Index idx, array<Index,3> i) {
+      double alpha1 = 0.5, alpha2 = 0.5, alpha3 = 0.5;
+      double kappa1 = 0.5, kappa2 = 0.5, kappa3 = 0.5;
+      mfp<3> x  = gi.x(i);
+      xx(idx) = 1.0 + alpha1*cos(kappa1*x[0]) + alpha2*cos(kappa2*x[1]) + alpha3*cos(kappa3*x[2]);
+    });
+
+    vec vv({gi.dvv_mult});
+    componentwise_vec_omp(gi.N_vv, [&vv, &gi](Index idx, array<Index,3> i) {
+        mfp<3> v  = gi.v(i);
+        vv(idx) = (1.0/(sqrt(pow(2*M_PI,3)))) * exp(-(pow(v[0],2)+pow(v[1],2)+pow(v[2],2))/2.0);
+    });
+
+    vector<const double*> X, V;
+    X.push_back(xx.begin());
+    V.push_back(vv.begin());
+
+    #ifdef __CUDA__
+    cout << "GPU SIMULATION" << endl;
+    #endif
+    #ifdef __MKL__
+    cout << "MKL ENABLED" << endl;
+    #endif
+    cout << "Simulation: " << problem << endl;
+    cout << "Dof in space: " << gi.N_xx[0] << " " << gi.N_xx[1] << " " << gi.N_xx[2] << " " << endl;
+    cout << "Dof in velocity: " << gi.N_vv[0] << " " << gi.N_vv[1] << " " << gi.N_vv[2] << " " << endl;
+    cout << "Error control: " << ec << endl;
+    cout << "Tolerance : " << tol1 << endl;
+    cout << "Initial rank: " << gi.r << endl;
+
+    if (ec == "bug"){
+      BUG_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
+    } else if (ec == "ee" || ec == "f"){
+      integration_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
+    } else {
+    cout << "Error control not known." << endl;
+    exit(1);
+    }
+  } else if (problem == "bot") {
+    //
+    // Bump-on-tail
+    //
+    mfp<6> lim_xx = {0.0,20.0*M_PI/3.0,0.0,20.0*M_PI/3,0.0,20.0*M_PI/3};
+    mfp<6> lim_vv = {-9.0,9.0,-9.0,9.0,-9.0,9.0};
+    grid_info_reserve<3> gi(max_r,r, N_xx, N_vv, lim_xx, lim_vv); 
+
+    vec xx({gi.dxx_mult});
+    componentwise_vec_omp(gi.N_xx, [&xx, &gi](Index idx, array<Index,3> i) {
+      double alpha = 0.03;
+      double kappa = 0.3;
+      mfp<3> x  = gi.x(i);
+      xx(idx) = 1.0 + alpha*(cos(kappa*x[0]) + cos(kappa*x[1]) + cos(kappa*x[2]));
+    });
+
+    vec vv({gi.dvv_mult});
+    componentwise_vec_omp(gi.N_vv, [&vv, &gi](Index idx, array<Index,3> i) {
+        mfp<3> v  = gi.v(i);
+        vv(idx) = (1.0/(sqrt(pow(2*M_PI,3)))) * 
+                  exp(-(pow(v[1],2)+pow(v[2],2))/2.0) *
+                  (0.9*exp(-pow(v[0],2)/2)+0.2*exp(-2*pow(v[0]-4.5,2)));
+    });
+
+    vector<const double*> X, V;
+    X.push_back(xx.begin());
+    V.push_back(vv.begin());
+
+    #ifdef __CUDA__
+    cout << "GPU SIMULATION" << endl;
+    #endif
+    #ifdef __MKL__
+    cout << "MKL ENABLED" << endl;
+    #endif
+    cout << "Simulation: " << problem << endl;
+    cout << "Dof in space: " << gi.N_xx[0] << " " << gi.N_xx[1] << " " << gi.N_xx[2] << " " << endl;
+    cout << "Dof in velocity: " << gi.N_vv[0] << " " << gi.N_vv[1] << " " << gi.N_vv[2] << " " << endl;
+    cout << "Error control: " << ec << endl;
+    cout << "Tolerance : " << tol1 << endl;
+    cout << "Initial rank: " << gi.r << endl;
+
+    if (ec == "bug"){
+      BUG_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
+    } else if (ec == "ee" || ec == "f"){
+      integration_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
+    } else {
+    cout << "Error control not known." << endl;
+    exit(1);
+    }
   } else {
     cout << "ERROR: problem with name " << problem << " is not supported" << endl;
     exit(1);
   }
+    cout << gt::sorted_output() << endl;
 
   return 0;
 }
