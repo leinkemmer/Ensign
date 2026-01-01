@@ -1604,6 +1604,14 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
     h_rank_f << h_rank[i] << endl;
   }
 
+  if (snapshots == 1){
+    multi_array<double,2> K({gi.dxx_mult,gi.r},sl);
+    multi_array<double,2> SOL({gi.dxx_mult,gi.dvv_mult},sl);
+    blas.matmul(lr_sol.X, lr_sol.S, K);
+    blas.matmul_transb(K, lr_sol.V, SOL);
+    dump("solution.data",SOL);
+  }
+
 }
 
 void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol1, double tol2, Index min_r, Index max_r, string ec, Index snapshots, const blas_ops& blas){
@@ -1877,6 +1885,549 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
   }
 }
 
+void integration_second_order_adapt_reserve(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol1, double tol2, Index min_r, Index max_r, string ec, Index snapshots, const blas_ops& blas){
+
+  gt::start("Initialization");
+  stloc sl = (CPU) ? stloc::host : stloc::device;
+
+  orthogonalize gs(&blas);
+
+  // Initialization
+  lr2<double> lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, sl);
+
+  if(sl == stloc::host) {
+    initialize(lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
+  } else {
+    lr2<double> h_lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
+    initialize(h_lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
+    lr_sol = h_lr_sol;
+  }
+  ofstream el_energyf("evolution.data");
+  ofstream contf("contf.data");
+  el_energyf.precision(16);
+  double t = 0.0;
+  Index n_steps = ceil(final_time/tau);
+
+  vector<int> h_rank(n_steps);
+
+  array<vec,3> E = create_vec_array(gi.dxx_mult, sl);
+  array<vec,3> Etmp = create_vec_array(gi.dxx_mult, sl);
+
+  PS_K_step_adapt K_step_rk4(sl, gi, &blas);
+  PS_S_step_adapt S_step_rk4(sl, gi, &blas);
+  PS_L_step_adapt L_step_rk4(sl, gi, &blas);
+
+  mat Xn({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
+  mat XnT({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
+  mat Sn({gi.r,gi.r}, sl);
+  mat Vn({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r}, sl);
+
+  electric_field efield(sl, gi);
+
+  coeff_C compute_C(sl, gi);
+  coeff_D compute_D(sl, gi);
+
+  array<mat, 3> C1 = create_mat_array({gi.r,gi.r}, sl);
+  array<mat, 3> C2 = create_mat_array({gi.r,gi.r}, sl);
+
+  array<mat, 3> D1 = create_mat_array({gi.r,gi.r}, sl);
+  array<mat, 3> D2 = create_mat_array({gi.r,gi.r}, sl);
+
+  // needed for error control
+  mat Kad({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
+  mat UUs({gi.r,gi.r}, sl);
+  mat VVs({gi.r,gi.r}, sl);
+  vec sigma({gi.r}, sl);
+  mat tmps({gi.r,gi.r}, sl);
+
+  gt::stop("Initialization");
+
+  Index kk = 1;
+  cout.precision(8);
+  gt::start("Main loop");
+  while(kk<=n_steps){
+
+    cout << "Step " << kk << " of " << n_steps << endl;
+
+    h_rank[kk-1] = (int)gi.r;
+
+    // Compute electric field at time tau/2
+    
+    // Compute C coefficients
+    compute_C(lr_sol.V, C1, C2, blas);
+    // Compute K
+    blas.matmul(lr_sol.X,lr_sol.S,Xn); // Xn is K
+    XnT = Xn;
+    // Electric field and energy
+    efield(Xn, lr_sol.V, E, blas);
+    double el_energy = electric_energy(E, gi, blas);
+    cout << el_energy << endl;
+    // ---- K step ----
+    K_step_rk4(tau/2.0, Xn, E, C1, C2, nsteps_int);
+    gs(Xn, Sn, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]); // Xn the new X
+    // Compute D coefficients
+    compute_D(Xn, E, D1, D2, blas);
+    // ---- S step ----
+    S_step_rk4(tau/2.0, Sn, C1, C2, D1, D2, nsteps_int);
+    // Compute L
+    blas.matmul_transb(lr_sol.V,Sn,Vn); // Vn is L
+    // ---- L step ----
+    L_step_rk4(tau/2.0, Vn, D1, D2, nsteps_int);
+    // Electric field at tau/2
+    efield(Xn, Vn, E, blas);
+    
+    // Restart integration using Strang splitting
+    // ---- Half step K step ----
+    K_step_rk4(tau/2.0, XnT, E, C1, C2, nsteps_int);
+    gs(XnT, Sn, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]); // Xn the new X
+    // Compute D coefficients
+    compute_D(XnT, E, D1, D2, blas);
+    // ---- Half step S step ----
+    S_step_rk4(tau/2.0, Sn, C1, C2, D1, D2, nsteps_int);
+    // Compute L
+    blas.matmul_transb(lr_sol.V,Sn,Vn); // Vn is L
+    // ---- Full step L step ----
+    L_step_rk4(tau, Vn, D1, D2, nsteps_int);
+    gs(Vn, Sn, gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
+    transpose_inplace(Sn);
+    // Compute C coefficients
+    compute_C(Vn, C1, C2, blas);
+    // ---- Half step S step ----
+    S_step_rk4(tau/2.0, Sn, C1, C2, D1, D2, nsteps_int);
+    // Compute K
+    blas.matmul(XnT,Sn,Xn); // Xn is K
+    // ---- Half step K step ----
+    K_step_rk4(tau/2.0, Xn, E, C1, C2, nsteps_int);
+    gs(Xn, Sn, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]); // Xn the new X
+
+    if (ec == "f"){
+      gt::start("SVD decomposition");
+      svd(Sn, UUs, VVs, sigma, blas);
+      gt::stop("SVD decomposition");
+      double svr;
+      if(Sn.sl == stloc::host){
+        svr = sigma(gi.r-1);
+      } else {
+        #ifdef __CUDA__
+          cudaMemcpy(&svr, &sigma(gi.r-1), sizeof(double),cudaMemcpyDeviceToHost);
+        #endif
+      }
+
+      if (svr >= tol1){
+        if (gi.r == max_r){
+          contf << "j" << endl;
+          cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
+
+          gt::start("Reject but max rank: swap");
+          lr_sol.X.swap(Xn);
+          lr_sol.V.swap(Vn);
+          lr_sol.S.swap(Sn);
+          gt::stop("Reject but max rank: swap");
+ 
+          el_energyf << t << " " << el_energy << endl;
+          t += tau;
+
+          kk = kk + 1;
+        } else {
+          contf << "r" << endl;
+          cout << "Rejected step, increasing rank by one." << endl;
+
+          gt::start("Reject: increase rank");
+          // Do all the updates
+          gt::start("Reject: increase rank (updates)");
+
+          lr_sol.S.swap(Sn);
+
+          gi.update_rank(gi.r+1);
+          lr_sol.update_info(gi.r);
+          K_step_rk4.update_info(gi.r);
+          S_step_rk4.update_info(gi.r);
+          L_step_rk4.update_info(gi.r);
+
+          Xn.update_shape({gi.dxx_mult,gi.r});
+          XnT.update_shape({gi.dxx_mult,gi.r});
+          Vn.update_shape({gi.dvv_mult,gi.r});
+          gt::stop("Reject: increase rank (updates)");
+
+          gt::start("Reject: increase rank (gram schmidt)");
+          if(lr_sol.X.sl == stloc::host){
+            mgs_orthcol_cpu(lr_sol.X,gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]);
+            mgs_orthcol_cpu(lr_sol.V,gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
+          } else {
+            #ifdef __CUDA__
+              mgs_orthcol_gpu(lr_sol.X,gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2],blas);
+              mgs_orthcol_gpu(lr_sol.V,gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2],blas);
+            #endif
+          }
+          gt::stop("Reject: increase rank (gram schmidt)");
+
+          gt::start("Reject: increase rank (some resizes rxr)");
+
+          // This could directly become a kernel, but s times s so we'll see
+          #ifdef __OPENMP__
+          #pragma omp parallel for
+          #endif
+          for(Index i=0; i < lr_sol.S.num_elements(); i++){
+              Index idx_r = i%gi.r;
+              Index idx_c = i/gi.r;
+              if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
+                if(lr_sol.S.sl == stloc::host){
+                  lr_sol.S(idx_r,idx_c) = 0.0;
+                } else {
+                  #ifdef __CUDA__
+                    double ZERO = 0.0;
+                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&ZERO, sizeof(double),cudaMemcpyHostToDevice);
+                  #endif
+                }
+              }
+              else {
+                if(lr_sol.S.sl == stloc::host){
+                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+                } else {
+                  #ifdef __CUDA__
+                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
+                  #endif
+                }
+              }
+          }
+          Sn.resize({gi.r,gi.r});
+          
+          for(int ii = 0; ii < 3; ii++){
+            C1[ii].resize({gi.r,gi.r});
+            C2[ii].resize({gi.r,gi.r});
+            D1[ii].resize({gi.r,gi.r});
+            D2[ii].resize({gi.r,gi.r});
+          }
+          UUs.resize({gi.r,gi.r});
+          VVs.resize({gi.r,gi.r});
+          tmps.resize({gi.r,gi.r});
+          sigma.resize({gi.r});
+
+          Kad.update_shape({gi.dxx_mult,gi.r});
+          efield.update_info(gi.r);
+          compute_C.update_info(gi.r);
+          compute_D.update_info(gi.r);
+          gt::stop("Reject: increase rank (some resizes rxr)");
+          gt::stop("Reject: increase rank");
+        }
+      } else if (svr <= tol2){
+          if (gi.r == min_r){
+            contf << "m" << endl;
+            cout << "Accepted step, should decrease rank but min rank reached. Proceeding keeping min rank." << endl;
+
+            gt::start("Accept but min rank: swap");
+            lr_sol.X.swap(Xn);
+            lr_sol.V.swap(Vn);
+            lr_sol.S.swap(Sn);
+
+            gt::stop("Accept but min rank: swap");
+
+          } else {
+            contf << "a" << endl;
+            cout << "Accepted step, decreasing rank by one." << endl;
+
+            gt::start("Accept: decrease rank");
+
+            // Do all the updates
+            gi.update_rank(gi.r-1);
+            lr_sol.update_info(gi.r);
+            K_step_rk4.update_info(gi.r);
+            S_step_rk4.update_info(gi.r);
+            L_step_rk4.update_info(gi.r);
+
+            Xn.update_shape({gi.dxx_mult,gi.r});
+            XnT.update_shape({gi.dxx_mult,gi.r});
+            Vn.update_shape({gi.dvv_mult,gi.r});
+            lr_sol.X.swap(Xn);
+            lr_sol.V.swap(Vn);
+
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+                Index idx_r = i%gi.r;
+                Index idx_c = i/gi.r;
+                if(lr_sol.S.sl == stloc::host){
+                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+                }else{
+                  #ifdef __CUDA__
+                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
+                  #endif
+                }
+            }
+            Sn.resize({gi.r,gi.r});
+
+            for(int ii = 0; ii < 3; ii++){
+              C1[ii].resize({gi.r,gi.r});
+              C2[ii].resize({gi.r,gi.r});
+              D1[ii].resize({gi.r,gi.r});
+              D2[ii].resize({gi.r,gi.r});
+            }
+            UUs.resize({gi.r,gi.r});
+            VVs.resize({gi.r,gi.r});
+            tmps.resize({gi.r,gi.r});
+            sigma.resize({gi.r});
+
+            Kad.update_shape({gi.dxx_mult,gi.r});
+            efield.update_info(gi.r);
+            compute_C.update_info(gi.r);
+            compute_D.update_info(gi.r);
+            gt::stop("Accept: decrease rank");
+
+          }
+          el_energyf << t << " " << el_energy << endl;
+          t += tau;
+          kk = kk + 1;
+      } else{
+        contf << "s" << endl;
+        cout << "Accepted step, keeping same rank." << endl;
+        gt::start("Accept keep rank: swap");
+        lr_sol.X.swap(Xn);
+        lr_sol.V.swap(Vn);
+        lr_sol.S.swap(Sn);
+        gt::stop("Accept keep rank: swap");
+
+        el_energyf << t << " " << el_energy << endl;
+        t += tau;
+        kk = kk + 1;
+      }
+    }else if (ec == "ee"){
+      gt::start("NEW el en (matmul, efield, ee)");
+      blas.matmul(Xn,Sn,Kad);
+      efield(Kad, Vn, Etmp, blas);
+
+      double el_energy_new = electric_energy(Etmp, gi, blas);
+      gt::stop("NEW el en (matmul, efield, ee)");
+      gt::start("SVD decomposition");
+      svd(Sn, UUs, VVs, sigma, blas);
+      gt::stop("SVD decomposition");
+      double svr;
+      if(Sn.sl == stloc::host){
+        svr = sigma(gi.r-1);
+        sigma(gi.r-1) = 0.0;
+      } else {
+        #ifdef __CUDA__
+          cudaMemcpy(&svr, &sigma(gi.r-1), sizeof(double),cudaMemcpyDeviceToHost);
+          double ZERO = 0.0;
+          cudaMemcpy(&sigma(gi.r-1),&ZERO, sizeof(double),cudaMemcpyHostToDevice);
+        #endif
+      }
+
+      gt::start("CUT el en (pmr, matmul, efield, ee)");
+      //TODO: can be optimized, but it's r times r
+      transpose_inplace(VVs);
+      ptw_mult_row(VVs,sigma,tmps);
+      blas.matmul(UUs,tmps,VVs);
+
+      blas.matmul(Xn,VVs,Kad);
+      efield(Kad, Vn, Etmp, blas);
+
+      double el_energy_cut = electric_energy(Etmp, gi, blas);
+      gt::stop("CUT el en (pmr, matmul, efield, ee)");
+
+      double err_el_energy = abs(el_energy_new-el_energy_cut);
+      double fact = 1.0/10.0;
+
+      if (err_el_energy >= (tol1+abs(el_energy_new)*tol1*fact)){
+        if (gi.r == max_r){
+          contf << "j" << endl;
+          cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
+
+          gt::start("Reject but max rank: swap");
+          lr_sol.X.swap(Xn);
+          lr_sol.V.swap(Vn);
+          lr_sol.S.swap(Sn);
+          gt::stop("Reject but max rank: swap");
+ 
+          el_energyf << t << " " << el_energy << endl;
+          t += tau;
+
+          kk = kk + 1;
+        } else {
+          contf << "r" << endl;
+          cout << "Rejected step, increasing rank by one." << endl;
+
+          gt::start("Reject: increase rank");
+          // Do all the updates
+          gt::start("Reject: increase rank (updates)");
+          
+          lr_sol.S.swap(Sn);
+
+          gi.update_rank(gi.r+1);
+          lr_sol.update_info(gi.r);
+          K_step_rk4.update_info(gi.r);
+          S_step_rk4.update_info(gi.r);
+          L_step_rk4.update_info(gi.r);
+
+          Xn.update_shape({gi.dxx_mult,gi.r});
+          XnT.update_shape({gi.dxx_mult,gi.r});
+          Vn.update_shape({gi.dvv_mult,gi.r});
+          gt::stop("Reject: increase rank (updates)");
+
+          gt::start("Reject: increase rank (gram schmidt)");
+          if(lr_sol.X.sl == stloc::host){
+            mgs_orthcol_cpu(lr_sol.X,gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]);
+            mgs_orthcol_cpu(lr_sol.V,gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
+          } else {
+            #ifdef __CUDA__
+              mgs_orthcol_gpu(lr_sol.X,gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2],blas);
+              mgs_orthcol_gpu(lr_sol.V,gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2],blas);
+            #endif
+          }
+          gt::stop("Reject: increase rank (gram schmidt)");
+
+          gt::start("Reject: increase rank (some resizes rxr)");
+
+          // This could directly become a kernel, but r times r so we'll see
+          #ifdef __OPENMP__
+          #pragma omp parallel for
+          #endif
+          for(Index i=0; i < lr_sol.S.num_elements(); i++){
+              Index idx_r = i%gi.r;
+              Index idx_c = i/gi.r;
+              if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
+                if(lr_sol.S.sl == stloc::host){
+                  lr_sol.S(idx_r,idx_c) = 0.0;
+                } else {
+                  #ifdef __CUDA__
+                    double ZERO = 0.0;
+                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&ZERO, sizeof(double),cudaMemcpyHostToDevice);
+                  #endif
+                }
+              } else {
+                if(lr_sol.S.sl == stloc::host){
+                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+                } else {
+                  #ifdef __CUDA__
+                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
+                  #endif
+                }
+              }
+          }
+          Sn.resize({gi.r,gi.r});
+
+          for(int ii = 0; ii < 3; ii++){
+            C1[ii].resize({gi.r,gi.r});
+            C2[ii].resize({gi.r,gi.r});
+            D1[ii].resize({gi.r,gi.r});
+            D2[ii].resize({gi.r,gi.r});
+          }
+          UUs.resize({gi.r,gi.r});
+          VVs.resize({gi.r,gi.r});
+          tmps.resize({gi.r,gi.r});
+          sigma.resize({gi.r});
+
+          Kad.update_shape({gi.dxx_mult,gi.r});
+          efield.update_info(gi.r);
+          compute_C.update_info(gi.r);
+          compute_D.update_info(gi.r);
+          gt::stop("Reject: increase rank (some resizes rxr)");
+          gt::stop("Reject: increase rank");
+        }
+      } else if (svr <= tol2){
+          if (gi.r == min_r){
+            contf << "m" << endl;
+            cout << "Accepted step, should decrease rank but min rank reached. Proceeding keeping min rank." << endl;
+
+            gt::start("Accept but min rank: swap");
+            lr_sol.X.swap(Xn);
+            lr_sol.V.swap(Vn);
+            lr_sol.S.swap(Sn);
+            gt::stop("Accept but min rank: swap");
+
+          } else {
+            contf << "a" << endl;
+            cout << "Accepted step, decreasing rank by one." << endl;
+
+            gt::start("Accept: decrease rank");
+
+            // Do all the updates
+            gi.update_rank(gi.r-1);
+            lr_sol.update_info(gi.r);
+            K_step_rk4.update_info(gi.r);
+            S_step_rk4.update_info(gi.r);
+            L_step_rk4.update_info(gi.r);
+
+            Xn.update_shape({gi.dxx_mult,gi.r});
+            XnT.update_shape({gi.dxx_mult,gi.r});
+            Vn.update_shape({gi.dvv_mult,gi.r});
+            lr_sol.X.swap(Xn);
+            lr_sol.V.swap(Vn);
+
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+                Index idx_r = i%gi.r;
+                Index idx_c = i/gi.r;
+                if(lr_sol.S.sl == stloc::host){
+                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+                }else{
+                  #ifdef __CUDA__
+                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
+                  #endif
+                }
+            }
+            Sn.resize({gi.r,gi.r});
+
+            for(int ii = 0; ii < 3; ii++){
+              C1[ii].resize({gi.r,gi.r});
+              C2[ii].resize({gi.r,gi.r});
+              D1[ii].resize({gi.r,gi.r});
+              D2[ii].resize({gi.r,gi.r});
+            }
+            UUs.resize({gi.r,gi.r});
+            VVs.resize({gi.r,gi.r});
+            tmps.resize({gi.r,gi.r});
+            sigma.resize({gi.r});
+
+            Kad.update_shape({gi.dxx_mult,gi.r});
+            efield.update_info(gi.r);
+            compute_C.update_info(gi.r);
+            compute_D.update_info(gi.r);
+            gt::stop("Accept: decrease rank");
+
+          }
+          el_energyf << t << " " << el_energy << endl;
+          t += tau;
+          kk = kk + 1;
+      } else{
+        contf << "s" << endl;
+        cout << "Accepted step, keeping same rank." << endl;
+        gt::start("Accept keep rank: swap");
+        lr_sol.X.swap(Xn);
+        lr_sol.V.swap(Vn);
+        lr_sol.S.swap(Sn);
+        gt::stop("Accept keep rank: swap");
+
+        el_energyf << t << " " << el_energy << endl;
+        t += tau;
+        kk = kk + 1;
+      }
+
+    } else{
+      cout << "Error control not known" << endl;
+      exit(1);
+    }
+  }
+  gt::stop("Main loop");
+
+  ofstream h_rank_f("h_rank.data");
+  for(Index i = 0; i < h_rank.size(); i++){
+    h_rank_f << h_rank[i] << endl;
+  }
+
+
+  if (snapshots == 1){
+    multi_array<double,2> K({gi.dxx_mult,gi.r},sl);
+    multi_array<double,2> SOL({gi.dxx_mult,gi.dvv_mult},sl);
+    blas.matmul(lr_sol.X, lr_sol.S, K);
+    blas.matmul_transb(K, lr_sol.V, SOL);
+    dump("solution.data",SOL);
+  }
+
+}
+
 
 int main(int argc, char** argv){
 
@@ -2044,6 +2595,7 @@ int main(int argc, char** argv){
       BUG_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
     } else if (ec == "ee" || ec == "f"){
       integration_first_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
+      //integration_second_order_adapt_reserve(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
     } else {
     cout << "Error control not known." << endl;
     exit(1);
