@@ -50,7 +50,7 @@ if(${OPENMP})
     set(OPENMP_DEFINES "-D__OPENMP__ -DUSE_OPENMP")
     add_compile_definitions(${OPENMP_DEFINES})
   else()
-    message("Could not find support for OpenMP")
+    message(FATAL_ERROR "Could not find support for OpenMP")
   endif()
 endif()
 
@@ -96,8 +96,16 @@ endif()
 
 ################################################################################
 # Fortran
+
 if(NOT ${MKL_ENABLED})
-  enable_language(Fortran)
+  include(CheckLanguage)
+    check_language(Fortran)
+    if(CMAKE_Fortran_COMPILER)
+      enable_language(Fortran)
+    else()
+      message(FATAL_ERROR "A Fortran compiler is required to build Ensign (unless MKL is enabled)."
+      )
+    endif()
 endif()
 
 
@@ -226,7 +234,7 @@ if(${MKL_ENABLED})
     set(MKL_DEFINES    "-D__MKL__" "-DMKL_ILP64" "-m64")
     set(MKL_LIBRARIES  "-L${MKL_LIBDIR} -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_gnu_thread -lmkl_core -lgomp -lpthread -lm -ldl")
     if(NOT (MKL_INCLUDEDIR AND MKL_LIBDIR))
-      message("MKL not found automatically. Please set MKL_INCLUDEDIR and MKL_LIBDIR")
+      message(FATAL_ERROR "MKL not found automatically. Please set MKL_INCLUDEDIR and MKL_LIBDIR")
     endif()
   else()
     message("MKL found automatically.")
