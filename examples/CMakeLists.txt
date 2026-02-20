@@ -41,6 +41,12 @@ endif()
 
 
 if(NOT ${CUDA_ENABLED})
+  # Minimal Vlasov solver example
+  add_executable(minimal_dlr_vlasov minimal_dlr_vlasov.cpp)
+  add_dependencies(minimal_dlr_vlasov Ensign)
+
+  target_link_libraries(minimal_dlr_vlasov Ensign::Ensign)
+
   # Alfven waves example
   add_executable(alfven_waves alfven_waves.cpp)
   add_dependencies(alfven_waves Ensign)
