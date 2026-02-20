@@ -14,7 +14,7 @@
 namespace Ensign {
 
 template<class T>
-std::function<T(T*,T*)> inner_product_from_weight(T* w, Index N) {
+std::function<T(T*,T*)> inner_product_from_weight(const T* w, Index N) {
   return [w,N](T* a, T*b) {
     T result=T(0.0);
     #ifdef __OPENMP__
@@ -25,8 +25,8 @@ std::function<T(T*,T*)> inner_product_from_weight(T* w, Index N) {
     return result;
   };
 };
-template std::function<double(double*,double*)> inner_product_from_weight(double* w, Index N);
-template std::function<float(float*,float*)> inner_product_from_weight(float* w, Index N);
+template std::function<double(double*,double*)> inner_product_from_weight(const double* w, Index N);
+template std::function<float(float*,float*)> inner_product_from_weight(const float* w, Index N);
 
 
 template<>
@@ -65,11 +65,10 @@ void gram_schmidt_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, std::f
     double ip = inner_product(Q.extract({j}), Q.extract({j}));
     R(j,j) = sqrt(ip);
 
-    //if(R(j,j) > 1e-14){
+    if(R(j,j) > 1e-14){
       cblas_dscal(dims[0],1.0/R(j,j),Q.extract({j}),1);
-    //} else {
-/*
-      cout << "Encountered linear dependence, using random." << endl;
+    } else {
+
       for(Index l = 0; l < dims[0]; l++){
         Q(l,j) = distribution(generator);
       }
@@ -81,28 +80,12 @@ void gram_schmidt_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, std::f
 
       double nrm = sqrt(inner_product(Q.extract({j}), Q.extract({j})));
       cblas_dscal(dims[0],1.0/nrm,Q.extract({j}),1);
-*/
-   // }
-  }
-};
-/*
-void gram_schmidt_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w) {
 
-  Index n = Q.shape()[0];
-  int r = Q.shape()[1];
-
-  for(Index j=0;j<r;j++) {
-    for(Index k=0;k<j;k++) {
-      R(k,j) = cblas_ddot(n,&Q(0,j),1,&Q(0,k),1);
-      R(k,j) *= w;
-      cblas_daxpy(n, -R(k,j), Q.extract({k}), 1, Q.extract({j}),1);
-      R(j,k) = 0.0;
     }
-    R(j,j) = sqrt(cblas_ddot(n,&Q(0,j),1,&Q(0,j),1)*w);
-    cblas_dscal(n,1.0/R(j,j),Q.extract({j}),1);
   }
 };
-*/
+
+
 void gram_schmidt_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w) {
 
   Index n = Q.shape()[0];
@@ -467,17 +450,11 @@ void orthogonalize::operator()(multi_array<double,2>& Q, multi_array<double,2>& 
 
 void orthogonalize::operator()(multi_array<double,2>& Q, multi_array<double,2>& R, double w) {
   if(Q.sl == stloc::host) {
-    //householder_cpu(Q, R, w);
-    //gram_schmidt_can_cpu(Q, R, w);
-    //gram_schmidt_cpu(Q, R, w);
     Ensign::Matrix::qr(Q, R);
     Q /= sqrt(w);
     R *= sqrt(w);
   } else {
     #ifdef __CUDA__
-    //gram_schmidt_gpu(Q, R, w, gen, blas->handle_devres);
-    //gram_schmidt_can_gpu(Q, R, w, blas->handle_devres);
-    //orthogonalize_householder_constw_gpu(Q, R, w, blas->handle_cusolver);
     orthogonalize_householder_gpu(Q, R, w, blas->handle_cusolver);
     #else
     cout << "ERROR: orthogonalize_gpu called but no GPU support available." << endl;
@@ -496,27 +473,27 @@ void orthogonalize::operator()(multi_array<double,2>& Q, multi_array<double,2>& 
   }
 }
 
-
-
-
-/*
-template<>
-void gram_schmidt(multi_array<float,2>& Q, multi_array<float,2>& R, std::function<float(float*,float*)> inner_product) {
-  array<Index,2> dims = Q.shape();
-  for(Index j=0;j<dims[1];j++) {
-    for(Index k=0;k<j;k++) {
-      R(k,j) = inner_product(Q.extract({j}), Q.extract({k}));
-      cblas_saxpy(dims[0], -R(k,j), Q.extract({k}), 1, Q.extract({j}),1);
-      R(j,k) = float(0.0);
-    }
-    R(j,j) = sqrt(inner_product(Q.extract({j}), Q.extract({j})));
-    if(std::abs(R(j,j)) < float(1000)*std::numeric_limits<float>::epsilon()){
-      cout << "Warning: linearly dependent columns in Gram-Schmidt" << endl;
-    } else{
-      cblas_sscal(dims[0],float(1.0/R(j,j)),Q.extract({j}),1);
-    }
+void orthogonalize::gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product) {
+  if(Q.sl == stloc::host) {
+    gram_schmidt_cpu(Q, R, inner_product);
+  } else {
+    #ifdef __CUDA__
+    cout << "ERROR: orthogonalize::gram_schmidt with non-constant inner product currently not implemented for GPU." << endl;
+    exit(1);
+    #endif
   }
-};*/
+}
+
+void orthogonalize::gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, double w) {
+  if(Q.sl == stloc::host) {
+    gram_schmidt_cpu(Q, R, w);
+  } else {
+    #ifdef __CUDA__
+    gram_schmidt_gpu(Q, R, w, gen, blas->handle_devres);
+    #endif
+  }
+}
+
 
 
 template<class T, class IP>
@@ -583,7 +560,6 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, IP inner_pro
 template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const Ensign::Matrix::blas_ops& blas);
 template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, double inner_product_X, double inner_product_V, const Ensign::Matrix::blas_ops& blas);
 template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, double* inner_product_X, double* inner_product_V, const Ensign::Matrix::blas_ops& blas);
-//template void initialize(lr2<float>& lr, vector<const float*> X, vector<const float*> V, std::function<float(float*,float*)> inner_product_X, std::function<float(float*,float*)> inner_product_V, const Ensign::Matrix::blas_ops& blas);
 
 template<class T>
 void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, array<double,3> h_xx, array<double,3> h_vv, const Ensign::Matrix::blas_ops& blas) {

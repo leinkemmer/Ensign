@@ -1283,8 +1283,8 @@ private:
   mat C1;
   ten3 D2, e, eA, C2, C3, D3;
   mat Lphi, Sphi, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi;
-  multi_array<double,1> ip_zv;
   multi_array<double,1> ip_xx;
+  multi_array<double,1> ip_zv;
   lr2<double> rho, E, dtA;
 };
 
@@ -1451,8 +1451,8 @@ private:
   mat C1;
   ten3 D2, e, eA, C2, C3, D3;
   mat Lphi, Sphi, unused, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi, X0, V0;
-  multi_array<double,1> ip_zv;
   multi_array<double,1> ip_xx;
+  multi_array<double,1> ip_zv;
   lr2<double> rho, E, dtA;
 
 };
@@ -1517,7 +1517,7 @@ struct timestepper_augmented_unconventional: timestepper {
 
     Xphi = Kphi;
     gt::start("gs");
-    gs(Xphi, Sphi, ip_xx.data());
+    gs(Xphi, Sphi, gi.h_xx[0]*gi.h_xx[1]);
     gt::stop("gs");
 
     D2 = ccoeff.compute_D2(f.X, Xphi, blas);
@@ -1552,12 +1552,14 @@ struct timestepper_augmented_unconventional: timestepper {
     });
 
     gt::start("gs");
-    gs(aug.X, unused, ip_xx.data());
-    gs(aug.V, unused, ip_zv.data());
+    gs.gram_schmidt(aug.X, unused, gi.h_xx[0]*gi.h_xx[1]);
+    gs.gram_schmidt(aug.V, unused, gi.h_zv[0]*gi.h_zv[1]);
     gt::stop("gs");
 
     // We do not need to compute the new S matrix (with N and M) since we already
     // know how S is expressed in the new basis.
+    // However, this requires that we use Gram Schmidt in the orthogonalization step above
+    // as QR can change the basis functions even if they are already orthogonal.
     for(Index i=0;i<2*gi.r;i++)
       for(Index j=0;j<2*gi.r;j++)
         aug.S(i,j) = (i<gi.r && j<gi.r) ? f.S(i,j) : 0.0;
@@ -1585,7 +1587,7 @@ struct timestepper_augmented_unconventional: timestepper {
   }
 
 
-  timestepper_augmented_unconventional(const grid_info<2>& _gi, const blas_ops& _blas, multi_array<double,1> _ip_xx, multi_array<double,1> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), aug_ccoeff(modify_r(_gi, 2*_gi.r), gi.r), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), S_step_aug(modify_r(gi, 2*_gi.r), _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), aug(2*_gi.r, {_gi.dxx_mult, _gi.dzv_mult}), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}) {
+  timestepper_augmented_unconventional(const grid_info<2>& _gi, const blas_ops& _blas, multi_array<double,1> _ip_xx, multi_array<double,1> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), aug_ccoeff(modify_r(_gi, 2*_gi.r), gi.r), L_step(_gi, _blas), K_step(_gi, _blas), S_step(_gi, _blas), S_step_aug(modify_r(gi, 2*_gi.r), _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), aug(2*_gi.r, {_gi.dxx_mult, _gi.dzv_mult}), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}) {
     D2.resize({gi.r,gi.r,gi.r});
     D3.resize({gi.r,gi.r,gi.r});
     
@@ -1600,8 +1602,8 @@ struct timestepper_augmented_unconventional: timestepper {
     C3.resize({gi.r,gi.r,gi.r});
     
     aug_C1.resize({2*gi.r, 2*gi.r});
-    aug_C2.resize({2*gi.r,2*gi.r,gi.r});
-    aug_C3.resize({2*gi.r,2*gi.r,gi.r});
+    aug_C2.resize({2*gi.r, 2*gi.r, gi.r});
+    aug_C3.resize({2*gi.r, 2*gi.r, gi.r});
 
     Lphi.resize({gi.N_zv[0], gi.r});
     LdtA.resize({gi.N_zv[0], gi.r});
@@ -1635,8 +1637,6 @@ private:
   mat C1, aug_C1;
   ten3 D2, e, eA, C2, C3, D3, aug_C2, aug_C3, aug_D2, aug_D3;
   mat Lphi, Sphi, unused, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi, X0, V0;
-  multi_array<double,1> ip_zv;
-  multi_array<double,1> ip_xx;
   lr2<double> aug;
   lr2<double> rho, E, dtA;
 };
@@ -1801,8 +1801,8 @@ private:
   mat C1;
   ten3 D2, e, eA, C2, C3, D3;
   mat Lphi, Sphi, K, L, Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi;
-  multi_array<double,1> ip_zv;
   multi_array<double,1> ip_xx;
+  multi_array<double,1> ip_zv;
   lr2<double> rho, E, dtA, ftmp;
 };
 
@@ -1868,7 +1868,7 @@ struct timestepper_bug_midpoint : timestepper {
 
     Xphi = Kphi;
     gt::start("gs");
-    gs(Xphi, Sphi, ip_xx.data());
+    gs(Xphi, Sphi, gi.h_xx[0]*gi.h_xx[1]);
     gt::stop("gs");
 
     D2 = ccoeff.compute_D2(fhalf.X, Xphi, blas);
@@ -1899,12 +1899,14 @@ struct timestepper_bug_midpoint : timestepper {
     });
 
     gt::start("gs");
-    gs(aug.X, unused, ip_xx.data());
-    gs(aug.V, unused, ip_zv.data());
+    gs.gram_schmidt(aug.X, unused, gi.h_xx[0]*gi.h_xx[1]);
+    gs.gram_schmidt(aug.V, unused, gi.h_zv[0]*gi.h_zv[1]);
     gt::stop("gs");
 
     // We do not need to compute the new S matrix (with N and M) since we already
     // know how S is expressed in the new basis.
+    // However, this requires that we use Gram Schmidt in the orthogonalization step above
+    // as QR can change the basis functions even if they are already orthogonal.    
     for(Index i=0;i<3*gi.r;i++)
       for(Index j=0;j<3*gi.r;j++)
         aug.S(i,j) = (i<gi.r && j<gi.r) ? f.S(i,j) : 0.0;
@@ -1932,7 +1934,7 @@ struct timestepper_bug_midpoint : timestepper {
   }
 
 
-  timestepper_bug_midpoint(const grid_info<2>& _gi, const blas_ops& _blas, multi_array<double,1> _ip_xx, multi_array<double,1> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), aug_ccoeff(modify_r(_gi, 3*_gi.r), gi.r), L_step(_gi, _blas), K_step(_gi, _blas), S_step_aug(modify_r(gi, 3*_gi.r), _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), ip_xx(_ip_xx), ip_zv(_ip_zv), aug(3*_gi.r, {_gi.dxx_mult, _gi.dzv_mult}), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), tsunc(_gi, _blas, _ip_xx, _ip_zv) {
+  timestepper_bug_midpoint(const grid_info<2>& _gi, const blas_ops& _blas, multi_array<double,1> _ip_xx, multi_array<double,1> _ip_zv) : gi(_gi), blas(_blas), ccoeff(_gi), aug_ccoeff(modify_r(_gi, 3*_gi.r), gi.r), L_step(_gi, _blas), K_step(_gi, _blas), S_step_aug(modify_r(gi, 3*_gi.r), _blas), gs(&_blas), compute_phi(_gi, _blas), dtA_it(_gi, _blas), aug(3*_gi.r, {_gi.dxx_mult, _gi.dzv_mult}), rho(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), E(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}),  dtA(_gi.r, {_gi.dxx_mult, _gi.N_zv[0]}), tsunc(_gi, _blas, _ip_xx, _ip_zv) {
     D2.resize({gi.r,gi.r,gi.r});
     D3.resize({gi.r,gi.r,gi.r});
     
@@ -1985,8 +1987,6 @@ private:
   mat C1, aug_C1;
   ten3 D2, e, eA, C2, C3, D3, aug_C2, aug_C3, aug_D2, aug_D3;
   mat Lphi, Sphi, unused, K, /*L,*/ Kphi, Xphi, Vphi, LdtA, KdtA, dzVphi, X0, V0;
-  multi_array<double,1> ip_zv;
-  multi_array<double,1> ip_xx;
   lr2<double> aug;
   lr2<double> rho, E, dtA;
   mat FVhalf, FXhalf;

@@ -21,11 +21,11 @@ struct multi_array {
     fill(emax.begin(), emax.end(), 0);
   }
 
-  multi_array(array<Index,d> _e, stloc _sl=stloc::host) : sl(_sl), v(nullptr) {
+  multi_array(array<Index,d> _e, stloc _sl=stloc::host) : v(nullptr), sl(_sl)  {
     resize(_e);
   }
   
-  multi_array(array<Index,d> _emax, array<Index,d> _e, stloc _sl=stloc::host) : sl(_sl), v(nullptr) {
+  multi_array(array<Index,d> _emax, array<Index,d> _e, stloc _sl=stloc::host) : v(nullptr), sl(_sl) {
     reserve(_emax,_e);
   }
 
