@@ -104,6 +104,7 @@ void componentwise_mat_fourier_omp(Index r, const mind<2>& N,  func F) {
 
 struct time_integrator {
   virtual void step(double tau, mat& U, std::function<void(const mat&, mat&)> rhs)=0;
+  virtual ~time_integrator() = default; 
 };
 
 struct rk4 : public time_integrator {
