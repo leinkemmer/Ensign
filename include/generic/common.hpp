@@ -21,7 +21,7 @@
 #include <functional>
 #include <random>
 
-#ifdef __CUDACC__
+#ifdef __CUDA__
 #include <cuda_runtime.h>
 #include "cublas_v2.h"
 #include <cufft.h>
@@ -48,7 +48,7 @@ using std::to_string;
 typedef ptrdiff_t Index;
 enum class stloc { host, device };
 
-#ifdef __CUDACC__
+#ifdef __CUDA__
 const int n_threads = 128;
 #endif
 

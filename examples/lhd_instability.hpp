@@ -104,6 +104,7 @@ void componentwise_mat_fourier_omp(Index r, const mind<2>& N,  func F) {
 
 struct time_integrator {
   virtual void step(double tau, mat& U, std::function<void(const mat&, mat&)> rhs)=0;
+  virtual ~time_integrator() = default; 
 };
 
 struct rk4 : public time_integrator {
@@ -800,6 +801,16 @@ struct poisson {
     double int_nu = 0.0;
     for(Index i=0;i<gi_e.n_x;i++) {
       int_Ene += E(i)*n_e(i);
+      int_nu += n_e(i)*(hy_e(i)/n_e(i) - hy_i(i)/n_i(i));
+    }
+    return gi_e.q*int_Ene/(gi_e.m*int_nu);
+  }
+  
+  double compute_anomcoll_ionmass(const vec& n_e, const vec& n_i, const vec& hy_e, const vec& hy_i) {
+    double int_Ene = 0.0;
+    double int_nu = 0.0;
+    for(Index i=0;i<gi_e.n_x;i++) {
+      int_Ene -= E(i)*n_i(i);
       int_nu += n_e(i)*(hy_e(i)/n_e(i) - hy_i(i)/n_i(i));
     }
     return gi_e.q*int_Ene/(gi_e.m*int_nu);

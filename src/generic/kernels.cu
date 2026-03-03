@@ -1,8 +1,27 @@
 #include <generic/kernels.hpp>
 
-#ifdef __CUDACC__
+#ifdef __CUDA__
 
 namespace Ensign {
+template<class T>
+__global__ void copy_R_QR(int n, int r, int m, T* Q, T* R, T w) {
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+  // r number of rows of R
+  // m number of rows of Q
+  while(idx < n){
+    int i = idx % r;
+    int j = idx / r;
+    if(j>=i){
+      R[idx] = Q[i + j*m] * sqrt(w);
+    }
+    else {
+      R[idx] = 0.0;
+    }
+    idx += blockDim.x * gridDim.x;
+  }
+}
+template __global__ void copy_R_QR(int, int, int, double*, double*, double);
+template __global__ void copy_R_QR(int, int, int, float*, float*, float);
 
 template<class T>
 __global__ void copy_R(int m, int n, T* Q, T* R, T w) {
@@ -26,6 +45,19 @@ __global__ void div_Q(int m, int n, T* Q, T w) {
 }
 template __global__ void div_Q(int, int, double*, double);
 template __global__ void div_Q(int, int, float*, float);
+
+template<class T>
+__global__ void diag_S(int n, T* S, T* sigma) {
+  int i = threadIdx.x;
+  int j = blockIdx.x;
+
+  if(i==j)
+    S[i + j*n] = sigma[i];
+  else
+    S[i + j*n] = 0.0;
+}
+template __global__ void diag_S(int, double*, double*);
+template __global__ void diag_S(int, float*, float*);
 
 template<class T>
 __global__ void fill_gpu(int n, T* v, T alpha){
@@ -281,12 +313,40 @@ __global__ void rk4_finalcomb(int n, double* A, double t, double* M1, double* M2
   int idx = threadIdx.x + blockDim.x * blockIdx.x;
 
   while(idx < n){
-    A[idx] += ((t/6.0) * (M1[idx]+2.0*M2[idx]+2.0*M3[idx]+M4[idx]-M5[idx]));
+    A[idx] += ((t/6.0) * (M1[idx]+2.0*M2[idx]+2.0*M3[idx]+M4[idx]-M5[idx])); // is minus coming from the call outside?
     idx += blockDim.x * gridDim.x;
   }
 }
 
-__global__ void transpose_inplace(int n, double* A){
+__global__ void addsub_rhs_k(int n, double* A, double* B, double* C){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    A[idx] += (B[idx] - C[idx]);
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+__global__ void setmultadd_rk4_k(int n, double* A, double* B, double t, double* C){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    A[idx] = B[idx] + t*C[idx];
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+__global__ void finstage_rk4_k(int n, double* A, double* B, double* C, double* D, double* E, double tau){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    A[idx] += (tau/6.0)*(B[idx]+2.0*(C[idx]+D[idx])+E[idx]);
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+template<class T>
+__global__ void transpose_inplace_k(int n, T* A){
 
   int i = blockIdx.x % n ; // n number of rows
   int j = blockIdx.x / n;
@@ -297,6 +357,7 @@ __global__ void transpose_inplace(int n, double* A){
     A[j+i*n] = tmp;
   }
 }
+template __global__ void transpose_inplace_k(int, double*);
 
 __global__ void der_fourier_2d(int N, int nx, int ny, cuDoubleComplex* A, double* lims, double nxx, cuDoubleComplex* B,cuDoubleComplex* C){
   int idx = threadIdx.x + blockDim.x * blockIdx.x;

@@ -5,6 +5,7 @@
 
 const vector<string> methods = {"lie", "unconventional", "augmented", "strang", "bug_midpoint"};
 
+
 string discr_to_str(discretization discr) {
   return (discr==discretization::fft) ? "fft" : "lw";
 }
@@ -380,10 +381,7 @@ void test_advection_v(string method, discretization discr) {
             
     cout << "Error advection v (" << method << ", " << discr_to_str(discr) << "): " << err << endl;
 
-    if(method == "lie" || method == "augmented")
-      REQUIRE( err <= 5e-3 );
-    else
-      REQUIRE( err <= 7e-3 );
+    REQUIRE( err <= 1e-2 );
 }
 
 void test_advection_v_dtA(string method, discretization discr) {

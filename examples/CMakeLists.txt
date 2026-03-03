@@ -16,96 +16,68 @@ endif()
 ################################################################################
 # Set up examples
 
-set(LR_SOURCES_GPU ../src/lr/lr.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/timer.cu ../src/generic/fft.cu ../src/generic/kernels.cu ../src/generic/netcdf.cpp)
+if(${CUDA_ENABLED})
+  set(LR_SOURCES_GPU ../src/generic/kernels.cu ../src/lr/lr.cu ../src/lr/coefficients.cu ../src/generic/utility.cu ../src/generic/matrix.cu ../src/generic/timer.cu ../src/generic/fft.cu ../src/generic/netcdf.cpp)
+endif()
 
 # Vlasov-Poisson examples
 
 if(${CUDA_ENABLED})
-  cuda_add_executable(linear_landau linear_landau.cu)
-  cuda_add_cublas_to_target(linear_landau)
-  cuda_add_cufft_to_target(linear_landau)
-  target_link_libraries(linear_landau ${CUDA_curand_LIBRARY})
-  target_link_libraries(linear_landau ${CUDA_cusolver_LIBRARY})
+  add_executable(vlasov_poisson vlasov_poisson.cu ${LR_SOURCES_GPU})
+  target_link_libraries(vlasov_poisson Ensign::Ensign CUDA::curand CUDA::cusolver CUDA::cublas CUDA::cufftw cxxopts)
 
-  cuda_add_executable(linear_landau_2d linear_landau_2d.cu ${LR_SOURCES_GPU})
-  cuda_add_cublas_to_target(linear_landau_2d)
-  cuda_add_cufft_to_target(linear_landau_2d)
-  target_link_libraries(linear_landau_2d ${CUDA_curand_LIBRARY})
-  target_link_libraries(linear_landau_2d ${CUDA_cusolver_LIBRARY})
-
-  cuda_add_executable(linear_landau_3d linear_landau_3d.cu ${LR_SOURCES_GPU})
-  cuda_add_cublas_to_target(linear_landau_3d)
-  cuda_add_cufft_to_target(linear_landau_3d)
-  target_link_libraries(linear_landau_3d ${CUDA_curand_LIBRARY})
-  target_link_libraries(linear_landau_3d ${CUDA_cusolver_LIBRARY})
-else()
-  add_executable(linear_landau linear_landau.cpp)
-
-  add_executable(linear_landau_2d linear_landau_2d.cpp)
-
-  add_executable(linear_landau_3d linear_landau_3d.cpp)
-endif()
-
-target_link_libraries(linear_landau    Ensign::Ensign)
-target_link_libraries(linear_landau_2d Ensign::Ensign)
-target_link_libraries(linear_landau_3d Ensign::Ensign)
-
-if(${CUDA_ENABLED})
-  cuda_add_executable(vlasov_poisson vlasov_poisson.cu ${LR_SOURCES_GPU})
-  cuda_add_cublas_to_target(vlasov_poisson)
-  cuda_add_cufft_to_target(vlasov_poisson)
-  target_link_libraries(vlasov_poisson ${CUDA_curand_LIBRARY})
-  target_link_libraries(vlasov_poisson ${CUDA_cusolver_LIBRARY})
+  add_executable(vlasov_poisson_adapt_reserve vlasov_poisson_adapt_reserve.cu ${LR_SOURCES_GPU})
+  target_link_libraries(vlasov_poisson_adapt_reserve Ensign::Ensign CUDA::curand CUDA::cusolver CUDA::cublas CUDA::cufftw cxxopts)
 else()
   add_executable(vlasov_poisson vlasov_poisson.cpp)
   add_dependencies(vlasov_poisson Ensign)
+
+  add_executable(vlasov_poisson_adapt_reserve vlasov_poisson_adapt_reserve.cpp)
+  add_dependencies(vlasov_poisson_adapt_reserve Ensign)
+
+  target_link_libraries(vlasov_poisson Ensign::Ensign cxxopts)
+  target_link_libraries(vlasov_poisson_adapt_reserve Ensign::Ensign cxxopts)
 endif()
 
 
-target_link_libraries(vlasov_poisson Ensign::Ensign cxxopts)
+if(NOT ${CUDA_ENABLED})
+  # Minimal Vlasov solver example
+  add_executable(minimal_dlr_vlasov minimal_dlr_vlasov.cpp)
+  add_dependencies(minimal_dlr_vlasov Ensign)
 
+  target_link_libraries(minimal_dlr_vlasov Ensign::Ensign)
 
-# Alfven waves example
-add_executable(alfven_waves alfven_waves.cpp)
-add_dependencies(alfven_waves Ensign)
+  # Alfven waves example
+  add_executable(alfven_waves alfven_waves.cpp)
+  add_dependencies(alfven_waves Ensign)
 
-target_link_libraries(alfven_waves Ensign::Ensign cxxopts)
+  target_link_libraries(alfven_waves Ensign::Ensign cxxopts)
 
+  # LHD instability example
+  add_executable(lhd_instability lhd_instability.cpp)
+  add_dependencies(lhd_instability Ensign)
 
-# LHD instability example
-add_executable(lhd_instability lhd_instability.cpp)
-add_dependencies(lhd_instability Ensign)
+  target_link_libraries(lhd_instability Ensign::Ensign cxxopts)
 
-target_link_libraries(lhd_instability Ensign::Ensign cxxopts)
+  # Drift-kinetics example
+  add_executable(drift_kinetics drift_kinetics_interpolatory.cpp)
+  add_dependencies(drift_kinetics Ensign)
+
+  target_link_libraries(drift_kinetics Ensign::Ensign cxxopts)
+endif()
+
 
 
 if(cxxopts_FOUND)
-  target_link_libraries(linear_landau_3d cxxopts::cxxopts)
+  #target_link_libraries(linear_landau_3d cxxopts::cxxopts)
   target_link_libraries(vlasov_poisson cxxopts::cxxopts)
-  target_link_libraries(alfven_waves cxxopts::cxxopts)
-  target_link_libraries(lhd_instability cxxopts::cxxopts)
+  target_link_libraries(vlasov_poisson_adpat_reserve cxxopts::cxxopts)
+  #target_link_libraries(alfven_waves cxxopts::cxxopts)
+  #target_link_libraries(lhd_instability cxxopts::cxxopts)
 else()
-  target_link_libraries(linear_landau_3d cxxopts)
+  #target_link_libraries(linear_landau_3d cxxopts)
   target_link_libraries(vlasov_poisson cxxopts)
-  target_link_libraries(alfven_waves cxxopts)
-  target_link_libraries(lhd_instability cxxopts)
+  target_link_libraries(vlasov_poisson_adapt_reserve cxxopts)
+  #target_link_libraries(alfven_waves cxxopts)
+  #target_link_libraries(lhd_instability cxxopts)
 endif()
-
-
-
-#add_executable(lhd_instability lhd_instability.cpp ${LR_SOURCES})
-#target_link_libraries(lhd_instability ${FFTW_LIBRARIES} ${NETCDF_LIBRARIES})
-#if(${MKL_ENABLED})
-#  target_link_libraries(lhd_instability ${MKL_LIBRARIES})
-#else()
-#  target_link_libraries(lhd_instability ${OPENBLAS_LIBRARIES} Threads::Threads "-lgfortran")
-#endif()
-#
-#add_executable(lhd_instability_test lhd_instability_test.cpp ${LR_SOURCES})
-#target_link_libraries(lhd_instability_test ${FFTW_LIBRARIES} ${NETCDF_LIBRARIES})
-#if(${MKL_ENABLED})
-#  target_link_libraries(lhd_instability_test ${MKL_LIBRARIES})
-#else()
-#  target_link_libraries(lhd_instability_test ${OPENBLAS_LIBRARIES} Threads::Threads "-lgfortran")
-#endif()
-#add_test(NAME lhd_instability COMMAND lhd_instability_test)

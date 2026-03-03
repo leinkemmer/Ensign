@@ -7,28 +7,36 @@
 
 namespace Ensign {
 
+
+
 template<class T, size_t d>
 struct multi_array {
   array<Index,d> e;
+  array<Index,d> emax;
   T* v;
   stloc sl;
 
   multi_array(stloc _sl=stloc::host) : v(nullptr), sl(_sl) {
     fill(e.begin(), e.end(), 0);
+    fill(emax.begin(), emax.end(), 0);
   }
 
-  multi_array(array<Index,d> _e, stloc _sl=stloc::host) : sl(_sl) {
+  multi_array(array<Index,d> _e, stloc _sl=stloc::host) : v(nullptr), sl(_sl)  {
     resize(_e);
+  }
+  
+  multi_array(array<Index,d> _emax, array<Index,d> _e, stloc _sl=stloc::host) : v(nullptr), sl(_sl) {
+    reserve(_emax,_e);
   }
 
   // copy constructor
-  multi_array(const multi_array& ma) {
+  multi_array(const multi_array& ma) : v(nullptr) {
     sl = ma.sl;
     resize(ma.e);
     if(sl == stloc::host) {
       std::copy(ma.data(), ma.data()+ma.num_elements(), v);
     } else {
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       cudaMemcpy(v, ma.data(), sizeof(T)*ma.num_elements(),
       cudaMemcpyDeviceToDevice);
       #else
@@ -39,7 +47,7 @@ struct multi_array {
     }
   }
 
-  // copy and swap assignment operator
+  // copy operator
   multi_array& operator=(const multi_array& ma) {
     if(v == nullptr) {
       sl = ma.sl;
@@ -52,7 +60,7 @@ struct multi_array {
     if(ma.sl == stloc::host && sl == stloc::host) { // both on CPU
       std::copy(ma.data(), ma.data()+ma.num_elements(), v);
     } else {
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       if(sl == stloc::host){ // dst on CPU
         cudaMemcpy(v, ma.data(), sizeof(T)*ma.num_elements(),
         cudaMemcpyDeviceToHost);
@@ -74,11 +82,42 @@ struct multi_array {
 
   void resize(array<Index,d> _e) {
     e = _e;
+    emax = _e;
     Index num_elements = prod(e);
     if(sl == stloc::host) {
+      if(v != nullptr) {
+          free(v);
+      }
       v = (T*)malloc(sizeof(T)*num_elements);
     } else {
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
+      if(v != nullptr) {
+        cudaFree(v);
+      }
+      v = (T*)gpu_malloc(sizeof(T)*num_elements);
+      #else
+      cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
+      << __LINE__ << endl;
+      exit(1);
+      #endif
+    }
+  }
+  
+  void reserve(array<Index,d> _emax, array<Index,d> _e) {
+    // Reserve memory for emax for a multiarray of actual size e
+    e = _e;
+    emax = _emax;
+    Index num_elements = prod(emax);
+    if(sl == stloc::host) {
+      if(v != nullptr) {
+          free(v);
+      }
+      v = (T*)malloc(sizeof(T)*num_elements);
+    } else {
+      #ifdef __CUDA__
+      if(v != nullptr) {
+          cudaFree(v);
+      }
       v = (T*)gpu_malloc(sizeof(T)*num_elements);
       #else
       cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
@@ -88,12 +127,27 @@ struct multi_array {
     }
   }
 
+  void swap(multi_array& ma) {
+    if (sl != ma.sl) {
+      cout << "ERROR: can't swap DEVICE and HOST multi_arrays" << __FILE__ << ":"
+      << __LINE__ << endl;
+      exit(1);
+    }
+    std::swap(ma.e,e);
+    std::swap(ma.emax,emax);
+    std::swap(ma.v,v);
+  }
+
+  void update_shape(array<Index,d> _e){
+    e = _e;
+  }
+
   ~multi_array() {
     if(v != nullptr) {
       if(sl == stloc::host) {
         free(v);
       } else {
-        #ifdef __CUDACC__
+        #ifdef __CUDA__
         cudaFree(v);
         #else
         cout << "ERROR: compiled without GPU support" << __FILE__ << ":"
@@ -110,7 +164,7 @@ struct multi_array {
       for(Index i=0;i<n;i++)
         v[i] = T(0.0);
     } else {
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       cudaMemset(v, 0, sizeof(T)*num_elements());
       #endif
     }
@@ -178,6 +232,10 @@ struct multi_array {
     return e;
   }
 
+  array<Index,d> shape_alloc() const {
+    return emax;
+  }
+
   T* data() const {
     return &v[0];
   }
@@ -202,7 +260,7 @@ struct multi_array {
       for(Index i=0;i<num_elements();i++)
         v[i] += lhs.v[i];
     } else if(sl == stloc::device && lhs.sl == stloc::device) {
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       if(std::is_same<T, complex<double>>::value)
         ptw_sum_complex<<<(num_elements()+n_threads-1)/n_threads,n_threads>>>(num_elements(), (cuDoubleComplex*)v, (cuDoubleComplex*)lhs.begin());
       else if(std::is_same<T, double>::value)
@@ -227,7 +285,7 @@ struct multi_array {
       for(Index i=0;i<num_elements();i++)
         v[i] += scalar;
     }else{
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
         ptw_sum_scal<<<(num_elements()+n_threads-1)/n_threads,n_threads>>>(num_elements(),begin(),scalar);
       #endif
     }
@@ -242,7 +300,7 @@ struct multi_array {
       for(Index i=0;i<num_elements();i++)
         v[i] -= lhs.v[i];
     } else {
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       if(std::is_same<T, double>::value)
         ptw_diff<<<(num_elements()+n_threads-1)/n_threads,n_threads>>>(num_elements(),v,lhs.begin());
       else {
@@ -262,7 +320,7 @@ struct multi_array {
       for(Index i=0;i<num_elements();i++)
         v[i] = scalar*v[i];
     }else{
-      #ifdef __CUDACC__
+      #ifdef __CUDA__
       run_ptw_mult_scal(num_elements(), v, scalar);
       #endif
     }
@@ -363,8 +421,21 @@ struct multi_array {
     }
   }
 
+  void sadd(const T scalar, const multi_array& ma) {
+    if(sl == stloc::host && ma.sl == stloc::host) {
+      Index num_elements = prod(e);
+      for(Index i=0;i<num_elements;i++) {
+        v[i] += scalar*ma.v[i];
+      }
+    } else {
+      cout << "ERROR: multi_array::sadd is not implemented for GPUs" << endl;
+      exit(1);
+    }
+  }
+
+
 private:
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
   void run_ptw_mult_scal(Index n, double* v, double scalar) {
     ptw_mult_scal<<<(n+n_threads-1)/n_threads,n_threads>>>(n, v, scalar);
   }

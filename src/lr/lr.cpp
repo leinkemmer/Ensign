@@ -7,14 +7,14 @@
 #include <cstring>
 #include <Eigen/Dense>
 
-#ifdef __CUDACC__
+#ifdef __CUDA__
 #include <curand.h>
 #endif
 
 namespace Ensign {
 
 template<class T>
-std::function<T(T*,T*)> inner_product_from_weight(T* w, Index N) {
+std::function<T(T*,T*)> inner_product_from_weight(const T* w, Index N) {
   return [w,N](T* a, T*b) {
     T result=T(0.0);
     #ifdef __OPENMP__
@@ -25,18 +25,14 @@ std::function<T(T*,T*)> inner_product_from_weight(T* w, Index N) {
     return result;
   };
 };
-template std::function<double(double*,double*)> inner_product_from_weight(double* w, Index N);
-template std::function<float(float*,float*)> inner_product_from_weight(float* w, Index N);
+template std::function<double(double*,double*)> inner_product_from_weight(const double* w, Index N);
+template std::function<float(float*,float*)> inner_product_from_weight(const float* w, Index N);
 
 
 template<>
 std::function<double(double*,double*)> inner_product_from_const_weight(double w, Index N) {
   return [w,N](double* a, double*b) {
     double result = cblas_ddot(N, a, 1, b, 1);
-    //double result=0.0;
-    //for(Index i=0;i<N;i++){
-    //  result += a[i]*b[i];
-    //}
     result *= w;
     return result;
   };
@@ -53,8 +49,6 @@ std::function<float(float*,float*)> inner_product_from_const_weight(float w, Ind
 
 template std::function<double(double*,double*)> inner_product_from_const_weight(double w, Index N);
 template std::function<float(float*,float*)> inner_product_from_const_weight(float w, Index N);
-
-
 
 void gram_schmidt_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product) {
   array<Index,2> dims = Q.shape();
@@ -91,42 +85,108 @@ void gram_schmidt_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, std::f
   }
 };
 
-void orthogonalize_householder_constw(multi_array<double,2>& Q, multi_array<double,2>& R, double w) { //Removed blas argument because not needed
-  array<Index,2> dims = Q.shape();
 
-  using namespace Eigen;
-  MatrixXd A(dims[0], dims[1]);
-  for(Index j=0;j<dims[1];j++) {
-    for(Index i=0;i<dims[0];i++) {
-      A(i,j) = Q(i,j);
+void gram_schmidt_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w) {
+
+  Index n = Q.shape()[0];
+  int r = Q.shape()[1];
+
+  std::default_random_engine generator(1234);
+  std::normal_distribution<double> distribution(0.0,1.0);
+
+  for(Index j=0;j<r;j++) {
+    for(Index k=0;k<j;k++) {
+      R(k,j) = cblas_ddot(n,&Q(0,j),1,&Q(0,k),1);
+      R(k,j) *= w;
+      cblas_daxpy(n, -R(k,j), Q.extract({k}), 1, Q.extract({j}),1);
+      R(j,k) = 0.0;
+    }
+    R(j,j) = sqrt(cblas_ddot(n,&Q(0,j),1,&Q(0,j),1)*w);
+    
+    if(R(j,j) > 1e-14){
+      cblas_dscal(n,1.0/R(j,j),Q.extract({j}),1);
+    } else {
+      for(Index l = 0; l < n; l++){
+        Q(l,j) = distribution(generator);
+      }
+      for(Index k=0;k<j;k++) {
+        cblas_daxpy(n, -w*cblas_ddot(n,&Q(0,j),1,&Q(0,k),1), Q.extract({k}), 1, Q.extract({j}),1);
+      }
+      cblas_dscal(n,1.0/sqrt(cblas_ddot(n,&Q(0,j),1,&Q(0,j),1)*w),Q.extract({j}),1);
+
     }
   }
+};
 
-  HouseholderQR<MatrixXd> qr(A.rows(), A.cols());
-  qr.compute(A);
-  MatrixXd q = qr.householderQ()*MatrixXd::Identity(A.rows(), A.cols());
-  MatrixXd temp = qr.matrixQR().triangularView<Upper>();
+double ddot(Index n, double* v, int a, double* w, int b){
+  double res = 0.0;
+  for(Index i = 0; i < n; i++){
+    //res += v[i]*w[i];
+    res = res + v[i]*w[i];
+  }
+  return res;
+}
 
-  MatrixXd RR(A.cols(), A.cols());
-  RR.setZero();
-  for(Index j=0;j<std::min(A.cols(),temp.cols());j++)
-    for(Index i=0;i<std::min(A.cols(),temp.rows());i++)
-      RR(i,j) = temp(i,j);
+void daxpy(Index n, double alpha, double* v, int a, double* w, int b){
+  #ifdef __OPENMP__
+  #pragma omp parallel for
+  #endif
+  for(Index i = 0; i < n; i++){
+    w[i] = alpha*v[i]+w[i];
+  }
+}
 
-  for(Index j=0;j<dims[1];j++) {
-    for(Index i=0;i<dims[0];i++) {
-      Q(i,j) = q(i,j);
+void dscal(Index n, double alpha, double* v, int b){
+  #ifdef __OPENMP__
+  #pragma omp parallel for
+  #endif
+  for(Index i = 0; i < n; i++){
+    v[i] = v[i]*alpha;
+  }
+}
+
+void gram_schmidt_can_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w) {
+
+  Index n = Q.shape()[0];
+  int r = Q.shape()[1];
+
+  R.set_zero();
+
+  for(Index j=0;j<r;j++) {
+    double val = sqrt(w*ddot(n,&Q(0,j),1,&Q(0,j),1));
+    if (val < 1e-14){
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
+      for(Index i=0;i<n;i++){
+        Q(i,j) = 0.0;
+      }
+      Q(j,j) = 1.0;
+      for(Index k=0;k<j;k++) {
+        daxpy(n, -w*Q(j,k), Q.extract({k}), 1, Q.extract({j}),1);
+        //R(j,k) = 0.0;
+        //R(k,j) = 0.0;
+      }
+      //R(j,j) = 0.0;
+      double tmp = sqrt(w*ddot(n,&Q(0,j),1,&Q(0,j),1));
+      dscal(n,1.0/tmp,Q.extract({j}),1);
+    } else {
+      for(Index k=0;k<j;k++) {
+        R(k,j) = w*ddot(n,&Q(0,j),1,&Q(0,k),1);
+        daxpy(n, -R(k,j), Q.extract({k}), 1, Q.extract({j}),1);
+        //R(j,k) = 0.0;
+      }
+      R(j,j) = sqrt(w*ddot(n,&Q(0,j),1,&Q(0,j),1));
+      dscal(n,1.0/R(j,j),Q.extract({j}),1);
     }
   }
+};
 
-  for(Index j=0;j<dims[1];j++)
-    for(Index i=0;i<dims[0];i++)
-      Q(i,j) /= sqrt(w);
-
-  for(Index j=0;j<dims[1];j++)
-    for(Index i=0;i<dims[1];i++)
-      R(i,j) = sqrt(w)*RR(i,j);
-
+void householder_cpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w) {
+  Ensign::Matrix::qr(Q,R);
+  double fact = sqrt(w);
+  Q /= fact;
+  R *= fact;
 }
 
 
@@ -184,7 +244,7 @@ void orthogonalize_householder_vecw(multi_array<double,2>& Q, multi_array<double
 }
 
 
-#ifdef __CUDACC__
+#ifdef __CUDA__
 void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, curandGenerator_t gen, cublasHandle_t handle_devres) { //with constant weight for inner product
   Index n = Q.shape()[0];
   int r = Q.shape()[1];
@@ -196,19 +256,24 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
       cublasDdot (handle_devres, n, &Q(0,j), 1, &Q(0,k), 1, &R(k,j));
       cudaDeviceSynchronize();
       scale_unique<<<1,1>>>(&R(k,j),w); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
+      cudaDeviceSynchronize();
       dmaxpy<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &R(k,j), &Q(0,k), &Q(0,j));
+      cudaDeviceSynchronize();
       scale_unique<<<1,1>>>(&R(j,k),0.0);
+      cudaDeviceSynchronize();
     }
 
       cublasDdot (handle_devres, n, &Q(0,j), 1, &Q(0,j), 1, &R(j,j));
       cudaDeviceSynchronize();
       scale_sqrt_unique<<<1,1>>>(&R(j,j),w);
+      cudaDeviceSynchronize();
 
       double val;
       cudaMemcpy(&val,&R(j,j),sizeof(double),cudaMemcpyDeviceToHost);
-
+      cudaDeviceSynchronize();
       if(std::abs(val) > 1e-14){
         ptw_div_gs<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j), &R(j,j));
+        cudaDeviceSynchronize();
       } else{
 
         // Generate random
@@ -227,45 +292,93 @@ void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double
           ptw_div_gs<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j), nrm);
 
       }
-
   }
+  cudaFree(nrm);
 };
 
-// STILL TO BE TESTED
-/*
-void gram_schmidt_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double* w) { //with non-constant weight for inner product. Still to be tested
-
+void gram_schmidt_can_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, cublasHandle_t handle_devres) { //with constant weight for inner product
   Index n = Q.shape()[0];
   int r = Q.shape()[1];
-  multi_array<double,1> tmp({n},stloc::device);
+  double* nrm;
+  cudaMalloc((void**)&nrm,sizeof(double));
+  double val;
+  double ONE = 1.0;
 
   for(Index j=0;j<r;j++) {
+      cublasDdot (handle_devres, n, &Q(0,j), 1, &Q(0,j), 1, nrm);
+      scale_sqrt_unique<<<1,1>>>(nrm,w);
+      cudaMemcpy(&val,nrm,sizeof(double),cudaMemcpyDeviceToHost);
+    if (val < 1e-14){
+      fill_gpu<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j), 0.0);
+      cudaMemcpy(&Q(j,j),&ONE,sizeof(double),cudaMemcpyHostToDevice);
     for(Index k=0;k<j;k++) {
-      ptw_mult<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j),w,tmp.begin());
-      cublasDdot (handle_devres, n, tmp.begin(), 1, &Q(0,k), 1,&R(k,j));
-      cudaDeviceSynchronize();
+      cudaMemcpy(nrm,&Q(j,k),sizeof(double),cudaMemcpyDeviceToDevice);
+      scale_unique<<<1,1>>>(nrm,w); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
+      dmaxpy<<<(n+n_threads-1)/n_threads,n_threads>>>(n, nrm, &Q(0,k), &Q(0,j));
+      scale_unique<<<1,1>>>(&R(j,k),0.0);
+      scale_unique<<<1,1>>>(&R(k,j),0.0);
+    }
+      scale_unique<<<1,1>>>(&R(j,j),0.0);
+
+      cublasDdot (handle_devres, n, &Q(0,j), 1, &Q(0,j), 1, nrm);
+      scale_sqrt_unique<<<1,1>>>(nrm,w);
+      ptw_div_gs<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j), nrm);
+    } else {
+    for(Index k=0;k<j;k++) {
+      cublasDdot (handle_devres, n, &Q(0,j), 1, &Q(0,k), 1, &R(k,j));
+      scale_unique<<<1,1>>>(&R(k,j),w); //cudamemcpyDev2Dev seems to be slow, better to use a simple kernel call
       dmaxpy<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &R(k,j), &Q(0,k), &Q(0,j));
       scale_unique<<<1,1>>>(&R(j,k),0.0);
     }
-      ptw_mult<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j),w,tmp.begin());
-      cublasDdot (handle_devres, n, &Q(0,j), 1, tmp.begin(), 1,&R(j,j));
-      cudaDeviceSynchronize();
+      cublasDdot (handle_devres, n, &Q(0,j), 1, &Q(0,j), 1, &R(j,j));
+      scale_sqrt_unique<<<1,1>>>(&R(j,j),w);
       ptw_div_gs<<<(n+n_threads-1)/n_threads,n_threads>>>(n, &Q(0,j), &R(j,j));
-
   }
+  }
+  cudaFree(nrm);
 };
-*/
 
+void orthogonalize_householder_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, cusolverDnHandle_t handle_cusolver) {
+
+  int m = Q.shape()[0];
+  int n = Q.shape()[1];
+
+  double *devTau, *work;
+  int *devInfo;
+  int szWork;
+  int szWork1;
+  int szWork2;
+
+  cudaMalloc((void**)&devTau, n * sizeof(double));
+  cudaMalloc((void **)&devInfo, sizeof(int));
+
+  cusolverDnDgeqrf_bufferSize(handle_cusolver, m, n, &Q(0,0), m, &szWork1);
+  cusolverDnDorgqr_bufferSize(handle_cusolver, m, n, n, &Q(0,0), m, devTau, &szWork2);
+  szWork = max(szWork1,szWork2);
+
+  cudaMalloc((void**)&work, szWork * sizeof(double));
+
+  cusolverDnDgeqrf(handle_cusolver, m, n, &Q(0,0), m, devTau, work, szWork, devInfo); 
+
+  copy_R_QR<<<(R.num_elements()+n_threads-1)/n_threads,n_threads>>>(R.num_elements(), n, m, Q.begin(), R.begin(), w);
+
+  cusolverDnDorgqr(handle_cusolver, m, n, n, &Q(0,0), m, devTau, work, szWork, devInfo);
+
+  Q *= (1.0/sqrt(w));
+
+  cudaFree(devTau);
+  cudaFree(work);
+  cudaFree(devInfo);
+}
 
 void orthogonalize_householder_constw_gpu(multi_array<double,2>& Q, multi_array<double,2>& R, double w, cusolverDnHandle_t handle_cusolver) {
 
   int m = Q.shape()[0];   // also lda
   int n = Q.shape()[1];
-  
 
   // allocate memory for tau, work and device info
   double *devTau, *work;
-	int szWork;
+  int szWork;
 
   cudaMalloc((void**)&devTau, n * sizeof(double));
 
@@ -283,8 +396,8 @@ void orthogonalize_householder_constw_gpu(multi_array<double,2>& Q, multi_array<
 
   // copy data from Q to our multi_array R (only upper tridiagonal part of A is R, rest is 0) (R should already be nxn)
   // in our function we already multiply by sqrt(w)
-
   copy_R<<<n,n>>>(m, n, &Q(0,0), &R(0,0), w);
+  cudaDeviceSynchronize();
 
   // we don't allocate extra memory for our second usage of cuSolver, because szwork2 < szwork
   // calculate the orthogonal matrix Q
@@ -292,9 +405,11 @@ void orthogonalize_householder_constw_gpu(multi_array<double,2>& Q, multi_array<
   cudaDeviceSynchronize();
 
   // divide Q by sqrt(w)
+  Q *= (1.0/sqrt(w));
 
-  div_Q<<<m,n>>>(m, n, &Q(0,0), w);
-
+  cudaFree(devTau);
+  cudaFree(work);
+  cudaFree(devInfo);
 }
 
 
@@ -304,7 +419,7 @@ void orthogonalize_householder_constw_gpu(multi_array<double,2>& Q, multi_array<
 orthogonalize::orthogonalize(const Ensign::Matrix::blas_ops* _blas) {
   blas = _blas;
 
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
   gen = 0;
   if(blas->gpu) {
     curandStatus_t status = curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
@@ -318,7 +433,7 @@ orthogonalize::orthogonalize(const Ensign::Matrix::blas_ops* _blas) {
 }
 
 orthogonalize::~orthogonalize() {
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
   if(gen)
       curandDestroyGenerator(gen);
   #endif
@@ -335,11 +450,12 @@ void orthogonalize::operator()(multi_array<double,2>& Q, multi_array<double,2>& 
 
 void orthogonalize::operator()(multi_array<double,2>& Q, multi_array<double,2>& R, double w) {
   if(Q.sl == stloc::host) {
-    orthogonalize_householder_constw(Q, R, w);
+    Ensign::Matrix::qr(Q, R);
+    Q /= sqrt(w);
+    R *= sqrt(w);
   } else {
-    #ifdef __CUDACC__
-    //gram_schmidt_gpu(Q, R, w, gen, blas->handle_devres);
-    orthogonalize_householder_constw_gpu(Q, R, w, blas->handle_cusolver);
+    #ifdef __CUDA__
+    orthogonalize_householder_gpu(Q, R, w, blas->handle_cusolver);
     #else
     cout << "ERROR: orthogonalize_gpu called but no GPU support available." << endl;
     exit(1);
@@ -357,27 +473,27 @@ void orthogonalize::operator()(multi_array<double,2>& Q, multi_array<double,2>& 
   }
 }
 
-
-
-
-/*
-template<>
-void gram_schmidt(multi_array<float,2>& Q, multi_array<float,2>& R, std::function<float(float*,float*)> inner_product) {
-  array<Index,2> dims = Q.shape();
-  for(Index j=0;j<dims[1];j++) {
-    for(Index k=0;k<j;k++) {
-      R(k,j) = inner_product(Q.extract({j}), Q.extract({k}));
-      cblas_saxpy(dims[0], -R(k,j), Q.extract({k}), 1, Q.extract({j}),1);
-      R(j,k) = float(0.0);
-    }
-    R(j,j) = sqrt(inner_product(Q.extract({j}), Q.extract({j})));
-    if(std::abs(R(j,j)) < float(1000)*std::numeric_limits<float>::epsilon()){
-      cout << "Warning: linearly dependent columns in Gram-Schmidt" << endl;
-    } else{
-      cblas_sscal(dims[0],float(1.0/R(j,j)),Q.extract({j}),1);
-    }
+void orthogonalize::gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product) {
+  if(Q.sl == stloc::host) {
+    gram_schmidt_cpu(Q, R, inner_product);
+  } else {
+    #ifdef __CUDA__
+    cout << "ERROR: orthogonalize::gram_schmidt with non-constant inner product currently not implemented for GPU." << endl;
+    exit(1);
+    #endif
   }
-};*/
+}
+
+void orthogonalize::gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, double w) {
+  if(Q.sl == stloc::host) {
+    gram_schmidt_cpu(Q, R, w);
+  } else {
+    #ifdef __CUDA__
+    gram_schmidt_gpu(Q, R, w, gen, blas->handle_devres);
+    #endif
+  }
+}
+
 
 
 template<class T, class IP>
@@ -444,10 +560,72 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, IP inner_pro
 template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, std::function<double(double*,double*)> inner_product_X, std::function<double(double*,double*)> inner_product_V, const Ensign::Matrix::blas_ops& blas);
 template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, double inner_product_X, double inner_product_V, const Ensign::Matrix::blas_ops& blas);
 template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V, double* inner_product_X, double* inner_product_V, const Ensign::Matrix::blas_ops& blas);
-//template void initialize(lr2<float>& lr, vector<const float*> X, vector<const float*> V, std::function<float(float*,float*)> inner_product_X, std::function<float(float*,float*)> inner_product_V, const Ensign::Matrix::blas_ops& blas);
 
+template<class T>
+void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, array<double,3> h_xx, array<double,3> h_vv, const Ensign::Matrix::blas_ops& blas) {
 
+  int n_b = X.size();
+  Index r = lr.rank();
+  
+  std::default_random_engine generator(1234);
+  std::normal_distribution<double> distribution(0.0,1.0);
 
+  for(Index kk=0;kk<r;kk++) {
+    if(kk < n_b){
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
+      for(Index i=0;i<lr.size_X();i++) {
+        lr.X(i, kk) = X[kk][i];
+      }
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
+      for(Index i=0;i<lr.size_V();i++) {
+        lr.V(i, kk) = V[kk][i];
+      }
+    }
+    else{
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
+      for(Index i=0;i<lr.size_X();i++) {
+        //lr.X(i, kk) = 0.0;
+        lr.X(i, kk) = distribution(generator);
+      }
+      #ifdef __OPENMP__
+      #pragma omp parallel for
+      #endif
+      for(Index i=0;i<lr.size_V();i++) {
+        //lr.V(i, kk) = 0.0;
+        lr.V(i, kk) = distribution(generator);
+      }
+    }
+  }
+
+  multi_array<T, 2> X_R(lr.S.shape()), V_R(lr.S.shape());
+
+  orthogonalize hh(&blas);
+  hh(lr.X, X_R, h_xx[0]*h_xx[1]*h_xx[2]);
+  hh(lr.V, V_R, h_vv[0]*h_vv[1]*h_vv[2]);
+
+  // TODO: inner loops can be reduced
+  for(int j = n_b; j < r; j++){
+    for(int i = 0; i < r; i++){
+      X_R(i,j) = T(0.0);
+    }
+  }
+
+  for(int j = n_b; j < r; j++){
+    for(int i = 0; i < r; i++){
+      V_R(i,j) = T(0.0);
+    }
+  }
+
+  blas.matmul_transb(X_R, V_R, lr.S);
+
+};
+template void initialize(lr2<double>& lr, vector<const double*> X, vector<const double*> V,array<double,3> h_xx, array<double,3> h_vv, const Ensign::Matrix::blas_ops& blas);
 
 template<class T, class IP>
 void lr_add(vector<const lr2<T>*> A, const vector<T>& alpha, lr2<T>& out,

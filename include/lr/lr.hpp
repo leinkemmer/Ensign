@@ -22,10 +22,18 @@ struct lr2 {
 
   lr2(Index r, array<Index,2> N, stloc sl=stloc::host) : S({r,r},sl), X({N[0],r},sl), V({N[1],r},sl) {}
 
+  lr2(Index r, Index r_max, array<Index,2> N, stloc sl=stloc::host) : S({r,r},sl), X({N[0],r_max},{N[0],r},sl), V({N[1],r_max},{N[1],r},sl) {}
+
   void resize(Index r, array<Index,2> N) {
     S.resize({r,r});
     X.resize({N[0],r});
     V.resize({N[1],r});
+  }
+
+  void update_info(Index r) {
+    X.update_shape({X.shape()[0],r});
+    S.resize({r,r});
+    V.update_shape({V.shape()[0],r});
   }
 
   Index size_X() const {
@@ -52,7 +60,6 @@ struct lr2 {
     return out;
   }
 };
-
 
 /*  Add two low-rank representations together.
 *
@@ -127,6 +134,10 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V,
                 IP inner_product_V,
                 const Ensign::Matrix::blas_ops& blas);
 
+template<class T>
+void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V,
+                array<double,3> h_xx, array<double,3> h_vv,
+                const Ensign::Matrix::blas_ops& blas);
 
 /* Return an inner product function object for use in, e.g., in gram_schmidt.
 */
@@ -145,23 +156,6 @@ std::function<T(T*,T*)> inner_product_from_weight(const T* w, Index N);
 * Note that the inputs are overwritten.
 */
 
-/*
-struct gram_schmidt {
-
-  gram_schmidt(const Ensign::Matrix::blas_ops* _blas);
-  ~gram_schmidt();
-
-  void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product);
-  void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, double w);
-  
-private:
-  const Ensign::Matrix::blas_ops* blas;
-  #ifdef __CUDACC__
-  curandGenerator_t gen;
-  #endif
-};
-*/
-
 struct orthogonalize {
 
   orthogonalize(const Ensign::Matrix::blas_ops* _blas);
@@ -170,11 +164,15 @@ struct orthogonalize {
   void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product);
   void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, double w);
   void operator()(multi_array<double,2>& Q, multi_array<double,2>& R, double* w);
-
+  
+  // Forces the use of Gram Schmidt.
+  // This guarantees that if the first number of basis functions are already orthonormal, they are not changed.
+  void gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, std::function<double(double*,double*)> inner_product);
+  void gram_schmidt(multi_array<double,2>& Q, multi_array<double,2>& R, double w);
   
 private:
   const Ensign::Matrix::blas_ops* blas;
-  #ifdef __CUDACC__
+  #ifdef __CUDA__
   curandGenerator_t gen;
   #endif
 };
