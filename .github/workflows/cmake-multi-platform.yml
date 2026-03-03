@@ -42,8 +42,6 @@ jobs:
         exclude:
           - os: windows-latest
             c_compiler: gcc
-          - os: ubuntu-latest
-            c_compiler: cl
           - os: macos-latest
             c_compiler: cl
     steps:
