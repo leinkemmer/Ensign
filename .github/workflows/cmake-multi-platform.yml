@@ -41,9 +41,8 @@ jobs:
           - os: macos-latest
             c_compiler: gcc
             cpp_compiler: g++
+            fortran_compiler: gfortran
         exclude:
-          - os: windows-latest
-            c_compiler: gcc
           - os: macos-latest
             c_compiler: cl
     steps:
