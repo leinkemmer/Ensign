@@ -23,7 +23,7 @@ jobs:
       #
       # To add more build types (Release, Debug, RelWithDebInfo, etc.) customize the build_type list.
       matrix:
-        os: [ubuntu-latest, debian-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         build_type: [Release]
         c_compiler: [gcc]
         fortran_compiler: [gfortran]
@@ -32,9 +32,6 @@ jobs:
             c_compiler: gcc
             cpp_compiler: g++
           - os: ubuntu-latest
-            c_compiler: gcc
-            cpp_compiler: g++
-          - os: debian-latest
             c_compiler: gcc
             cpp_compiler: g++
           - os: macos-latest
@@ -52,12 +49,8 @@ jobs:
       with:
           compiler: ${{ matrix.toolchain.compiler }}
           version: ${{ matrix.toolchain.version }}
-    - name: Install MSYS2 + gfortran
-      shell: pwsh
-      run: |
-        choco install msys2 -y
-        refreshenv
-   
+          
+     
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
       id: strings
@@ -73,6 +66,7 @@ jobs:
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }}
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ..
         -S ${{ github.workspace }}
 
