@@ -31,7 +31,6 @@ jobs:
           - os: windows-latest
             c_compiler: gcc
             cpp_compiler: g++
-            fortran_compiler: gfortran
           - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
