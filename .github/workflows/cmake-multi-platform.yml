@@ -35,6 +35,12 @@ jobs:
           - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
+          - os: ubuntu-latest
+            c_compiler: clang
+            cpp_compiler: clang
+          - os: debian-latest
+            c_compiler: clang
+            cpp_compiler: g++
           - os: macos-latest
             c_compiler: gcc
             cpp_compiler: g++
@@ -68,7 +74,7 @@ jobs:
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ..
         -S ${{ github.workspace }}
 
     - name: Build
