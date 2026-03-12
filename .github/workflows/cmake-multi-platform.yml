@@ -52,7 +52,12 @@ jobs:
       with:
           compiler: ${{ matrix.toolchain.compiler }}
           version: ${{ matrix.toolchain.version }}
-
+    - name: Install MSYS2 + gfortran
+      shell: pwsh
+      run: |
+        choco install msys2 -y
+        refreshenv
+   
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
       id: strings
