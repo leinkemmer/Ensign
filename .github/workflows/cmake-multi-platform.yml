@@ -39,7 +39,7 @@ jobs:
             c_compiler: clang
             cpp_compiler: clang
           - os: debian-latest
-            c_compiler: clang
+            c_compiler: gcc
             cpp_compiler: g++
           - os: macos-latest
             c_compiler: gcc
