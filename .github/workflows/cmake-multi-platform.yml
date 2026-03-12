@@ -23,7 +23,7 @@ jobs:
       #
       # To add more build types (Release, Debug, RelWithDebInfo, etc.) customize the build_type list.
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, debian-latest, windows-latest, macos-latest]
         build_type: [Release]
         c_compiler: [gcc]
         fortran_compiler: [gfortran]
@@ -35,16 +35,12 @@ jobs:
           - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
-          - os: ubuntu-latest
-            c_compiler: clang
-            cpp_compiler: clang
           - os: debian-latest
             c_compiler: gcc
             cpp_compiler: g++
           - os: macos-latest
             c_compiler: gcc
             cpp_compiler: g++
-            fortran_compiler: gfortran
         exclude:
           - os: windows-latest
             c_compiler: gcc
