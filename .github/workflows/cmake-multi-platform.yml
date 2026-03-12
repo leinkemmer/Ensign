@@ -51,7 +51,7 @@ jobs:
           version: ${{ matrix.toolchain.version }}
     - name: Setup MSYS2 + compilers
       if: matrix.os == 'windows-latest'
-      uses: msys2/setup-msys2@v3
+      uses: msys2/setup-msys2@v2
       with:
         update: true
         install: mingw-w64-ucrt-x86_64-gcc-fortran
