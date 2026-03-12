@@ -23,12 +23,12 @@ jobs:
       #
       # To add more build types (Release, Debug, RelWithDebInfo, etc.) customize the build_type list.
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, fedora-latest, macos-latest]
         build_type: [Release]
         c_compiler: [gcc]
         fortran_compiler: [gfortran]
         include:
-          - os: windows-latest
+          - os: fedora-latest
             c_compiler: gcc
             cpp_compiler: g++
           - os: ubuntu-latest
@@ -49,13 +49,7 @@ jobs:
       with:
           compiler: ${{ matrix.toolchain.compiler }}
           version: ${{ matrix.toolchain.version }}
-    - name: Setup MSYS2 + compilers
-      if: matrix.os == 'windows-latest'
-      uses: msys2/setup-msys2@v2
-      with:
-        update: true
-        install: mingw-w64-ucrt-x86_64-gcc-fortran
-     
+    
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
       id: strings
@@ -67,14 +61,11 @@ jobs:
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
       run: >
-        $Env:PATH = "C:\msys64\ucrt64\bin;" + $Env:PATH gfortran --version
-        cmake -B build -S .
-        -DCMAKE_Fortran_COMPILER="C:\msys64\ucrt64\bin\gfortran.exe"
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }}
-        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ..
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.27 ..
         -S ${{ github.workspace }}
 
     - name: Build
