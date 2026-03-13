@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.16...3.30)
+cmake_minimum_required(VERSION 3.16...3.30 FATAL_ERROR)
+message(CMAKE_MAYOR_VERSION)
 project(Ensign 
   VERSION 1.0.1
   DESCRIPTION "Framework for dynamical low-rank simulations"
