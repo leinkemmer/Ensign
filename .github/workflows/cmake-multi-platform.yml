@@ -38,6 +38,7 @@ jobs:
         exclude:
           - os: macos-latest
             c_compiler: cl
+            fortran_compiler: gfortran
     steps:
     - uses: actions/checkout@v4
     
