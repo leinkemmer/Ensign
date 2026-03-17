@@ -52,7 +52,7 @@ jobs:
     - name: Install compilers (macOS)
       if: matrix.os == 'macos-latest'
       run:
-        brew install gcc fftw cmake
+        brew install clang fftw cmake
                
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
@@ -68,7 +68,7 @@ jobs:
     - name: Build
       # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
       # run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
-      run: cmake --build build --config Release
+      run: cmake --build --config Release
       
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
