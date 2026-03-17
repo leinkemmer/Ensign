@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.16...3.30 FATAL_ERROR)
-message(CMAKE_MAYOR_VERSION)
+
 project(Ensign 
+  message(STATUS "CMake version: ${CMAKE_VERSION}")
+  message(STATUS "CMake major version: ${CMAKE_MAJOR_VERSION}")
   VERSION 1.0.1
   DESCRIPTION "Framework for dynamical low-rank simulations"
   HOMEPAGE_URL "https://github.com/leinkemmer/Ensign"
