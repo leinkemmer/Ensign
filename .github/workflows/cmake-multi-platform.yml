@@ -67,7 +67,7 @@ jobs:
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} 
         -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }}
-        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.20
         
     - name: Build
       # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
