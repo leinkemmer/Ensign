@@ -67,13 +67,8 @@ jobs:
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} 
         -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }}
-        ExternalProject_Add(fftw
-          URL https://www.fftw.org/fftw-3.3.10.tar.gz
-          CMAKE_ARGS
-             -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
-             -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-        )
-  
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        
     - name: Build
       # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
