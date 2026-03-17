@@ -1,127 +1,47 @@
-name: Build and Test (Multi-Platform)
+name: CMake Build
 
 on:
   push:
-    branches: [ main, master ]
   pull_request:
-    branches: [ main, master ]
-
-jobs:
+  jobs:
   build:
-    name: ${{ matrix.os }} / ${{ matrix.cc }} + ${{ matrix.fc }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
       matrix:
         include:
-          # --- Linux (Ubuntu) ---
           - os: ubuntu-latest
-            cc: gcc
-            cxx: g++
-            fc: gfortran
-
-          - os: ubuntu-latest
-            cc: clang
-            cxx: clang++
-            fc: gfortran
-
-          # --- macOS ---
+            c_compiler: gcc
+            cpp_compiler: g++
+            fortran_compiler: gfortran
           - os: macos-latest
-            cc: gcc
-            cxx: g++
-            fc: gfortran
-            use_homebrew_gcc: true
-
-          - os: macos-latest
-            cc: clang
-            cxx: clang++
-            fc: gfortran
-
-          # --- Windows (MinGW only; skip MSVC + gfortran) ---
-          - os: windows-latest
-            cc: gcc
-            cxx: g++
-            fc: gfortran
-            use_msys2: true
-
+            c_compiler: clang
+            cpp_compiler: clang++
+            fortran_compiler: gfortran
+        fail-fast: false
+        
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # --- Linux: install gfortran ---
-      - name: Set up Fortran (Linux)
-        if: runner.os == 'Linux'
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install cmake fftw gcc
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y gfortran
-
-      # --- macOS: GCC + GFortran via Homebrew ---
-      - name: Set up Fortran (macOS Homebrew GCC)
-        if: runner.os == 'macOS' && matrix.use_homebrew_gcc == true
-        run: |
-          brew update
-          brew install gcc
-          GCC_VERSION=$(brew list --versions gcc | awk '{print $2}')
-          echo "Using GCC version: $GCC_VERSION"
-          echo "CC=gcc-${GCC_VERSION%%.*}" >> $GITHUB_ENV
-          echo "CXX=g++-${GCC_VERSION%%.*}" >> $GITHUB_ENV
-          echo "FC=gfortran-${GCC_VERSION%%.*}" >> $GITHUB_ENV
-          which gcc-${GCC_VERSION%%.*}
-          gcc-${GCC_VERSION%%.*} --version
-          gfortran-${GCC_VERSION%%.*} --version
-
-      # --- macOS: Clang + GFortran ---
-      - name: Set up Fortran (macOS Clang)
-        if: runner.os == 'macOS' && matrix.use_homebrew_gcc != true
-        run: |
-          brew install gcc
-          echo "FC=gfortran" >> $GITHUB_ENV
-
-      # --- Windows: MinGW-w64 (MSYS2) setup ---
-      - name: Set up MSYS2 (Windows + GCC)
-        if: runner.os == 'Windows' && matrix.use_msys2 == true
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-gcc-fortran
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-make
-
-      - name: Build and test (MSYS2)
-        if: runner.os == 'Windows' && matrix.use_msys2 == true
-        shell: msys2 {0}
-        run: |
-          cmake -S . -B build \
-            -G "MinGW Makefiles" \
-            -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --parallel
-          ctest --test-dir build --output-on-failure
-
-      # --- Standard builds (Linux + macOS) ---
-      - name: Configure (CMake)
-        if: runner.os != 'Windows' || matrix.use_msys2 != true
-        run: |
-          LINK_FLAGS=""
-          # Add linker flags for Clang + GFortran on Linux
-          if [ "${{ runner.os }}" = "Linux" ] && [ "${{ matrix.cc }}" = "clang" ] && [ "${{ matrix.fc }}" = "gfortran" ]; then
-            LINK_FLAGS="-DCMAKE_EXE_LINKER_FLAGS='-lgfortran -lquadmath -lm'"
-          fi
-
-          echo "Configuring with CC=${{ env.CC || matrix.cc }}, FC=${{ env.FC || matrix.fc }}"
-          cmake -S . -B build \
-            -DCMAKE_C_COMPILER=${{ env.CC || matrix.cc }} \
-            -DCMAKE_CXX_COMPILER=${{ env.CXX || matrix.cxx }} \
-            -DCMAKE_Fortran_COMPILER=${{ env.FC || matrix.fc }} \
-            -DCMAKE_BUILD_TYPE=Release \
-            $LINK_FLAGS
+          sudo apt-get install -y cmake fftw3-dev gfortran build-essential
+          - name: Configure
+        run: cmake -S . -B build \
+             -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+             -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+             -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }} \
+             -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        if: runner.os != 'Windows' || matrix.use_msys2 != true
-        run: cmake --build build --parallel
+        run: cmake --build build --config Release
 
       - name: Run tests
-        if: runner.os != 'Windows' || matrix.use_msys2 != true
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --output-on-failure -C Release -S build
+          
