@@ -25,7 +25,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         build_type: [Release]
-        c_compiler: [gcc]
+        c_compiler: [gcc] [g++]
         fortran_compiler: [gfortran]
         include:
           - os: ubuntu-latest
