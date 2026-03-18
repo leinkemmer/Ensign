@@ -65,7 +65,7 @@ jobs:
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }}
         -DCMAKE_BUILD_TYPE=Release
-        -DENABLE_ASAN=${{ matrix.enable_asan }}
+        -DENABLE_ASAN=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }} 
         
     - name: Build
       # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
