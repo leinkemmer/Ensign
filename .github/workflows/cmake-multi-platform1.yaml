@@ -28,9 +28,6 @@ jobs:
             c_compiler: gcc
             cpp_compiler: g++
             fortran_compiler: gfortran
-            toolchain:
-            compiler: gcc
-            version: latest
             enable_asan: ON
           - os: macos-latest
             c_compiler: clang
