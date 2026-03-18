@@ -28,10 +28,12 @@ jobs:
             c_compiler: gcc
             cpp_compiler: g++
             fortran_compiler: gfortran
+            enable_asan: ON
           - os: macos-latest
             c_compiler: clang
             cpp_compiler: clang++
             fortran_compiler: gfortran
+            enable_asan: OFF
         
     steps:
     - uses: actions/checkout@v4
@@ -52,7 +54,7 @@ jobs:
     - name: Install compilers (macOS)
       if: matrix.os == 'macos-latest'
       run:
-        brew install gcc@14 fftw cmake
+        brew install fftw cmake
                
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
@@ -64,7 +66,7 @@ jobs:
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }}
         -DCMAKE_BUILD_TYPE=Release
-        -DOPENMP=OFF
+        -DENABLE_ASAN=${{ matrix.enable_asan }}
         
     - name: Build
       # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
