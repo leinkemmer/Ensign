@@ -57,7 +57,7 @@ jobs:
       if: matrix.os == 'macos-latest'
       run:
       #  brew install fftw cmake
-        brew install fftw cmake
+        brew install fftw cmake libomp
       
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
@@ -68,6 +68,7 @@ jobs:
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }}
+        -DCMAKE_EXE_LINKER_FLAGS="-lomp"
         -DCMAKE_BUILD_TYPE=Release
         -DENABLE_ASAN=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }} 
         
