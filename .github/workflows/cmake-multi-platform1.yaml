@@ -68,7 +68,7 @@ jobs:
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }}
-        -DCMAKE_EXE_LINKER_FLAGS="-lomp"
+        #-DCMAKE_EXE_LINKER_FLAGS="-lomp"
         -DCMAKE_BUILD_TYPE=Release
         -DENABLE_ASAN=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }} 
         
