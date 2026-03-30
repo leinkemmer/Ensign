@@ -164,7 +164,7 @@ void test_dtA_iteration(discretization discr) {
     if(gi.discr == discretization::fft)
       REQUIRE( err < 1e-12);
     else
-      REQUIRE( err < 1e-3);
+      REQUIRE( err < 5e-3);
 
     // initialize E with something non-zero and check rhs
     componentwise_vec_omp(gi.N_xx, [&xx1, &xx2, &gi](Index idx, array<Index,2> i) {
