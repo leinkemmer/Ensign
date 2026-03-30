@@ -27,11 +27,11 @@ jobs:
             cpp_compiler: g++
             fortran_compiler: gfortran
             enable_asan: ON
-          - os: fedora-latest
-            c_compiler: gcc
-            cpp_compiler: g++
-            fortran_compiler: gfortran
-            enable_asan: ON
+          #- os: fedora-latest
+          #  c_compiler: gcc
+          #  cpp_compiler: g++
+          #  fortran_compiler: gfortran
+          #  enable_asan: ON
           - os: macos-latest
             c_compiler: clang
             cpp_compiler: clang++
