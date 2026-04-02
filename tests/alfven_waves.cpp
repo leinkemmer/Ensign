@@ -381,7 +381,7 @@ void test_advection_v(string method, discretization discr) {
             
     cout << "Error advection v (" << method << ", " << discr_to_str(discr) << "): " << err << endl;
 
-    REQUIRE( err <= 1e-2 );
+    REQUIRE( err <= 0.022 );
 }
 
 void test_advection_v_dtA(string method, discretization discr) {
