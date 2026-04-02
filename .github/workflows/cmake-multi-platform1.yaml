@@ -62,10 +62,10 @@ jobs:
         sudo apt-get install -y gfortran cmake build-essential
     
     # Fedora deps
-    - name: Install dependencies (Fedora)
-      if: matrix.container != null
-      run: |
-        dnf install -y gcc gcc-c++ gcc-gfortran cmake make git    
+    #- name: Install dependencies (Fedora)
+    #  if: matrix.container != null
+    #  run: |
+    #    dnf install -y gcc gcc-c++ gcc-gfortran cmake make git    
 
     # MacOS deps
     - name: Install dependencies (macOS)
