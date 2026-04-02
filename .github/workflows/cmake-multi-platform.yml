@@ -39,7 +39,7 @@ jobs:
             container: null
             c_compiler: clang
             cpp_compiler: clang++
-            fortran_compiler: gfortran
+            #fortran_compiler: gfortran
             enable_asan: OFF
 
     steps:
@@ -66,7 +66,7 @@ jobs:
     - name: Install dependencies (macOS)
       if: matrix.os == 'macos-latest'
       run: |
-        brew install fftw cmake libomp
+        brew install fftw cmake libomp gcc
     
     - name: Show OS
       run: |
