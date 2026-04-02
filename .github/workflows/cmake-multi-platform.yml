@@ -74,14 +74,14 @@ jobs:
     
     - name: Configure CMake
       run: |
-        cmake -B ${{ steps.strings.outputs.build-output-dir }} 
-              -S ${{ github.workspace }} 
-              -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} 
-              -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} 
-              -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }} 
-              -DCMAKE_BUILD_TYPE=Release 
+        cmake -B ${{ steps.strings.outputs.build-output-dir }} \ 
+              -S ${{ github.workspace }} \
+              -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+              -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+              -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }} \ 
+              -DCMAKE_BUILD_TYPE=Release \ 
               -DENABLE_ASAN=${{ matrix.enable_asan }}
-              -DOPENMP=OFF
+              
     
     - name: Build
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }}
