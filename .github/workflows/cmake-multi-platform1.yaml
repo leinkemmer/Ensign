@@ -27,13 +27,6 @@ jobs:
             cpp_compiler: g++
             fortran_compiler: gfortran
             enable_asan: ON
-          - os: ubuntu-latest
-            container: 
-              image: fedora-latest
-            steps:
-              - run: cat /etc/os-release
-              - run: dnf install -y gcc g++ make gfortran
-            enable_asan: ON
           - os: macos-latest
             c_compiler: clang
             cpp_compiler: clang++
@@ -41,26 +34,15 @@ jobs:
             enable_asan: OFF
     steps:
     - uses: actions/checkout@v4
-          
-    - uses: fortran-lang/setup-fortran@v1
-      id: setup-fortran
-      with:
-          compiler: ${{ matrix.toolchain.compiler }}
-          version: ${{ matrix.toolchain.version }}
     
-    - name: Set reusable strings
-      # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
-      id: strings
-      shell: bash
-      run: 
-        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
-        
-    - name: Install compilers (macOS)
+    - name: Install dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get update && sudo apt-get install -y gfortran cmake
+
+    - name: Install dependencies (macOS)
       if: matrix.os == 'macos-latest'
-      run:
-      #  brew install fftw cmake
-        brew install fftw cmake libomp
-      
+      run: brew install fftw cmake libomp
+             
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
