@@ -22,41 +22,59 @@ jobs:
       # To add more build types (Release, Debug, RelWithDebInfo, etc.) customize the build_type list.
       matrix:
         include:
+          # Ubuntu
           - os: ubuntu-latest
-            container: ""
+            container: null
             c_compiler: gcc
             cpp_compiler: g++
             fortran_compiler: gfortran
             enable_asan: ON
+
+          # Fedora (container)
           - os: ubuntu-latest
-            container: 
-             image: fedora:latest
+            container:
+              image: fedora:latest
             c_compiler: gcc
             cpp_compiler: g++
             fortran_compiler: gfortran
             enable_asan: ON
+
+          # macOS
           - os: macos-latest
+            container: null
             c_compiler: clang
             cpp_compiler: clang++
             fortran_compiler: gfortran
             enable_asan: OFF
+          
     steps:
     - uses: actions/checkout@v4
     
+    - name: Set build dir
+      id: strings
+      run: echo "build-output-dir=${{ github.workspace }}/build" >> $GITHUB_OUTPUT
+    
+    # Ubuntu deps
     - name: Install dependencies (Ubuntu)
-      if: matrix.os == 'ubuntu-latest'
-      run: sudo apt-get update && sudo apt-get install -y gfortran cmake
+      if: matrix.os == 'ubuntu-latest' && matrix.container == null
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gfortran cmake build-essential
+    
+    # Fedora deps
+    - name: Install dependencies (Fedora)
+      if: matrix.container != null
+      run: |
+        dnf install -y gcc gcc-c++ gcc-gfortran cmake make git    
 
+    # MacOS deps
     - name: Install dependencies (macOS)
       if: matrix.os == 'macos-latest'
       run: brew install fftw cmake libomp
       
     - name: Show OS
       run: cat /etc/os-release
-
-    - name: Install dependencies
-      run: dnf install -y gcc gcc-c++ gcc-gfortran cmake make git
-    
+      
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
