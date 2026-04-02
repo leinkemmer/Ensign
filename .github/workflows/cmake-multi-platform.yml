@@ -60,28 +60,39 @@ jobs:
     - name: Install dependencies (Fedora)
       if: matrix.container != null
       run: |
-        dnf install -y gcc gcc-c++ gcc-gfortran cmake make git
+        dnf update -y
+        dnf install -y gcc gcc-c++ gcc-gfortran cmake make git libgomp
     
     # macOS deps
     - name: Install dependencies (macOS)
       if: matrix.os == 'macos-latest'
       run: |
-        brew install fftw cmake libomp gcc
+        brew install gcc fftw cmake libomp 
     
     - name: Show OS
       run: |
         cat /etc/os-release || uname -a
+    - name: Check compilers
+  
+      run: |
+       which ${{ matrix.c_compiler }} || true
+       which ${{ matrix.cpp_compiler }} || true
+       which ${{ matrix.fortran_compiler }} || true
+       ${{ matrix.fortran_compiler }} --version || true
     
     - name: Configure CMake
       run: |
         cmake -B ${{ steps.strings.outputs.build-output-dir }} \
-              -S ${{ github.workspace }} \
-              -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
-              -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
-              -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }} \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DENABLE_ASAN=${{ matrix.enable_asan }}
-              
+          -S ${{ github.workspace }} \
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+          -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }} \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DENABLE_ASAN=${{ matrix.enable_asan }} \
+          -DOpenMP_C_FLAGS="-Xpreprocessor -fopenmp" \
+          -DOpenMP_C_LIB_NAMES="omp" \
+          -DOpenMP_CXX_FLAGS="-Xpreprocessor -fopenmp" \
+          -DOpenMP_CXX_LIB_NAMES="omp"    
     
     - name: Build
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }}
