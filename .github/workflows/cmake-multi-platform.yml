@@ -54,20 +54,21 @@ jobs:
       if: matrix.os == 'ubuntu-latest' && matrix.container == null
       run: |
         sudo apt-get update
-        sudo apt-get install -y gfortran cmake build-essential
+        sudo apt-get install -y gfortran
+
     
     # Fedora deps
     - name: Install dependencies (Fedora)
       if: matrix.container != null
       run: |
         dnf update -y
-        dnf install -y gcc gcc-c++ gcc-gfortran cmake make git libgomp
+        dnf install -y gcc gcc-c++ gcc-gfortran cmake make git
     
     # macOS deps
     - name: Install dependencies (macOS)
       if: matrix.os == 'macos-latest'
       run: |
-        brew install gcc fftw cmake libomp 
+        brew install gcc
     
     - name: Show OS
       run: |
@@ -82,17 +83,16 @@ jobs:
     
     - name: Configure CMake
       run: |
+        FC=$(which gfortran || true)
+        echo "Detected Fortran compiler: $FC"
+        
         cmake -B ${{ steps.strings.outputs.build-output-dir }} \
           -S ${{ github.workspace }} \
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
           -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
-          -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }} \
+          -DCMAKE_Fortran_COMPILER=$FC \
           -DCMAKE_BUILD_TYPE=Release \
-          -DENABLE_ASAN=${{ matrix.enable_asan }} \
-          -DOpenMP_C_FLAGS="-Xpreprocessor -fopenmp" \
-          -DOpenMP_C_LIB_NAMES="omp" \
-          -DOpenMP_CXX_FLAGS="-Xpreprocessor -fopenmp" \
-          -DOpenMP_CXX_LIB_NAMES="omp"    
+          -DENABLE_ASAN=${{ matrix.enable_asan }} 
     
     - name: Build
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }}
