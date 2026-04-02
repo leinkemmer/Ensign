@@ -27,13 +27,6 @@ jobs:
             cpp_compiler: g++
             fortran_compiler: gfortran
             enable_asan: ON
-          - os: ubuntu-latest
-            container: 
-              image: fedora:latest
-            steps:
-              - run: cat /etc/os-release
-              - run: dnf install -y gcc g++ make gfortran
-            enable_asan: ON
           - os: macos-latest
             c_compiler: clang
             cpp_compiler: clang++
