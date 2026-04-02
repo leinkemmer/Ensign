@@ -24,20 +24,10 @@ jobs:
         include:
           # Ubuntu
           - os: ubuntu-latest
-            #container: null
             c_compiler: gcc
             cpp_compiler: g++
             fortran_compiler: gfortran
             enable_asan: ON
-
-          # Fedora (container)
-          #- os: ubuntu-latest
-          #  container:
-          #    image: fedora:latest
-          #  c_compiler: gcc
-          #  cpp_compiler: g++
-          #  fortran_compiler: gfortran
-          #  enable_asan: ON
 
           # macOS
           - os: macos-latest
@@ -61,12 +51,6 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y gfortran cmake build-essential
     
-    # Fedora deps
-    #- name: Install dependencies (Fedora)
-    #  if: matrix.container != null
-    #  run: |
-    #    dnf install -y gcc gcc-c++ gcc-gfortran cmake make git    
-
     # MacOS deps
     - name: Install dependencies (macOS)
       if: matrix.os == 'macos-latest'
