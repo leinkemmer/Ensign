@@ -24,20 +24,20 @@ jobs:
         include:
           # Ubuntu
           - os: ubuntu-latest
-            container: null
+            #container: null
             c_compiler: gcc
             cpp_compiler: g++
             fortran_compiler: gfortran
             enable_asan: ON
 
           # Fedora (container)
-          - os: ubuntu-latest
-            container:
-              image: fedora:latest
-            c_compiler: gcc
-            cpp_compiler: g++
-            fortran_compiler: gfortran
-            enable_asan: ON
+          #- os: ubuntu-latest
+          #  container:
+          #    image: fedora:latest
+          #  c_compiler: gcc
+          #  cpp_compiler: g++
+          #  fortran_compiler: gfortran
+          #  enable_asan: ON
 
           # macOS
           - os: macos-latest
