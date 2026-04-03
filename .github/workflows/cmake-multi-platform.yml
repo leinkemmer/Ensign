@@ -25,21 +25,11 @@ jobs:
         include:
           # Ubuntu
           - os: ubuntu-latest
-            container: null
             c_compiler: gcc
             cpp_compiler: g++
             fortran_compiler: gfortran
             enable_asan: ON
             
-          # Fedora
-          - os: ubuntu-latest
-            container:
-              image: fedora:latest
-            c_compiler: gcc
-            cpp_compiler: g++
-            fortran_compiler: gfortran
-            enable_asan: ON
-
           # MacOS  
           - os: macos-latest
             c_compiler: clang
@@ -63,12 +53,6 @@ jobs:
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-    - name: Install Compilers (Fedora)
-      if: matrix.container 
-      run: |
-        dnf update -y
-        dnf install -y gcc gcc-c++ cmake make git
-    
     - name: Install Compilers (macOS) 
       if: matrix.os == 'macos-latest'
       run:
