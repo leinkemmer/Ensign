@@ -1,5 +1,4 @@
-# This starter workflow is for a CMake project running on multiple platforms. There is a different starter workflow if you just want a 
-single platform.
+# This starter workflow is for a CMake project running on multiple platforms. There is a different starter workflow if you just want a single platform.
 # See: https://github.com/actions/starter-workflows/blob/main/ci/cmake-single-platform.yml
 
 name: CMake on multiple platforms
@@ -34,7 +33,7 @@ jobs:
             cpp_compiler: clang++
             fortran_compiler: gfortran
             enable_asan: OFF
-steps:
+    steps:
     - uses: actions/checkout@v4
           
     - uses: fortran-lang/setup-fortran@v1
@@ -49,8 +48,8 @@ steps:
       shell: bash
       run: 
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
-        
-    - name: Install compilers (macOS)
+  
+    - name: Install Compilers (macOS) 
       if: matrix.os == 'macos-latest'
       run:
         # brew install fftw cmake
