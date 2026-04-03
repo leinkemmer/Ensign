@@ -67,7 +67,7 @@ jobs:
       if: matrix.container 
       run: |
         dnf update -y
-        dnf install -y gcc gcc-c++ gfortran cmake make git
+        dnf install -y gcc gcc-c++ cmake make git
     
     - name: Install Compilers (macOS) 
       if: matrix.os == 'macos-latest'
