@@ -40,6 +40,18 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - uses: fortran-lang/setup-fortran@v1
+      id: setup-fortran
+      with:
+          compiler: ${{ matrix.toolchain.compiler }}
+          version: ${{ matrix.toolchain.version }}
+    
+    - name: Set reusable strings
+      # Turn repeated input strings (such as the build output directory) into step outputs.
+      id: strings
+      shell: bash
+      run: 
+        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
     - name: Set build dir
       id: strings
       run: echo "build-output-dir=${{ github.workspace }}/build" >> $GITHUB_OUTPUT
