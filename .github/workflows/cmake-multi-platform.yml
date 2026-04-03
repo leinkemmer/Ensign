@@ -23,11 +23,23 @@ jobs:
       # To add more build types (Release, Debug, RelWithDebInfo, etc.) customize the build_type list.
       matrix:
         include:
+          # Ubuntu
           - os: ubuntu-latest
+            container: null
             c_compiler: gcc
             cpp_compiler: g++
             fortran_compiler: gfortran
             enable_asan: ON
+          # Fedora
+          - os: ubuntu-latest
+            container:
+              image: fedora:latest
+            c_compiler: gcc
+            gpp_compiler: g++
+            fortran_compiler: gfortran
+            enable_asan: ON
+
+          # MacOS  
           - os: macos-latest
             c_compiler: clang
             cpp_compiler: clang++
@@ -48,7 +60,13 @@ jobs:
       shell: bash
       run: 
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
-  
+
+    - name: Install Compilers (Fedora)
+      if: matrix.container != null
+      run: |
+        dnf update -y
+        dnf install -y gcc gcc-c++ gcc-gfortran cmake make git
+    
     - name: Install Compilers (macOS) 
       if: matrix.os == 'macos-latest'
       run:
