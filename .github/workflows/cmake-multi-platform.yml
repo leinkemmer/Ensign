@@ -37,7 +37,7 @@ jobs:
               image: fedora:latest
             c_compiler: gcc
             cpp_compiler: g++
-            fortran_compiler: gcc
+            fortran_compiler: gfortran
             enable_asan: ON
 
           # MacOS  
