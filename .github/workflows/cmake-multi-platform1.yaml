@@ -37,7 +37,7 @@ jobs:
             c_compiler: gcc
             cpp_compiler: g++
             fortran_compiler: gfortran
-            eneable_asan: ON
+            enable_asan: ON
             
           # macOS
           - os: macos-latest
@@ -53,15 +53,16 @@ jobs:
     - uses: fortran-lang/setup-fortran@v1
       id: setup-fortran
       with:
-          compiler: ${{ matrix.toolchain.compiler }}
-          version: ${{ matrix.toolchain.version }}
+          compiler: ${{ matrix.fortran_compiler }}
+          #compiler: ${{ matrix.toolchain.compiler }}
+          #version: ${{ matrix.toolchain.version }}
     
-    - name: Set reusable strings
+    #- name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs.
-      id: strings
-      shell: bash
-      run: 
-        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+      #id: strings
+      #shell: bash
+      #run: 
+        #echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
     - name: Set build dir
       id: strings
       run: echo "build-output-dir=${{ github.workspace }}/build" >> $GITHUB_OUTPUT
@@ -97,9 +98,11 @@ jobs:
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }}
-        -DCMAKE_EXE_LINKER_FLAGS=lomp
-        -DCMAKE_BUILD_TYPE=Release
-        -DENABLE_ASAN=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }} 
+        -DCMAKE_EXE_LINKER_FLAGS=-lomp
+        #-DCMAKE_BUILD_TYPE=Release
+        #-DENABLE_ASAN=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }} 
+        -DCMAKE_BUILD_TYPE=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }}
+        -DENABLE_ASAN=${{ matrix.enable_asan }}
         
     - name: Build
       # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
