@@ -81,7 +81,7 @@ jobs:
         
         cmake \
           -B build \
-          -S . \
+          -S . 
           # -DCMAKE_C_COMPILER=$(which gcc) \
           # -DCMAKE_CXX_COMPILER=$(which g++) \
           # -DCMAKE_Fortran_COMPILER=$(which gfortran) \
