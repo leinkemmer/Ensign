@@ -72,24 +72,11 @@ jobs:
         dnf install -y gcc gcc-c++ gcc-gfortran cmake make git fftw-devel pkgconf-pkg-config
     
     - name: Configure CMake
-      
+      env:
+        CC: gcc
+        CXX: g++
+        FC: gfortran
       run: |
-        pwd
-        ls -la
-
-        echo "gcc=$(which gcc)"
-        echo "g++=$(which g++)"
-        echo "gfortran=$(which gfortran || true)"
-
-        gcc --version || true
-        g++ --version || true
-        gfortran --version || true
-
-        env:
-          CC: gcc
-          CXX: g++
-          FC: gfortran
-
         cmake \
           -B build \
           -S . \
