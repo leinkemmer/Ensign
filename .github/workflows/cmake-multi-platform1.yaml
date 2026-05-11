@@ -32,8 +32,7 @@ jobs:
 
           # Fedora
           - os: ubuntu-latest
-            container:
-              image: fedora:latest
+            container: fedora:latest
             c_compiler: gcc
             cpp_compiler: g++
             fortran_compiler: gfortran
@@ -51,18 +50,8 @@ jobs:
     - uses: actions/checkout@v4
     
     - uses: fortran-lang/setup-fortran@v1
-      id: setup-fortran
       with:
           compiler: ${{ matrix.fortran_compiler }}
-          #compiler: ${{ matrix.toolchain.compiler }}
-          #version: ${{ matrix.toolchain.version }}
-    
-    #- name: Set reusable strings
-      # Turn repeated input strings (such as the build output directory) into step outputs.
-      #id: strings
-      #shell: bash
-      #run: 
-        #echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
     - name: Set build dir
       id: strings
       run: echo "build-output-dir=${{ github.workspace }}/build" >> $GITHUB_OUTPUT
@@ -72,7 +61,7 @@ jobs:
       if: matrix.os == 'ubuntu-latest' && matrix.container == null
       run: |
         sudo apt-get update
-        sudo apt-get install -y gfortran cmake build-essential
+        sudo apt-get install -y gfortran cmake build-essential libftw3-dev
     
     # Fedora deps
     - name: Install dependencies (Fedora)
@@ -87,32 +76,26 @@ jobs:
       run: brew install fftw cmake libomp gfortran-14
       
     - name: Show OS
-      run: cat /etc/os-release
+      run: cat uname -a
       
     - name: Configure CMake
-      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
-      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
       run: >
-        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        cmake 
+        -B ${{ steps.strings.outputs.build-output-dir }}
         -S ${{ github.workspace }}
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }}
-        -DCMAKE_EXE_LINKER_FLAGS=-lomp
+        #-DCMAKE_EXE_LINKER_FLAGS=-lomp
         #-DCMAKE_BUILD_TYPE=Release
         #-DENABLE_ASAN=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }} 
         -DCMAKE_BUILD_TYPE=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }}
         -DENABLE_ASAN=${{ matrix.enable_asan }}
         
     - name: Build
-      # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-      # run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config Release
       # run: cmake --build build --config Release
       
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
-      # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      # run: ctest --build-config ${{ matrix.build_type }}
       run: ctest --output-on-failure -C Release
