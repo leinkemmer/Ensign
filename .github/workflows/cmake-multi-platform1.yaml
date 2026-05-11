@@ -85,7 +85,7 @@ jobs:
         ls -la "${{ github.workspace }}"
 
         cmake \
-          -B "${{ steps.strings.outputs.build-output-dir }}" \
+          -B "${{ steps.strings.outputs.build-output-dir }}/build"  >> $GITHUB_OUTPUT \
           -S "${{ github.workspace }}" \
           -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
