@@ -78,8 +78,12 @@ jobs:
       run: brew install fftw cmake libomp 
       
     - name: Show OS
-      run: cat uname -a
-      
+      run: uname -a
+      Run cat uname -a
+cat: uname: No such file or directory
+cat: -a: No such file or directory
+Error: Process completed with exit code 1.
+
     - name: Configure CMake
       run: >
         cmake 
