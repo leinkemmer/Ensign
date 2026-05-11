@@ -55,7 +55,7 @@ jobs:
     #      compiler: ${{ matrix.fortran_compiler }}
     - name: Set build dir
       id: strings
-      run: echo "build-output-dir=${{ github.workspace }}/build" >> $GITHUB_OUTPUT
+      run: echo "build-output-dir=${{ github.workspace }}" >> $GITHUB_OUTPUT
     
     # Ubuntu deps
     - name: Install dependencies (Ubuntu)
