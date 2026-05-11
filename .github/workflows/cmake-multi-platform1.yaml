@@ -84,7 +84,6 @@ jobs:
         echo "workspace: ${{ github.workspace }}"
         ls -la "${{ github.workspace }}"
 
-      run: |
         cmake \
           -B "${{ steps.strings.outputs.build-output-dir }}" \
           -S "${{ github.workspace }}" \
