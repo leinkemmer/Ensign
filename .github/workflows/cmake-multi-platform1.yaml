@@ -70,7 +70,9 @@ jobs:
       run: |
         dnf update -y
         dnf install -y gcc gcc-c++ gcc-gfortran cmake make git fftw-devel pkgconf-pkg-config
-        - name: Configure CMake
+    
+    - name: Configure CMake
+      
       run: |
         pwd
         ls -la
@@ -82,10 +84,10 @@ jobs:
           -DCMAKE_CXX_COMPILER=$(which ${{ matrix.cpp_compiler }}) \
           -DCMAKE_Fortran_COMPILER=$(which ${{ matrix.fortran_compiler }}) \
           -DCMAKE_BUILD_TYPE=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }} \
-          -DENABLE_ASAN=${{ matrix.enable_asan }}
-          
-        - name: Build
-          run: cmake --build build
+         -DENABLE_ASAN=${{ matrix.enable_asan }}
+    
+    - name: Build
+      run: cmake --build build    
     
     # MacOS deps
     - name: Install dependencies (macOS)
