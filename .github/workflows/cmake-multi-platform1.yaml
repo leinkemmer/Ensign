@@ -78,9 +78,12 @@ jobs:
       
     - name: Show OS
       run: uname -a
-  
+        
     - name: Configure CMake
       run: |
+        echo "workspace: ${{ github.workspace }}"
+        ls -la "${{ github.workspace }}"
+
         cmake \
         -B "${{ steps.strings.outputs.build-output-dir }}" \
         -S "${{ github.workspace }}" \
