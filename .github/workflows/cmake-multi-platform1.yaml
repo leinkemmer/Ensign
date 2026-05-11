@@ -83,7 +83,7 @@ jobs:
           # -DCMAKE_C_COMPILER=$(which gcc) \
           # -DCMAKE_CXX_COMPILER=$(which g++) \
           # -DCMAKE_Fortran_COMPILER=$(which gfortran) \
-          -DCMAKE_BUILD_TYPE=Debug \
+          # -DCMAKE_BUILD_TYPE=Debug \
           -DENABLE_ASAN=ON
               
     - name: Build
