@@ -33,11 +33,10 @@ jobs:
 
           # Fedora
           - os: ubuntu-latest
-            container: 
-              image: fedora:latest
+            container: fedora:latest
             c_compiler: gcc
             cpp_compiler: g++
-            fortran_compiler: gcc-gfortran
+            fortran_compiler: fortran
             enable_asan: ON
             
           # macOS
@@ -45,7 +44,7 @@ jobs:
             container: null
             c_compiler: clang
             cpp_compiler: clang++
-            fortran_compiler: gcc
+            fortran_compiler: fortran
             enable_asan: OFF
           
     steps:
@@ -63,7 +62,7 @@ jobs:
       if: matrix.os == 'ubuntu-latest' && matrix.container == null
       run: |
         sudo apt-get update
-        sudo apt-get install -y gfortran cmake build-essential libftw3-dev
+        sudo apt-get install -y gfortran cmake build-essential libfftw3-dev
     
     # Fedora deps
     - name: Install dependencies (Fedora)
@@ -75,7 +74,7 @@ jobs:
     # MacOS deps
     - name: Install dependencies (macOS)
       if: matrix.os == 'macos-latest'
-      run: brew install fftw cmake libomp 
+      run: brew install fftw cmake libomp gcc
       
     - name: Show OS
       run: uname -a
