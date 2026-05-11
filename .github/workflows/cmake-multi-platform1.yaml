@@ -28,7 +28,7 @@ jobs:
             container: null
             c_compiler: gcc
             cpp_compiler: g++
-            fortran_compiler: gcc
+            fortran_compiler: gfortran
             enable_asan: ON
 
           # Fedora
@@ -37,7 +37,7 @@ jobs:
               image: fedora:latest
             c_compiler: gcc
             cpp_compiler: g++
-            fortran_compiler: gcc
+            fortran_compiler: gcc-gfortran
             enable_asan: ON
             
           # macOS
@@ -45,7 +45,7 @@ jobs:
             container: null
             c_compiler: clang
             cpp_compiler: clang++
-            fortran_compiler: gfortran
+            fortran_compiler: gcc
             enable_asan: OFF
           
     steps:
