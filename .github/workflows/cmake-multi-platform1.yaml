@@ -94,9 +94,10 @@ jobs:
           -DENABLE_ASAN=${{ matrix.enable_asan }}   
     
     - name: Build
-      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config Release
-        # run: cmake --build build --config Release
+      # run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config Release
+      run: cmake --build build --config Release
       
     - name: Test
-      working-directory: ${{ steps.strings.outputs.build-output-dir }}
+      # working-directory: ${{ steps.strings.outputs.build-output-dir }}
+      working-directory: build
       run: ctest --output-on-failure -C Release
