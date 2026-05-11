@@ -80,7 +80,7 @@ jobs:
       run: uname -a
   
     - name: Configure CMake
-      run: >
+      run: |
         cmake 
         -B ${{ steps.strings.outputs.build-output-dir }}
         -S ${{ github.workspace }}
