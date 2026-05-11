@@ -85,13 +85,17 @@ jobs:
         g++ --version || true
         gfortran --version || true
 
+        env:
+          CC: gcc
+          CXX: g++
+          FC: gfortran
 
         cmake \
           -B build \
           -S . \
-          -DCMAKE_C_COMPILER=$(which gcc) \
-          -DCMAKE_CXX_COMPILER=$(which g++) \
-          -DCMAKE_Fortran_COMPILER=$(which gfortran) \
+          # -DCMAKE_C_COMPILER=$(which gcc) \
+          # -DCMAKE_CXX_COMPILER=$(which g++) \
+          # -DCMAKE_Fortran_COMPILER=$(which gfortran) \
           -DCMAKE_BUILD_TYPE=Debug \
           -DENABLE_ASAN=ON
               
