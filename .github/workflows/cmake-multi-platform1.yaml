@@ -69,7 +69,7 @@ jobs:
       if: matrix.container != null
       run: |
         dnf update -y
-        dnf install -y gcc gcc-c++ gcc-gfortran cmake make git fftw-devel pkgconf-pkg-config
+        dnf install -y gcc gcc-c++ gcc-gfortran cmake make git fftw-devel pkgconf-pkg-config libasan16
     
     - name: Configure CMake
       env:
@@ -77,6 +77,8 @@ jobs:
         CXX: g++
         FC: gfortran
       run: |
+        rm -rf build
+        
         cmake \
           -B build \
           -S . \
