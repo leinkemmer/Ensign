@@ -44,7 +44,7 @@ jobs:
             container: null
             c_compiler: clang
             cpp_compiler: clang++
-            fortran_compiler: gfortran
+            fortran_compiler: gfortran-14
             enable_asan: OFF
           
     steps:
