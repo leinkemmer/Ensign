@@ -74,7 +74,7 @@ jobs:
     # MacOS deps
     - name: Install dependencies (macOS)
       if: matrix.os == 'macos-latest'
-      run: brew install fftw cmake libomp gcc
+      run: brew install cmake # fftw libomp gcc
       
     - name: Show OS
       run: uname -a
