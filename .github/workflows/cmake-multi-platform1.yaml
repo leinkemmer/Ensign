@@ -44,7 +44,7 @@ jobs:
             container: null
             c_compiler: clang
             cpp_compiler: clang++
-            fortran_compiler: fortran
+            fortran_compiler: gfortran
             enable_asan: OFF
           
     steps:
@@ -69,12 +69,12 @@ jobs:
       if: matrix.container != null
       run: |
         dnf update -y
-        dnf install -y gcc gcc-c++ gcc-gfortran cmake make git
+        dnf install -y gcc gcc-c++ gcc-gfortran cmake make git fftw-devel
     
     # MacOS deps
     - name: Install dependencies (macOS)
       if: matrix.os == 'macos-latest'
-      run: brew install cmake # fftw libomp gcc
+      run: brew install cmake fftw libomp gcc
       
     - name: Show OS
       run: uname -a
@@ -89,7 +89,8 @@ jobs:
         -S "${{ github.workspace }}" \
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
-        -DCMAKE_Fortran_COMPILER=gfortran \
+        -DCMAKE_FORTRAN_COMPILER=${{ matrix.fortran_compiler }} \
+        # -DCMAKE_Fortran_COMPILER=gfortran \
         -DCMAKE_BUILD_TYPE=Release
         # -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }} \
         # -DCMAKE_BUILD_TYPE=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }} \
