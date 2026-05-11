@@ -36,7 +36,7 @@ jobs:
             container: fedora:latest
             c_compiler: gcc
             cpp_compiler: g++
-            fortran_compiler: fortran
+            fortran_compiler: gfortran
             enable_asan: ON
             
           # macOS
@@ -85,8 +85,8 @@ jobs:
         ls -la "${{ github.workspace }}"
 
         cmake \
-        -B "/home/runner/work/Ensign/Ensign/build" \
-        -S "/home/runner/work/Ensign/Ensign" \
+        -B build \
+        -S . \
         # -B "${{ steps.strings.outputs.build-output-dir }}" \
         # -S "${{ github.workspace }}" \
         -DCMAKE_CXX_COMPILER=g++ \
