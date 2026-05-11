@@ -68,8 +68,8 @@ jobs:
     - name: Install dependencies (Fedora)
       if: matrix.container != null
       run: |
-        dnf update -y
-        dnf install -y gcc gcc-c++ gcc-gfortran cmake make git fftw-devel
+        # dnf update -y
+        dnf install -y gcc gcc-c++ gcc-gfortran cmake make git fftw-devel pkgconf-pkg-config
     
     # MacOS deps
     - name: Install dependencies (macOS)
