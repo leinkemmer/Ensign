@@ -68,9 +68,10 @@ jobs:
     - name: Install dependencies (Fedora)
       if: matrix.container != null
       run: |
-        # dnf update -y
+        dnf update -y
         dnf install -y gcc gcc-c++ gcc-gfortran cmake make git fftw-devel pkgconf-pkg-config
-    
+        git clone https://github.com/leinkemmer/Ensign.git
+        
     # MacOS deps
     - name: Install dependencies (macOS)
       if: matrix.os == 'macos-latest'
@@ -85,7 +86,7 @@ jobs:
         ls -la "${{ github.workspace }}"
 
         cmake \
-          -B "${{ steps.strings.outputs.build-output-dir }}/build" \
+          -B "${{ steps.strings.outputs.build-output-dir }}" \
           -S "${{ github.workspace }}" \
           -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
