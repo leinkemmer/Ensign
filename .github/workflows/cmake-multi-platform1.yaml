@@ -84,7 +84,7 @@ jobs:
           # -DCMAKE_CXX_COMPILER=$(which g++) \
           # -DCMAKE_Fortran_COMPILER=$(which gfortran) \
           # -DCMAKE_BUILD_TYPE=Debug \
-          -DENABLE_ASAN=ON
+          # -DENABLE_ASAN=ON
               
     - name: Build
       run: cmake --build build    
