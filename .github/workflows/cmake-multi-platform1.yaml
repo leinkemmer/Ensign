@@ -50,9 +50,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - uses: fortran-lang/setup-fortran@v1
-      with:
-          compiler: ${{ matrix.fortran_compiler }}
+    #- uses: fortran-lang/setup-fortran@v1
+    #  with:
+    #      compiler: ${{ matrix.fortran_compiler }}
     - name: Set build dir
       id: strings
       run: echo "build-output-dir=${{ github.workspace }}/build" >> $GITHUB_OUTPUT
