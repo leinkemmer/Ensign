@@ -77,8 +77,8 @@ jobs:
         CC: ${{ matrix.c_compiler }}
         CXX: ${{ matrix.cpp_compiler }}
         FC: ${{ matrix.fortran_compiler }}
-      run: >
-         run: |
+      
+      run: |
           cmake -S . -B build
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
           -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
