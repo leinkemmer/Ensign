@@ -78,10 +78,23 @@ jobs:
         CXX: ${{ matrix.cpp_compiler }}
         FC: ${{ matrix.fortran_compiler }}
       run: >
-         cmake -S . -B build \
-         -DCMAKE_BUILD_TYPE=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }} \
-         -DENABLE_ASAN=${{ matrix.enable_asan }}
+         run: >
+          cmake -S . -B build
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+          -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }}
+          -DENABLE_ASAN=${{ matrix.enable_asan }}
+          
+    # Build
+    - name: Build
+      run: cmake --build build --parallel
     
+    # Test
+    - name: Test
+      working-directory: build
+      run: ctest --output-on-failure
+      
     # MacOS deps
     - name: Install dependencies (macOS)
       if: matrix.os == 'macos-latest'
