@@ -1,0 +1,66 @@
+name: CMake on multiple platforms
+
+on:
+  push:
+    branches: [master, development]
+  pull_request:
+    branches: [master, development]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+
+      matrix:
+        include:
+          - os: ubuntu-latest
+            c: gcc
+            cxx: g++
+            fc: gfortran
+            asan: ON
+
+          - os: ubuntu-latest
+            container: ghcr.io/YOURUSER/fedora-cmake:latest
+            c: gcc
+            cxx: g++
+            fc: gfortran
+            asan: ON
+
+          - os: macos-latest
+            c: clang
+            cxx: clang++
+            fc: gfortran-14
+            asan: OFF
+
+    container: ${{ matrix.container || '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps (Ubuntu)
+        if: runner.os == 'Linux' && matrix.container == ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran cmake libfftw3-dev
+
+      - name: Install deps (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install cmake fftw gcc
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_C_COMPILER=${{ matrix.c }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DCMAKE_Fortran_COMPILER=${{ matrix.fc }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.asan == 'ON' && 'Debug' || 'Release' }} \
+            -DENABLE_ASAN=${{ matrix.asan }}
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure
