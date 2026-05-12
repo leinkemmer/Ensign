@@ -70,6 +70,7 @@ jobs:
       run: |
         dnf update -y
         dnf install -y gcc gcc-c++ gcc-gfortran cmake make git fftw-devel pkgconf-pkg-config libasan libubsan
+        git clone https://github.com/leinkemmer/Ensign.git "${GITHUB_WORKSPACE}"
     
     - name: Configure CMake
       env:
