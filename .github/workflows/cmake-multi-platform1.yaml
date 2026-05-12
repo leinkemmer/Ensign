@@ -70,7 +70,7 @@ jobs:
       run: |
         dnf update -y
         dnf install -y gcc gcc-c++ gcc-gfortran cmake make git fftw-devel pkgconf-pkg-config libasan libubsan
-        git clone https://github.com/leinkemmer/Ensign.git "${GITHUB_WORKSPACE}"
+        
     
     - name: Configure CMake
       env:
@@ -78,6 +78,8 @@ jobs:
         CXX: ${{ matrix.cpp_compiler }}
         FC: ${{ matrix.fortran_compiler }}
       run: |
+        echo "workspace: $GITHUB_WORKSPACE"
+        ls -la "$GITHUB_WORKSPACE"
         rm -rf build
 
         cmake \
