@@ -1,66 +1,137 @@
+# This starter workflow is for a CMake project running on multiple platforms. There is a different starter workflow if you just want a single platform.
+# See: https://github.com/actions/starter-workflows/blob/main/ci/cmake-single-platform.yml
 name: CMake on multiple platforms
 
 on:
   push:
-    branches: [master, development]
+    branches: [ "master", "development" ]
   pull_request:
-    branches: [master, development]
+    branches: [ "master", "development" ]
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    
     strategy:
+      # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
       fail-fast: false
 
+      # Set up a matrix to run the following 3 configurations:
+      # 1. <Linux, Release, latest GCC compiler toolchain on the default runner image, default generator>
+      # 2. <Linux, Release, latest Clang compiler toolchain on the default runner image, default generator>
+      # To add more build types (Release, Debug, RelWithDebInfo, etc.) customize the build_type list.
       matrix:
         include:
+          # Ubuntu
           - os: ubuntu-latest
-            c: gcc
-            cxx: g++
-            fc: gfortran
-            asan: ON
+            container: null
+            c_compiler: gcc
+            cpp_compiler: g++
+            fortran_compiler: gfortran
+            enable_asan: ON
 
+          # Fedora
           - os: ubuntu-latest
-            container: ghcr.io/YOURUSER/fedora-cmake:latest
-            c: gcc
-            cxx: g++
-            fc: gfortran
-            asan: ON
-
+            container: fedora:latest
+            c_compiler: gcc
+            cpp_compiler: g++
+            fortran_compiler: gfortran
+            enable_asan: ON
+            
+          # macOS
           - os: macos-latest
-            c: clang
-            cxx: clang++
-            fc: gfortran-14
-            asan: OFF
-
-    container: ${{ matrix.container || '' }}
-
+            container: null
+            c_compiler: clang
+            cpp_compiler: clang++
+            fortran_compiler: gfortran-14
+            enable_asan: OFF
+          
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
+    
+    # - uses: fortran-lang/setup-fortran@v1
+    #  with:
+    #      compiler: ${{ matrix.fortran_compiler }}
+    - name: Set build dir
+      id: strings
+      run: echo "build-output-dir=${{ github.workspace }}" >> $GITHUB_OUTPUT
+    
+    # Ubuntu deps
+    - name: Install dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest' && matrix.container == null
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gfortran cmake build-essential libfftw3-dev
+    
+    # Fedora deps
+    - name: Install dependencies (Fedora)
+      if: matrix.container != null
+      run: |
+        dnf update -y
+        dnf install -y gcc gcc-c++ gcc-gfortran cmake make git fftw-devel pkgconf-pkg-config libasan libubsan
+        
+    
+    - name: Configure CMake
+      env:
+        CC: ${{ matrix.c_compiler }}
+        CXX: ${{ matrix.cpp_compiler }}
+        FC: ${{ matrix.fortran_compiler }}
+      
+      run: |
+          # cmake -S . -B build
+          # -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+          # -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+          # -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }}
+          # -DCMAKE_BUILD_TYPE=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }}
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }} -DENABLE_ASAN=${{ matrix.enable_asan }}
+          # -DENABLE_ASAN=${{ matrix.enable_asan }}
+          
+    # Build
+    - name: Build
+      run: cmake --build build --parallel
+    
+    # Test
+    - name: Test
+      working-directory: build
+      run: ctest --output-on-failure
+      
+    # MacOS deps
+    - name: Install dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: brew install cmake fftw libomp gcc
+      
+    - name: Show environment
+      run: |
+        uname -a
+        pwd
+        ls -la
+        which ${{ matrix.c_compiler }} || true
+        which ${{ matrix.cpp_compiler }} || true
+        which ${{ matrix.fortran_compiler }} || true
+      
+    - name: Show OS
+      run: uname -a
+        
+    - name: Configure CMake
+      run: |
+        echo "workspace: ${{ github.workspace }}"
+        ls -la "${{ github.workspace }}"
 
-      - name: Install deps (Ubuntu)
-        if: runner.os == 'Linux' && matrix.container == ''
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gfortran cmake libfftw3-dev
-
-      - name: Install deps (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install cmake fftw gcc
-
-      - name: Configure
-        run: |
-          cmake -S . -B build \
-            -DCMAKE_C_COMPILER=${{ matrix.c }} \
-            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
-            -DCMAKE_Fortran_COMPILER=${{ matrix.fc }} \
-            -DCMAKE_BUILD_TYPE=${{ matrix.asan == 'ON' && 'Debug' || 'Release' }} \
-            -DENABLE_ASAN=${{ matrix.asan }}
-
-      - name: Build
-        run: cmake --build build --parallel
-
-      - name: Test
-        working-directory: build
-        run: ctest --output-on-failure
+        cmake \
+          -B "${{ steps.strings.outputs.build-output-dir }}" \
+          -S "${{ github.workspace }}" \
+          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+          -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }} \
+          -DCMAKE_BUILD_TYPE=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }} \
+          -DENABLE_ASAN=${{ matrix.enable_asan }}
+    
+    - name: Build
+      # run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config Release
+      run: cmake --build build --config Release
+      
+    - name: Test
+      # working-directory: ${{ steps.strings.outputs.build-output-dir }}
+      working-directory: build
+      run: ctest --output-on-failure -C Release
