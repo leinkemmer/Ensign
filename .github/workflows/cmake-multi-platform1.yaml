@@ -78,15 +78,16 @@ jobs:
         CXX: ${{ matrix.cpp_compiler }}
         FC: ${{ matrix.fortran_compiler }}
       run: |
-        pwd
-        echo "$GITHUB_WORKSPACE"
+        echo "pwd: $(pwd)"
+        echo "workspace: $GITHUB_WORKSPACE"
         ls -la .
         ls -la "$GITHUB_WORKSPACE" || true
+        
         rm -rf build
 
         cmake \
-           -B build \
            -S . \
+           -B build \
            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
            -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
            -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }} \
