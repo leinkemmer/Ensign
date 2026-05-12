@@ -78,8 +78,8 @@ jobs:
         CXX: ${{ matrix.cpp_compiler }}
         FC: ${{ matrix.fortran_compiler }}
       run: |
-        echo "PWD=$(pwd)"
-        echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+        pwd
+        echo "$GITHUB_WORKSPACE"
         ls -la .
         ls -la "$GITHUB_WORKSPACE" || true
         rm -rf build
