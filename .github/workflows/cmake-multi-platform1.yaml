@@ -77,18 +77,11 @@ jobs:
         CC: ${{ matrix.c_compiler }}
         CXX: ${{ matrix.cpp_compiler }}
         FC: ${{ matrix.fortran_compiler }}
-      run: |
-        echo "pwd: $(pwd)"
-        echo "workspace: $GITHUB_WORKSPACE"
-        ls -la .
-        ls -la "$GITHUB_WORKSPACE" || true
-        
-        rm -rf build
-
-        cmake -S . -B build \
-         # -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
-         # -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
-         # -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }} \
+      run: >
+         cmake -S . -B build \
+         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+         -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }} \
          -DCMAKE_BUILD_TYPE=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }} \
          -DENABLE_ASAN=${{ matrix.enable_asan }}
     
