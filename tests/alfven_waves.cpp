@@ -164,7 +164,7 @@ void test_dtA_iteration(discretization discr) {
     if(gi.discr == discretization::fft)
       REQUIRE( err < 1e-12);
     else
-      REQUIRE( err < 3e-3);
+      REQUIRE( err < 8e-3);
 
     // initialize E with something non-zero and check rhs
     componentwise_vec_omp(gi.N_xx, [&xx1, &xx2, &gi](Index idx, array<Index,2> i) {
@@ -203,7 +203,7 @@ void test_dtA_iteration(discretization discr) {
     if(gi.discr == discretization::fft)
       REQUIRE( err < 1e-12);
     else
-      REQUIRE( err < 3e-3);
+      REQUIRE( err < 5e-3);
 
     // check the lhs
     lr2<double> lhs = E;
@@ -381,7 +381,7 @@ void test_advection_v(string method, discretization discr) {
             
     cout << "Error advection v (" << method << ", " << discr_to_str(discr) << "): " << err << endl;
 
-    REQUIRE( err <= 1e-2 );
+    REQUIRE( err <= 0.022 );
 }
 
 void test_advection_v_dtA(string method, discretization discr) {

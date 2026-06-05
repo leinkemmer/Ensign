@@ -1,0 +1,100 @@
+name: Ensign CI on Ubuntu, Fedora, and MacOS
+
+on:
+  push:
+    branches: [ "master", "development" ]
+  pull_request:
+    branches: [ "master", "development" ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    
+    strategy:
+      # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
+      fail-fast: false
+
+      matrix:
+        include:
+          # Ubuntu
+          - os: ubuntu-latest
+            container: null
+            c_compiler: gcc
+            cpp_compiler: g++
+            fortran_compiler: gfortran
+            enable_asan: ON
+
+          # Fedora
+          - os: ubuntu-latest
+            container: fedora:latest
+            c_compiler: gcc
+            cpp_compiler: g++
+            fortran_compiler: gfortran
+            enable_asan: ON
+
+          # macOS
+          - os: macos-latest
+            container: null
+            c_compiler: gcc
+            cpp_compiler: g++
+            fortran_compiler: gfortran-15
+            enable_asan: OFF
+          
+    steps:
+    - uses: actions/checkout@v4
+    
+    # Ubuntu deps
+    - name: Install dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest' && matrix.container == null
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gfortran cmake build-essential libfftw3-dev
+    
+    # MacOS deps
+    - name: Install dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install cmake gcc libomp
+    
+    # Fedora deps
+    - name: Install dependencies (Fedora)
+      if: matrix.container != null
+      run: |
+        dnf -y update
+        dnf install -y gcc gcc-c++ gcc-gfortran cmake make git fftw-devel pkgconf-pkg-config libasan libubsan
+        
+    - name: Configure CMake
+      env:
+        CC: ${{ matrix.c_compiler }}
+        CXX: ${{ matrix.cpp_compiler }}
+        FC: ${{ matrix.fortran_compiler }}
+        
+      run: |
+        if [ "${{ matrix.os }}" = "macos-latest" ]; then
+        OMP=$(brew --prefix libomp)
+
+        cmake -S . -B build \
+        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+        -DCMAKE_Fortran_COMPILER=${{ matrix.fortran_compiler }} \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DENABLE_ASAN=${{ matrix.enable_asan }} \
+        -DOPENMP=OFF 
+        else
+        cmake -S . -B build \
+        -DCMAKE_BUILD_TYPE=${{ matrix.enable_asan == 'ON' && 'Debug' || 'Release' }} \
+        -DENABLE_ASAN=${{ matrix.enable_asan }}
+        fi
+
+    # Build
+    - name: Build
+      run: cmake --build build --verbose -- -j1
+    
+    # Test
+    - name: Test
+      working-directory: build
+      run: ctest --output-on-failure
+    
+    - name: Show OS
+      run: uname -a

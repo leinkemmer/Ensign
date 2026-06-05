@@ -1,10 +1,12 @@
-cmake_minimum_required(VERSION 3.27 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
+
 project(Ensign 
   VERSION 1.0.1
   DESCRIPTION "Framework for dynamical low-rank simulations"
   HOMEPAGE_URL "https://github.com/leinkemmer/Ensign"
   LANGUAGES CXX C
 )
+
 enable_testing()
 
 include(CheckCXXCompilerFlag)
@@ -199,6 +201,7 @@ if(NOT fftw3_FOUND)
       -DENABLE_OPENMP=${OPENMP}
       -DBUILD_SHARED_LIBS=OFF
       -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+      -DCMAKE_POLICY_VERSION_MINIMUM=3.5
     UPDATE_COMMAND ""
   )
   ExternalProject_Get_Property(fftw SOURCE_DIR)
@@ -235,6 +238,13 @@ else()
   message("OpenBLAS is used by default. MKL support is available by setting MKL_ENABLED to ON (set MKL_INCLUDEDIR and MKL_LIBDIR environment variables appropriately).")
   find_package(OpenBLAS QUIET)
   if(NOT openblas_FOUND)
+
+    if(APPLE)
+      set(OPENMP OFF)
+    else()
+      set(OPENMP ON)
+    endif()
+  
     ExternalProject_Add(openblas
       GIT_REPOSITORY "https://github.com/OpenMathLib/OpenBLAS.git"
       GIT_TAG "v0.3.29"

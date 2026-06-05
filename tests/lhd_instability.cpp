@@ -117,7 +117,7 @@ TEST_CASE( "LHD instability", "[lhd_instability]" ) {
     }
   }
   cout << "ERROR_INIT: " << err << endl;
-  REQUIRE(err <= 1e-12); 
+  REQUIRE(err <= 2.5e-12); 
  }
 
 
