@@ -17,7 +17,7 @@ struct nc_writer {
     void add_var(string name, vector<string> dims);
     
     void start_write_mode();
-    void write(string name, double* data);
+    void write(string name, const double* data);
 
 private:
     int ncid;

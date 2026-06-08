@@ -42,7 +42,7 @@ struct grid_info_reserve {
   Index dxx_mult, dvv_mult, dxxh_mult, dvvh_mult;
 
   grid_info_reserve(Index _rmax, Index _r, mind<d> _N_xx, mind<d> _N_vv, mfp<2*d> _lim_xx, mfp<2*d> _lim_vv)
-    : rmax(_rmax), r(_r), N_xx(_N_xx), N_vv(_N_vv), lim_xx(_lim_xx), lim_vv(_lim_vv) {
+    : r(_r), rmax(_rmax), N_xx(_N_xx), N_vv(_N_vv), lim_xx(_lim_xx), lim_vv(_lim_vv) {
 
     // compute h_xx and h_vv
     for(int ii = 0; ii < 3; ii++){
@@ -698,8 +698,8 @@ struct PS_K_step_adapt {
 
 
 private:
-  grid_info_reserve<3> gi;
   stloc sl;
+  grid_info_reserve<3> gi;
   const blas_ops* blas;
 
   std::unique_ptr<fft3d<2>> fft;
@@ -774,8 +774,8 @@ struct PS_S_step_adapt {
   }
 
 private:
-  grid_info_reserve<3> gi;
   stloc sl;
+  grid_info_reserve<3> gi;
   const blas_ops* blas;
 
   mat tmpSS, tmpS, tmpS2;
@@ -909,8 +909,8 @@ struct PS_L_step_adapt {
 
 
 private:
-  grid_info_reserve<3> gi;
   stloc sl;
+  grid_info_reserve<3> gi;
   const blas_ops* blas;
 
   std::unique_ptr<fft3d<2>> fft;
@@ -987,8 +987,8 @@ struct BUG_S_step_adapt {
   }
 
 private:
-  grid_info_reserve<3> gi;
   stloc sl;
+  grid_info_reserve<3> gi;
   const blas_ops* blas;
 
   mat tmpSS, tmpS, tmpS2;
@@ -1600,7 +1600,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
   gt::stop("Main loop");
 
   ofstream h_rank_f("h_rank.data");
-  for(Index i = 0; i < h_rank.size(); i++){
+  for(Index i = 0; i < (Index)h_rank.size(); i++){
     h_rank_f << h_rank[i] << endl;
   }
 
@@ -1880,7 +1880,7 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
   gt::stop("Main loop");
 
   ofstream h_rank_f("h_rank.data");
-  for(Index i = 0; i < h_rank.size(); i++){
+  for(Index i = 0; i < (Index)h_rank.size(); i++){
     h_rank_f << h_rank[i] << endl;
   }
 }
@@ -2413,7 +2413,7 @@ void integration_second_order_adapt_reserve(double final_time, double tau, int n
   gt::stop("Main loop");
 
   ofstream h_rank_f("h_rank.data");
-  for(Index i = 0; i < h_rank.size(); i++){
+  for(Index i = 0; i < (Index)h_rank.size(); i++){
     h_rank_f << h_rank[i] << endl;
   }
 

@@ -521,15 +521,9 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, IP inner_pro
       }
     }
     else{
-      #ifdef __OPENMP__
-      #pragma omp parallel for
-      #endif
       for(Index i=0;i<lr.size_X();i++) {
         lr.X(i, k) = distribution(generator);
       }
-      #ifdef __OPENMP__
-      #pragma omp parallel for
-      #endif
       for(Index i=0;i<lr.size_V();i++) {
         lr.V(i, k) = distribution(generator);
       }
@@ -586,16 +580,10 @@ void initialize(lr2<T>& lr, vector<const T*> X, vector<const T*> V, array<double
       }
     }
     else{
-      #ifdef __OPENMP__
-      #pragma omp parallel for
-      #endif
       for(Index i=0;i<lr.size_X();i++) {
         //lr.X(i, kk) = 0.0;
         lr.X(i, kk) = distribution(generator);
       }
-      #ifdef __OPENMP__
-      #pragma omp parallel for
-      #endif
       for(Index i=0;i<lr.size_V();i++) {
         //lr.V(i, kk) = 0.0;
         lr.V(i, kk) = distribution(generator);
@@ -747,6 +735,15 @@ void lr_mul(const lr2<T>& A, const lr2<T>& B, lr2<T>& out,
     cout << "ERROR in lr_mul: shape of V does not match in input B and output." << endl;
     exit(1);
   }
+  if(A.size_X() != B.size_X()) {
+    cout << "ERROR in lr_mul: shape of X does not match in input A and input B." << endl;
+    exit(1);
+  }
+  if(A.size_V() != B.size_V()) {
+    cout << "ERROR in lr_mul: shape of V does not match in input A and input B." << endl;
+    exit(1);
+  }
+
   Index r_A = A.rank();
   Index r_B = B.rank();
   if(r_A*r_B != out.rank()) {

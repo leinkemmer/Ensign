@@ -387,8 +387,8 @@ struct PS_K_step {
 
 
 private:
-  grid_info<3> gi;
   stloc sl;
+  grid_info<3> gi;
   const blas_ops* blas;
 
   std::unique_ptr<fft3d<2>> fft;
@@ -598,6 +598,7 @@ struct PS_L_step {
 
 private:
   grid_info<3> gi;
+  const blas_ops* blas;
   std::unique_ptr<fft3d<2>> fft;
   array<vec,3> v, dd1_r;
   array<mat,3> Lv;
@@ -606,7 +607,6 @@ private:
   array<cmat,3> Lvhat;
   std::unique_ptr<vec> d_lim_vv;
   diagonalization schur;
-  const blas_ops* blas;
 };
 
 

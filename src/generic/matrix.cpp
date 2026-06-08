@@ -882,7 +882,7 @@ void svd(const multi_array<double,2>& input, multi_array<double,2>& U, multi_arr
 }
 
 template<> 
-void qr(const multi_array<double,2>& Q, multi_array<double,2>& R) {
+void qr(multi_array<double,2>& Q, multi_array<double,2>& R) {
   // Pay attention, input overwritten
   if(Q.sl == stloc::host){
     #ifdef __MKL__

@@ -16,7 +16,8 @@ struct fft {
     ~fft();
 
     void forward(multi_array<double,d>& real, multi_array<complex<double>,d>& freq); 
-    void forward(double* real, complex<double>* freq, stloc sl); 
+    void forward(double* real, complex<double>* freq, stloc sl);
+    // Note that the backward transform overwrites the input data. This is a limitation of FFTW.
     void backward(multi_array<complex<double>,d>& freq, multi_array<double,d>& real);
     void backward(complex<double>* freq, double* real, stloc sl); 
 

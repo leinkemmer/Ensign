@@ -9,8 +9,17 @@ array<fftw_plan,2> create_plans_1d(Index dims_, multi_array<double,2>& real, mul
   array<fftw_plan,2> out;
   int dims = int(dims_);
 
-  out[0] = fftw_plan_many_dft_r2c(1, &dims, real.shape()[1], real.begin(), NULL, 1, dims, (fftw_complex*)freq.begin(), NULL, 1, dims/2 + 1, FFTW_ESTIMATE);
+  out[0] = fftw_plan_many_dft_r2c(1, &dims, real.shape()[1], real.begin(), NULL, 1, dims, (fftw_complex*)freq.begin(), NULL, 1, dims/2 + 1, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
   out[1] = fftw_plan_many_dft_c2r(1, &dims, real.shape()[1], (fftw_complex*)freq.begin(), NULL, 1, dims/2 + 1, real.begin(), NULL, 1, dims, FFTW_ESTIMATE);
+
+  if(out[0] == 0) {
+    cout << "ERROR: fftw_plan_many_dft_r2c could not be created" << endl;
+    exit(1);
+  }
+  if(out[1] == 0) {
+    cout << "ERROR: fftw_plan_many_dft_c2r could not be created" << endl;
+    exit(1);
+  }
 
   return out;
 }
@@ -19,8 +28,17 @@ array<fftw_plan,2> create_plans_1d(Index dims_, multi_array<double,1>& real, mul
   array<fftw_plan,2> out;
   int dims = int(dims_);
 
-  out[0] = fftw_plan_many_dft_r2c(1, &dims, 1, real.begin(), NULL, 1, dims, (fftw_complex*)freq.begin(), NULL, 1, dims/2 + 1, FFTW_ESTIMATE);
+  out[0] = fftw_plan_many_dft_r2c(1, &dims, 1, real.begin(), NULL, 1, dims, (fftw_complex*)freq.begin(), NULL, 1, dims/2 + 1, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
   out[1] = fftw_plan_many_dft_c2r(1, &dims, 1, (fftw_complex*)freq.begin(), NULL, 1, dims/2 + 1, real.begin(), NULL, 1, dims, FFTW_ESTIMATE);
+
+  if(out[0] == 0) {
+    cout << "ERROR: fftw_plan_many_dft_r2c could not be created" << endl;
+    exit(1);
+  }
+  if(out[1] == 0) {
+    cout << "ERROR: fftw_plan_many_dft_c2r could not be created" << endl;
+    exit(1);
+  }
 
   return out;
 }
@@ -29,8 +47,17 @@ array<fftw_plan,2> create_plans_2d(array<Index,2> dims_, multi_array<double,2>& 
   array<fftw_plan,2> out;
   array<int,2> dims = {int(dims_[1]),int(dims_[0])};
 
-  out[0] = fftw_plan_many_dft_r2c(2, dims.begin(), real.shape()[1], real.begin(), NULL, 1, dims[1]*dims[0], (fftw_complex*)freq.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), FFTW_ESTIMATE);
+  out[0] = fftw_plan_many_dft_r2c(2, dims.begin(), real.shape()[1], real.begin(), NULL, 1, dims[1]*dims[0], (fftw_complex*)freq.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
   out[1] = fftw_plan_many_dft_c2r(2, dims.begin(), real.shape()[1], (fftw_complex*)freq.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), real.begin(), NULL, 1, dims[1]*dims[0], FFTW_ESTIMATE);
+
+  if(out[0] == 0) {
+    cout << "ERROR: fftw_plan_many_dft_r2c could not be created" << endl;
+    exit(1);
+  }
+  if(out[1] == 0) {
+    cout << "ERROR: fftw_plan_many_dft_c2r could not be created" << endl;
+    exit(1);
+  }
 
   return out;
 }
@@ -39,8 +66,17 @@ array<fftw_plan,2> create_plans_2d(array<Index,2> dims_, multi_array<double,1>& 
   array<fftw_plan,2> out;
   array<int,2> dims = {int(dims_[1]),int(dims_[0])};
 
-  out[0] = fftw_plan_many_dft_r2c(2, dims.begin(), 1, real.begin(), NULL, 1, dims[1]*dims[0], (fftw_complex*)freq.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), FFTW_ESTIMATE);
+  out[0] = fftw_plan_many_dft_r2c(2, dims.begin(), 1, real.begin(), NULL, 1, dims[1]*dims[0], (fftw_complex*)freq.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
   out[1] = fftw_plan_many_dft_c2r(2, dims.begin(), 1, (fftw_complex*)freq.begin(), NULL, 1, dims[0]*(dims[1]/2 + 1), real.begin(), NULL, 1, dims[1]*dims[0], FFTW_ESTIMATE);
+
+  if(out[0] == 0) {
+    cout << "ERROR: fftw_plan_many_dft_r2c could not be created" << endl;
+    exit(1);
+  }
+  if(out[1] == 0) {
+    cout << "ERROR: fftw_plan_many_dft_c2r could not be created" << endl;
+    exit(1);
+  }
 
   return out;
 }
@@ -49,8 +85,17 @@ array<fftw_plan,2> create_plans_3d(array<Index,3> dims_, multi_array<double,2>& 
   array<fftw_plan,2> out;
   array<int,3> dims = {int(dims_[2]), int(dims_[1]), int(dims_[0])};
 
-  out[0] = fftw_plan_many_dft_r2c(3, dims.begin(), real.shape()[1], real.begin(), NULL, 1, dims[2]*dims[1]*dims[0], (fftw_complex*)freq.begin(), NULL, 1, dims[0]*dims[1]*(dims[2]/2 + 1), FFTW_ESTIMATE);
+  out[0] = fftw_plan_many_dft_r2c(3, dims.begin(), real.shape()[1], real.begin(), NULL, 1, dims[2]*dims[1]*dims[0], (fftw_complex*)freq.begin(), NULL, 1, dims[0]*dims[1]*(dims[2]/2 + 1), FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
   out[1] = fftw_plan_many_dft_c2r(3, dims.begin(), real.shape()[1], (fftw_complex*)freq.begin(), NULL, 1, dims[0]*dims[1]*(dims[2]/2 + 1), real.begin(), NULL, 1, dims[2]*dims[1]*dims[0], FFTW_ESTIMATE);
+
+  if(out[0] == 0) {
+    cout << "ERROR: fftw_plan_many_dft_r2c could not be created" << endl;
+    exit(1);
+  }
+  if(out[1] == 0) {
+    cout << "ERROR: fftw_plan_many_dft_c2r could not be created" << endl;
+    exit(1);
+  }
 
   return out;
 }
@@ -59,8 +104,17 @@ array<fftw_plan,2> create_plans_3d(array<Index,3> dims_, multi_array<double,1>& 
   array<fftw_plan,2> out;
   array<int,3> dims = {int(dims_[2]), int(dims_[1]), int(dims_[0])};
 
-  out[0] = fftw_plan_many_dft_r2c(3, dims.begin(), 1, real.begin(), NULL, 1, dims[2]*dims[1]*dims[0], (fftw_complex*)freq.begin(), NULL, 1, dims[0]*dims[1]*(dims[2]/2 + 1), FFTW_ESTIMATE);
+  out[0] = fftw_plan_many_dft_r2c(3, dims.begin(), 1, real.begin(), NULL, 1, dims[2]*dims[1]*dims[0], (fftw_complex*)freq.begin(), NULL, 1, dims[0]*dims[1]*(dims[2]/2 + 1), FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
   out[1] = fftw_plan_many_dft_c2r(3, dims.begin(), 1, (fftw_complex*)freq.begin(), NULL, 1, dims[0]*dims[1]*(dims[2]/2 + 1), real.begin(), NULL, 1, dims[2]*dims[1]*dims[0], FFTW_ESTIMATE);
+
+  if(out[0] == 0) {
+    cout << "ERROR: fftw_plan_many_dft_r2c could not be created" << endl;
+    exit(1);
+  }
+  if(out[1] == 0) {
+    cout << "ERROR: fftw_plan_many_dft_c2r could not be created" << endl;
+    exit(1);
+  }
 
   return out;
 }
@@ -69,8 +123,17 @@ array<fftw_plan,2> create_plans_3d(array<Index,3> dims_, multi_array<double,1>& 
 array<fftw_plan,2> create_plans_3d_adapt(array<Index,3> dims_, multi_array<double,2>& real, multi_array<complex<double>,2>& freq){
   array<fftw_plan,2> out;
 
-  out[0] = fftw_plan_dft_r2c_3d(int(dims_[2]), int(dims_[1]), int(dims_[0]), real.begin(), (fftw_complex*)freq.begin(), FFTW_ESTIMATE);
+  out[0] = fftw_plan_dft_r2c_3d(int(dims_[2]), int(dims_[1]), int(dims_[0]), real.begin(), (fftw_complex*)freq.begin(), FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
   out[1] = fftw_plan_dft_c2r_3d(int(dims_[2]), int(dims_[1]), int(dims_[0]), (fftw_complex*)freq.begin(), real.begin(), FFTW_ESTIMATE);
+
+  if(out[0] == 0) {
+    cout << "ERROR: fftw_plan_many_dft_r2c could not be created" << endl;
+    exit(1);
+  }
+  if(out[1] == 0) {
+    cout << "ERROR: fftw_plan_many_dft_c2r could not be created" << endl;
+    exit(1);
+  }
 
   return out;
 }

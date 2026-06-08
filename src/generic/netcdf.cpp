@@ -49,7 +49,7 @@ void nc_writer::start_write_mode() {
   ERR(retval);
 }
 
-void nc_writer::write(string name, double* data) {
+void nc_writer::write(string name, const double* data) {
   int retval;
   
   if ((retval = nc_put_var_double(ncid, var_ids[name], data)))

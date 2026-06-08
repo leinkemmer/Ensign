@@ -117,7 +117,7 @@ double colloquation_to_lr(const multi_array<double,2>& f_I, multi_array<double,2
     multi_array<double,1> sigma1({r});
     svd(U_trunc, U1, V1, sigma1, blas);
 
-    double cond = sigma1(0)/sigma1(r-1);
+    double cond = sigma1(0)/(sigma1(r-1)+1e-15);
     if(cond > 1e7) {
         cout << "WARNING: condition number of U in colloquation_to_lr is " << cond << endl;
     }

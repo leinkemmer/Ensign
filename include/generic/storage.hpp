@@ -177,7 +177,7 @@ struct multi_array {
       k += stride*idx[i];
       stride *= e[i];
     }
-    assert(k < num_elements());
+    assert(k < num_elements() && k >= 0);
     return k;
   }
 
@@ -236,19 +236,43 @@ struct multi_array {
     return emax;
   }
 
-  T* data() const {
+  T* data() {
+    if(v == nullptr) {
+      cout << "ERROR: data() called on an uninitialized multi_array" << endl;
+      exit(1);
+    }
+    return &v[0];
+  } 
+
+  const T* data() const {
+    if(v == nullptr) {
+      cout << "ERROR: data() called on an uninitialized multi_array" << endl;
+      exit(1);
+    }
     return &v[0];
   }
 
   Index num_elements() const {
+    if(v == nullptr) {
+      cout << "ERROR: begin() called on an uninitialized multi_array" << endl;
+      exit(1);
+    }
     return prod(e);
   }
 
   T* begin() const noexcept {
+    if(v == nullptr) {
+      cout << "ERROR: begin() called on an uninitialized multi_array" << endl;
+      exit(1);
+    }    
     return &v[0];
   }
 
   T* end() const noexcept {
+    if(v == nullptr) {
+      cout << "ERROR: end() called on an uninitialized multi_array" << endl;
+      exit(1);
+    }        
     return &v[num_elements()];
   }
 

@@ -1268,6 +1268,8 @@ struct timestepper_lie : timestepper {
     KdtA.resize({gi.dxx_mult, gi.r});
     Xphi.resize({gi.dxx_mult, gi.r});
     Vphi.resize({gi.N_zv[0], gi.r});
+
+    dtA.set_zero();
   }
 
 private:

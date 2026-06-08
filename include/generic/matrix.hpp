@@ -112,7 +112,7 @@ template<class T>
 void svd(const multi_array<T,2>& input, multi_array<T,2>& U, multi_array<T,2>& V, multi_array<T,1>& sigma_diag, const blas_ops& blas);
 
 template<class T> 
-void qr(const multi_array<T,2>& Q, multi_array<T,2>& R);
+void qr(multi_array<T,2>& Q, multi_array<T,2>& R);
 
 
 /* Linear solver based on a LU decomposition.

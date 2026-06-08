@@ -89,9 +89,6 @@ multi_array<T, 2> orthogonalize(multi_array<T, 2>& input,
     std::default_random_engine generator(1234);
     std::normal_distribution<double> distribution(0.0, 1.0);
 
-#ifdef __OPENMP__
-#pragma omp parallel for
-#endif
     for (Index k = n_basisfunctions; k < cols; ++k) {
         for (Index i = 0; i < rows; ++i) {
             input(i, k) = distribution(generator);
