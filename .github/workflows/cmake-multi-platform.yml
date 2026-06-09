@@ -94,7 +94,7 @@ jobs:
     # Test
     - name: Test
       working-directory: build
-      run: ctest --output-on-failure
+      run: cat /etc/os-release; ctest --output-on-failure
     
     - name: Show OS
       run: uname -a

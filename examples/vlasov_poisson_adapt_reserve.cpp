@@ -1195,7 +1195,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
       gt::start("SVD decomposition");
       svd(Sn, UUs, VVs, sigma, blas);
       gt::stop("SVD decomposition");
-      double svr;
+      double svr=0.0;
       if(Sn.sl == stloc::host){
         svr = sigma(gi.r-1);
       } else {
@@ -1390,7 +1390,7 @@ void integration_first_order_adapt_reserve(double final_time, double tau, int ns
       gt::start("SVD decomposition");
       svd(Sn, UUs, VVs, sigma, blas);
       gt::stop("SVD decomposition");
-      double svr;
+      double svr=0.0;
       if(Sn.sl == stloc::host){
         svr = sigma(gi.r-1);
         sigma(gi.r-1) = 0.0;
@@ -1674,7 +1674,7 @@ void BUG_first_order_adapt_reserve(double final_time, double tau, int nsteps_int
   #ifdef __CUDA__
   vec sigma_h({2*gi.r}, stloc::host);
   #endif
-  Index newr;
+  Index newr = gi.rmax/2;
   gt::stop("Initialization");
 
   cout.precision(8);
@@ -2004,7 +2004,7 @@ void integration_second_order_adapt_reserve(double final_time, double tau, int n
       gt::start("SVD decomposition");
       svd(Sn, UUs, VVs, sigma, blas);
       gt::stop("SVD decomposition");
-      double svr;
+      double svr=0;
       if(Sn.sl == stloc::host){
         svr = sigma(gi.r-1);
       } else {
@@ -2201,7 +2201,7 @@ void integration_second_order_adapt_reserve(double final_time, double tau, int n
       gt::start("SVD decomposition");
       svd(Sn, UUs, VVs, sigma, blas);
       gt::stop("SVD decomposition");
-      double svr;
+      double svr=0;
       if(Sn.sl == stloc::host){
         svr = sigma(gi.r-1);
         sigma(gi.r-1) = 0.0;

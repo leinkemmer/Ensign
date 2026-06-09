@@ -599,7 +599,6 @@ struct PS_L_step {
     fft1d<1> fft({gi.N_zv[0]}, tmp, Lhat);
 
     mat M({gi.N_zv[1], gi.r});
-    mat Mtmp({gi.N_zv[1], gi.r});
     cmat Mhat({gi.N_zv[1]/2+1, gi.r});
     fft1d<2> fft2({gi.N_zv[1]}, M, Mhat);
 

@@ -101,6 +101,7 @@ struct multi_array {
       exit(1);
       #endif
     }
+    set_zero();    
   }
   
   void reserve(array<Index,d> _emax, array<Index,d> _e) {
@@ -125,6 +126,7 @@ struct multi_array {
       exit(1);
       #endif
     }
+    set_zero();
   }
 
   void swap(multi_array& ma) {
@@ -430,10 +432,13 @@ struct multi_array {
     return os;
   }
 
-
-  bool operator==(const multi_array& lhs){
-    if (lhs.shape() != shape()){
-      return false;
+  #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+  bool operator==(const multi_array& lhs) const {
+    if(v == nullptr || lhs.v == nullptr) {
+      cout << "ERROR: comparison == for two multi_array where one is not initialized" << endl;
+      exit(1);
+    } else if (lhs.shape() != shape()) {
+        return false;
     } else {
       for(Index i=0;i<lhs.num_elements();i++){
         if(std::isnan(lhs.v[i]) || std::isnan(v[i])) 

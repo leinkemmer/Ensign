@@ -72,6 +72,7 @@ endif()
 # External libraries
 ################################################################################
 
+cmake_policy(SET CMP0135 NEW)
 set_directory_properties(PROPERTIES EP_BASE ${FETCHCONTENT_BASE_DIR})
 
 ################################################################################
@@ -273,6 +274,7 @@ endif()
 # Compiler options
 ################################################################################
 
+
 if(NOT ${CUDA_ENABLED})
   if(${Sanitizer})
     add_compile_options("-fno-omit-frame-pointer;-fsanitize=address")
@@ -287,7 +289,7 @@ if(NOT ${CUDA_ENABLED})
     )
   
   elseif(CMAKE_CXX_COMPILER_ID MATCHES GNU)
-    add_compile_options(-Wall -Wno-maybe-uninitialized)
+    add_compile_options(-Wall -Wmaybe-uninitialized)
     add_compile_options(
       "$<$<CONFIG:RELEASE>:-O3;-DNDEBUG>"
       "$<$<CONFIG:DEBUG>:-O0;-g3;-ggdb3;-Wall;-D_GLIBCXX_DEBUG;-fno-omit-frame-pointer;-ftrapv>"
