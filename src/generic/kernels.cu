@@ -24,6 +24,41 @@ template __global__ void copy_R_QR(int, int, int, double*, double*, double);
 template __global__ void copy_R_QR(int, int, int, float*, float*, float);
 
 template<class T>
+__global__ void increase_S(int n, int r, T* S, T* Sn) {
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+  // r number of rows S (r-1 number of rows Sn)
+  while(idx < n){
+    int i = idx % r;
+    int j = idx / r;
+    if((i == (r-1)) || (j == (r-1))){
+      S[idx] = 0.0;
+    }
+    else {
+      S[idx] = Sn[i+j*(r-1)];
+    }
+    idx += blockDim.x * gridDim.x;
+  }
+}
+template __global__ void increase_S(int, int, double*, double*);
+template __global__ void increase_S(int, int, float*, float*);
+
+template<class T>
+__global__ void decrease_S(int n, int r, T* S, T* Sn) {
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+  // r number of rows S (r+1 number of rows Sn)
+  while(idx < n){
+    int i = idx % r;
+    int j = idx / r;
+    if((i < r) && (j < r)){
+      S[idx] = Sn[i+j*(r+1)];
+    }
+    idx += blockDim.x * gridDim.x;
+  }
+}
+template __global__ void decrease_S(int, int, double*, double*);
+template __global__ void decrease_S(int, int, float*, float*);
+
+template<class T>
 __global__ void copy_R(int m, int n, T* Q, T* R, T w) {
   int i = threadIdx.x;
   int j = blockIdx.x;
