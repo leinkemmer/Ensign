@@ -1007,10 +1007,8 @@ void mgs_orthcol_cpu(multi_array<double,2>& X, double w) {
   array<Index,2> dims = X.shape();
   Index rk = dims[1];
 
-  gt::start("RANDOM CPU");
   std::default_random_engine generator(1234);
   std::normal_distribution<double> distribution(0.0,1.0);
-  gt::stop("RANDOM CPU");
   #ifdef __OPENMP__
   #pragma omp parallel for
   #endif
@@ -1033,11 +1031,9 @@ void mgs_orthcol_cpu(multi_array<double,2>& X, double w) {
     double* r;
     cudaMalloc((void**)&r,sizeof(double));
 
-    gt::start("RANDOM GPU");
     curandGenerator_t gen;
     curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_DEFAULT);
     curandSetPseudoRandomGeneratorSeed(gen,1234);
-    gt::stop("RANDOM GPU");
 
     curandGenerateNormalDouble(gen,&X(0,rk-1),n, 0.0, 1.0);
   
@@ -1148,10 +1144,27 @@ double norm_err_EF(array<vec,3>& E1, array<vec,3>& E2, grid_info_reserve<3>& gi,
   return sqrt((L2norms2[0]+L2norms2[1]+L2norms2[2])*gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]);
 }
 
-void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol1, double tol2, Index min_r, Index max_r, string ec, Index snapshots, const blas_ops& blas){
+void extract_rows(mat& A, Index init, Index fin, mat& B){
+  Index ncols = A.shape()[1];
+  for(Index i=0; i<ncols; i++){
+    if (A.sl == stloc::host){
+      std::copy(&A({init,i}),&A({fin,i})+1,&B({0,i}));
+    } else{
+      #ifdef __CUDA__
+      cudaMemcpy(&B({0,i}), &A({init,i}), sizeof(double)*(fin-init+1),cudaMemcpyDeviceToDevice);
+      #endif
+    }
+  }
+
+  return;
+
+}
+
+void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol_inc, double tol_inc_rel, double tol_dec, double tol_dec_rel, Index min_r, Index max_r, string ec, Index snapshots, const blas_ops& blas){
 
   gt::start("Initialization");
   stloc sl = (CPU) ? stloc::host : stloc::device;
+  string gstr;
 
   orthogonalize gs(&blas);
 
@@ -1160,13 +1173,15 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
 
   if(sl == stloc::host) {
     initialize(lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
+    gstr = "cpu";
   } else {
     lr2<double> h_lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
     initialize(h_lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
     lr_sol = h_lr_sol;
+    gstr = "gpu";
   }
-  ofstream el_energyf("evolution_ps_"+ec+".data");
-  ofstream contf("contf_ps_"+ec+".data");
+  ofstream el_energyf("evolution_ps_"+ec+"_"+gstr+".data");
+  ofstream contf("contf_ps_"+ec+"_"+gstr+".data");
   el_energyf.precision(16);
   double t = 0.0;
   Index n_steps = ceil(final_time/tau);
@@ -1217,10 +1232,10 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
 
     h_rank[kk-1] = (int)gi.r;
 
-    gt::start("K step p1");
+    gt::start("K step");
     // Compute K
     blas.matmul(lr_sol.X,lr_sol.S,Xn); // Xn is K
-    gt::stop("K step p1");
+    gt::stop("K step");
 
     gt::start("Electric field");
     // Electric field
@@ -1236,12 +1251,12 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
     gt::start("C coeffs");
     compute_C(lr_sol.V, C1, C2, blas);
     gt::stop("C coeffs");
-    gt::start("K step p2");
+    gt::start("K step");
     K_step_rk4(tau, Xn, E, C1, C2, nsteps_int);
     gt::start("gs K step");
     gs(Xn, Sn, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]); // Xn the new X
     gt::stop("gs K step");
-    gt::stop("K step p2");
+    gt::stop("K step");
  
     // ---- S step ----
     gt::start("D coeffs");
@@ -1276,7 +1291,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
         #endif
       }
 
-      if (svr >= tol1){
+      if (svr >= tol_inc){
         if (gi.r == max_r){
           contf << "j" << endl;
           cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
@@ -1372,7 +1387,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
           gt::stop("Reject: increase rank (some resizes rxr)");
           gt::stop("Reject: increase rank");
         }
-      } else if (svr <= tol2){
+      } else if (svr <= tol_dec){
           if (gi.r == min_r){
             contf << "m" << endl;
             cout << "Accepted step, should decrease rank but min rank reached. Proceeding keeping min rank." << endl;
@@ -1482,9 +1497,8 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
 
       double norm_ef = norm_EF(Etmp, gi, blas);
       double err_ef = norm_err_EF(Etmp, Etmp2, gi, blas);
-      double fact = 1.0/10.0;
 
-      if (err_ef >= (tol1+norm_ef*tol1*fact)){
+      if (err_ef >= (tol_inc+norm_ef*tol_inc_rel)){
         if (gi.r == max_r){
           contf << "j" << endl;
           cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
@@ -1579,7 +1593,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
           gt::stop("Reject: increase rank (some resizes rxr)");
           gt::stop("Reject: increase rank");
         }
-      } else if (err_ef <= (tol2+norm_ef*tol2*fact)){
+      } else if (err_ef <= (tol_dec+norm_ef*tol_dec_rel)){
           if (gi.r == min_r){
             contf << "m" << endl;
             cout << "Accepted step, should decrease rank but min rank reached. Proceeding keeping min rank." << endl;
@@ -1691,9 +1705,8 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
       gt::stop("CUT el en (pmr, matmul, efield, ee)");
 
       double err_el_energy = abs(el_energy_new-el_energy_cut);
-      double fact = 1.0/10.0;
 
-      if (err_el_energy >= (tol1+el_energy_new*tol1*fact)){
+      if (err_el_energy >= (tol_inc+el_energy_new*tol_inc_rel)){
         if (gi.r == max_r){
           contf << "j" << endl;
           cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
@@ -1788,7 +1801,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
           gt::stop("Reject: increase rank (some resizes rxr)");
           gt::stop("Reject: increase rank");
         }
-      } else if (err_el_energy <= (tol2+el_energy_new*tol2*fact)){
+      } else if (err_el_energy <= (tol_dec+el_energy_new*tol_dec_rel)){
           if (gi.r == min_r){
             contf << "m" << endl;
             cout << "Accepted step, should decrease rank but min rank reached. Proceeding keeping min rank." << endl;
@@ -1876,7 +1889,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
   }
   gt::stop("Main loop");
 
-  ofstream h_rank_f("h_rank_ps"+ec+".data");
+  ofstream h_rank_f("h_rank_ps_"+ec+"_"+gstr+".data");
   for(Index i = 0; i < (Index)h_rank.size(); i++){
     h_rank_f << h_rank[i] << endl;
   }
@@ -1886,7 +1899,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
     multi_array<double,2> SOL({gi.dxx_mult,gi.dvv_mult},sl);
     blas.matmul(lr_sol.X, lr_sol.S, K);
     blas.matmul_transb(K, lr_sol.V, SOL);
-    dump("solution_ps"+ec+".data",SOL);
+    dump("solution_ps_"+ec+"_"+gstr+".data",SOL);
   }
 
 }
@@ -1901,6 +1914,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
   }
 
   stloc sl = (CPU) ? stloc::host : stloc::device;
+  string gstr;
 
   orthogonalize gs(&blas);
 
@@ -1909,13 +1923,15 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
 
   if(sl == stloc::host) {
     initialize(lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
+    gstr = "cpu";
   } else {
     lr2<double> h_lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
     initialize(h_lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
     lr_sol = h_lr_sol;
+    gstr = "gpu";
   }
-  ofstream el_energyf("evolution_bug.data");
-  ofstream contf("contf_bug.data");
+  ofstream el_energyf("evolution_bug_"+gstr+".data");
+  ofstream contf("contf_bug_"+gstr+".data");
   el_energyf.precision(16);
   double t = 0.0;
   Index n_steps = ceil(final_time/tau);
@@ -1980,6 +1996,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
     gt::start("Electric energy");
     double el_energy = electric_energy(E, gi, blas);
     gt::stop("Electric energy");
+
     cout << el_energy << endl;
     el_energyf << t << " " << el_energy << endl;
 
@@ -1994,7 +2011,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
 
 
     // HERE AUGMENTATION K
-    gt::start("K step aug");
+    gt::start("K step aug + GS");
     Xn.update_shape({gi.dxx_mult,2*gi.r});
     if(Xn.sl == stloc::host){
       std::copy(lr_sol.X.data(), lr_sol.X.data()+lr_sol.X.num_elements(), Xn.data()+lr_sol.X.num_elements());
@@ -2003,13 +2020,8 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
       cudaMemcpy(Xn.data()+lr_sol.X.num_elements(), lr_sol.X.data(), sizeof(double)*lr_sol.X.num_elements(),cudaMemcpyDeviceToDevice);
       #endif
     }
-
     gs(Xn, Stmp, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]);
-
-
-    blas.matmul_transa(Xn,lr_sol.X,Mhat);
-    Mhat *= gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2];
-    gt::stop("K step aug");
+    gt::stop("K step aug + GS");
 
     // ---- L step ----
     gt::start("D coeffs");
@@ -2022,7 +2034,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
     gt::stop("L step");
 
     // HERE AUGMENTATION L
-    gt::start("L step aug");
+    gt::start("L step aug + GS");
     Vn.update_shape({gi.dvv_mult,2*gi.r});
     if(Vn.sl == stloc::host){
       std::copy(lr_sol.V.data(), lr_sol.V.data()+lr_sol.V.num_elements(), Vn.data()+lr_sol.V.num_elements());
@@ -2032,18 +2044,21 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
       #endif
     }
     gs(Vn, Stmp, gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
-    blas.matmul_transa(Vn,lr_sol.V,Nhat);
-    Nhat *= gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2];
-    gt::stop("L step aug");
+    gt::stop("L step aug + GS");
 
     // ---- S step ----
-    gt::start("S step");
+    gt::start("Hat matrices (for S step)");
+    blas.matmul_transa(Xn,lr_sol.X,Mhat);
+    Mhat *= gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2];
+    blas.matmul_transa(Vn,lr_sol.V,Nhat);
+    Nhat *= gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2];
+
     Stmp.resize({2*gi.r,gi.r});
     blas.matmul(Mhat,lr_sol.S,Stmp);
     blas.matmul_transb(Stmp,Nhat,Shat);
-    gt::stop("S step");
+    gt::stop("Hat matrices (for S step)");
 
-    gt::start("S step new C D coeffs");
+    gt::start("New C and D coeffs (for S step)");
     // Recompute C and D coeffs, fixed electric field
     for(int ii = 0; ii < 3; ii++){
       C1[ii].resize({2*gi.r,2*gi.r});
@@ -2055,17 +2070,17 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
     compute_D.update_info(2*gi.r);
     compute_C(Vn, C1, C2, blas);
     compute_D(Xn, E, D1, D2, blas);
-    gt::stop("S step new C D coeffs");
+    gt::stop("New C and D coeffs (for S step)");
 
     gt::start("S step");
     S_step_rk4(tau, Shat, C1, C2, D1, D2, nsteps_int);
     gt::stop("S step");
-    
+
     // Determine new rank
     gt::start("SVD decomposition");
     svd(Shat, UUs, VVs, sigma, blas);
     gt::stop("SVD decomposition");
-    
+
     gt::start("Choosing new rank");
     if(Shat.sl == stloc::host){
       for(Index idx = 0; idx < 2*gi.r; idx++){
@@ -2095,7 +2110,6 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
       #endif
     }
 
-    newr = gi.r;
     if (2*newr > gi.rmax){
       cout << "Rank can't exceed maxrank, setting rank=rmax/2" << endl;
       newr = gi.rmax/2;
@@ -2163,7 +2177,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
   }
   gt::stop("Main loop");
 
-  ofstream h_rank_f("h_rank_bug.data");
+  ofstream h_rank_f("h_rank_bug_"+gstr+".data");
   for(Index i = 0; i < (Index)h_rank.size(); i++){
     h_rank_f << h_rank[i] << endl;
   }
@@ -2173,13 +2187,14 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
     multi_array<double,2> SOL({gi.dxx_mult,gi.dvv_mult},sl);
     blas.matmul(lr_sol.X, lr_sol.S, K);
     blas.matmul_transb(K, lr_sol.V, SOL);
-    dump("solution_bug.data",SOL);
+    dump("solution_bug_"+gstr+".data",SOL);
   }
 }
 
-void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol1, double tol2, Index min_r, Index max_r, string ec, Index snapshots, const blas_ops& blas){
+void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol_inc, double tol_inc_rel, double tol_dec, double tol_dec_rel, Index min_r, Index max_r, string ec, Index snapshots, const blas_ops& blas){
 
   stloc sl = (CPU) ? stloc::host : stloc::device;
+  string gstr;
 
   orthogonalize gs(&blas);
 
@@ -2188,13 +2203,15 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
 
   if(sl == stloc::host) {
     initialize(lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
+    gstr = "cpu";
   } else {
     lr2<double> h_lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
     initialize(h_lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
     lr_sol = h_lr_sol;
+    gstr = "gpu";
   }
-  ofstream el_energyf("evolution_ps_so_"+ec+".data");
-  ofstream contf("contf_ps_so_"+ec+".data");
+  ofstream el_energyf("evolution_ps_so_"+ec+"_"+gstr+".data");
+  ofstream contf("contf_ps_so_"+ec+"_"+gstr+".data");
   el_energyf.precision(16);
   double t = 0.0;
   Index n_steps = ceil(final_time/tau);
@@ -2300,7 +2317,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
         #endif
       }
 
-      if (svr >= tol1){
+      if (svr >= tol_inc){
         if (gi.r == max_r){
           contf << "j" << endl;
           cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
@@ -2387,7 +2404,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
           compute_C.update_info(gi.r);
           compute_D.update_info(gi.r);
         }
-      } else if (svr <= tol2){
+      } else if (svr <= tol_dec){
           if (gi.r == min_r){
             contf << "m" << endl;
             cout << "Accepted step, should decrease rank but min rank reached. Proceeding keeping min rank." << endl;
@@ -2486,9 +2503,8 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
 
       double norm_ef = norm_EF(Etmp, gi, blas);
       double err_ef = norm_err_EF(Etmp, Etmp2, gi, blas);
-      double fact = 1.0/10.0;
 
-      if (err_ef >= (tol1+norm_ef*tol1*fact)){
+      if (err_ef >= (tol_inc+norm_ef*tol_inc_rel)){
         if (gi.r == max_r){
           contf << "j" << endl;
           cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
@@ -2574,7 +2590,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
           compute_C.update_info(gi.r);
           compute_D.update_info(gi.r);
         }
-      } else if (err_ef <= (tol2+norm_ef*tol2*fact)){
+      } else if (err_ef <= (tol_dec+norm_ef*tol_dec_rel)){
           if (gi.r == min_r){
             contf << "m" << endl;
             cout << "Accepted step, should decrease rank but min rank reached. Proceeding keeping min rank." << endl;
@@ -2674,9 +2690,8 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
       double el_energy_cut = electric_energy(Etmp, gi, blas);
 
       double err_el_energy = abs(el_energy_new-el_energy_cut);
-      double fact = 1.0/10.0;
 
-      if (err_el_energy >= (tol1+el_energy_new*tol1*fact)){
+      if (err_el_energy >= (tol_inc+el_energy_new*tol_inc_rel)){
         if (gi.r == max_r){
           contf << "j" << endl;
           cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
@@ -2762,7 +2777,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
           compute_C.update_info(gi.r);
           compute_D.update_info(gi.r);
         }
-      } else if (err_el_energy <= (tol2+el_energy_new*tol2*fact)){
+      } else if (err_el_energy <= (tol_dec+el_energy_new*tol_dec_rel)){
           if (gi.r == min_r){
             contf << "m" << endl;
             cout << "Accepted step, should decrease rank but min rank reached. Proceeding keeping min rank." << endl;
@@ -2843,18 +2858,50 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
     }
   }
 
-  ofstream h_rank_f("h_rank_ps_so_"+ec+".data");
+  ofstream h_rank_f("h_rank_ps_so_"+ec+"_"+gstr+".data");
   for(Index i = 0; i < (Index)h_rank.size(); i++){
     h_rank_f << h_rank[i] << endl;
   }
 
 
   if (snapshots == 1){
-    multi_array<double,2> K({gi.dxx_mult,gi.r},sl);
-    multi_array<double,2> SOL({gi.dxx_mult,gi.dvv_mult},sl);
-    blas.matmul(lr_sol.X, lr_sol.S, K);
-    blas.matmul_transb(K, lr_sol.V, SOL);
-    dump("solution_ps_so"+ec+".data",SOL);
+    //multi_array<double,2> K({gi.dxx_mult,gi.r},sl);
+    //multi_array<double,2> SOL({gi.dxx_mult,gi.dvv_mult},sl);
+    //blas.matmul(lr_sol.X, lr_sol.S, K);
+    //blas.matmul_transb(K, lr_sol.V, SOL);
+    //dump("solution_ps_so_"+ec+"_"+gstr+".data",SOL);
+
+    mat TMPX({gi.N_xx[0],gi.r}, sl);
+    mat TMPV({gi.N_vv[0],gi.r}, sl);
+    mat TMP1({gi.N_xx[0],gi.r}, sl);
+    mat SOL({gi.N_xx[0],gi.N_vv[0]}, sl);
+
+    extract_rows(lr_sol.X, 0, gi.N_xx[0]-1, TMPX);
+    extract_rows(lr_sol.V, pow(gi.N_vv[0],3)/2+pow(gi.N_vv[0],2)/2, pow(gi.N_vv[0],3)/2+pow(gi.N_vv[0],2)/2+gi.N_vv[0]-1, TMPV);
+    blas.matmul(TMPX, lr_sol.S, TMP1);
+    blas.matmul_transb(TMP1, TMPV, SOL);
+    dump("slice_ps_so_"+gstr+".data",SOL);
+
+    mat EX({gi.N_xx[0],1}, sl);
+    mat EY({gi.N_xx[0],1}, sl);
+    mat EZ({gi.N_xx[0],1}, sl);
+    if (TMPX.sl == stloc::host){
+      std::copy(E[0].data(),E[0].data()+gi.N_xx[0]+1,&EX({0,0}));
+      std::copy(E[1].data(),E[1].data()+gi.N_xx[0]+1,&EY({0,0}));
+      std::copy(E[2].data(),E[2].data()+gi.N_xx[0]+1,&EZ({0,0}));
+    } else{
+      #ifdef __CUDA__
+      cudaMemcpy(&EX({0,0}), E[0].data(), sizeof(double)*(gi.N_xx[0]),cudaMemcpyDeviceToDevice);
+      cudaMemcpy(&EY({0,0}), E[1].data(), sizeof(double)*(gi.N_xx[0]),cudaMemcpyDeviceToDevice);
+      cudaMemcpy(&EZ({0,0}), E[2].data(), sizeof(double)*(gi.N_xx[0]),cudaMemcpyDeviceToDevice);
+      #endif
+    }
+
+    dump("EX_"+ec+"_"+gstr+".data",EX);
+    dump("EY_"+ec+"_"+gstr+".data",EY);
+    dump("EZ_"+ec+"_"+gstr+".data",EZ);
+
+
   }
 
 }
@@ -2869,6 +2916,7 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
   }
 
   stloc sl = (CPU) ? stloc::host : stloc::device;
+  string gstr;
 
   orthogonalize gs(&blas);
 
@@ -2877,13 +2925,15 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
 
   if(sl == stloc::host) {
     initialize(lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
+    gstr = "cpu";
   } else {
     lr2<double> h_lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
     initialize(h_lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
     lr_sol = h_lr_sol;
+    gstr = "gpu";
   }
-  ofstream el_energyf("evolution_bug_so.data");
-  ofstream contf("contf_bug_so.data");
+  ofstream el_energyf("evolution_bug_so_"+gstr+".data");
+  ofstream contf("contf_bug_so_"+gstr+".data");
   el_energyf.precision(16);
   double t = 0.0;
   Index n_steps = ceil(final_time/tau);
@@ -2961,7 +3011,6 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
     compute_C(lr_sol.V, C1, C2, blas);
     K_step_rk4(tau/2.0, Xn, E, C1, C2, nsteps_int);
     gs(Xn, M, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]);
-    
 
     // L step
     compute_D(lr_sol.X, E, D1, D2, blas);
@@ -2969,34 +3018,27 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
     blas.matmul_transb(lr_sol.V,lr_sol.S,Vn); // Vn is L
     L_step_rk4(tau/2.0, Vn, D1, D2, nsteps_int);
     gs(Vn, N, gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
-    
  
     // S step
     blas.matmul_transa(Xn,lr_sol.X,M);
     M *= gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2];
-    
 
     blas.matmul_transa(Vn,lr_sol.V,N);
     N *= gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2];
-    
 
     blas.matmul(M,lr_sol.S,Stmp);
     blas.matmul_transb(Stmp,N,Sn);
-    
 
     compute_C(Vn, C1, C2, blas);
     compute_D(Xn, E, D1, D2, blas);
-    
 
     S_step_rk4_BUG1(tau/2.0, Sn, C1, C2, D1, D2, nsteps_int);
-    
+
     // --- Electric field at half step ---
     blas.matmul(Xn,Sn,XnT);
     efield(XnT, Vn, E, blas);
 
-
     // --- Do basis augmentation ---
-    //compute_C(Vn, C1, C2, blas);
     compute_D(Xn, E, D1, D2, blas);
 
     // For X
@@ -3085,7 +3127,6 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
       }
       #endif
     }
-    newr = gi.r;
 
     if (3*newr > gi.rmax){
       cout << "Rank can't exceed maxrank, setting rank=rmax/3" << endl;
@@ -3160,17 +3201,28 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
 
   }
 
-  ofstream h_rank_f("h_rank_bug_so.data");
+  ofstream h_rank_f("h_rank_bug_so_"+gstr+".data");
   for(Index i = 0; i < (Index)h_rank.size(); i++){
     h_rank_f << h_rank[i] << endl;
   }
   
   if (snapshots == 1){
-    multi_array<double,2> K({gi.dxx_mult,gi.r},sl);
-    multi_array<double,2> SOL({gi.dxx_mult,gi.dvv_mult},sl);
-    blas.matmul(lr_sol.X, lr_sol.S, K);
-    blas.matmul_transb(K, lr_sol.V, SOL);
-    dump("solution_bug_so.data",SOL);
+    //multi_array<double,2> K({gi.dxx_mult,gi.r},sl);
+    //multi_array<double,2> SOL({gi.dxx_mult,gi.dvv_mult},sl);
+    //blas.matmul(lr_sol.X, lr_sol.S, K);
+    //blas.matmul_transb(K, lr_sol.V, SOL);
+    //dump("solution_bug_so_"+gstr+".data",SOL);
+    
+    mat TMPX({gi.N_xx[0],gi.r}, sl);
+    mat TMPV({gi.N_vv[0],gi.r}, sl);
+    mat TMP1({gi.N_xx[0],gi.r}, sl);
+    mat SOL({gi.N_xx[0],gi.N_vv[0]}, sl);
+
+    extract_rows(lr_sol.X, 0, gi.N_xx[0]-1, TMPX);
+    extract_rows(lr_sol.V, pow(gi.N_vv[0],3)/2+pow(gi.N_vv[0],2)/2, pow(gi.N_vv[0],3)/2+pow(gi.N_vv[0],2)/2+gi.N_vv[0]-1, TMPV);
+    blas.matmul(TMPX, lr_sol.S, TMP1);
+    blas.matmul_transb(TMP1, TMPV, SOL);
+    dump("slice_bug_so"+gstr+".data",SOL);
   }
 }
 
@@ -3180,20 +3232,22 @@ int main(int argc, char** argv){
   cxxopts::Options options("vlasov_poisson", "3+3 dimensional dynamical low-rank Vlasov--Poisson solver");
   options.add_options()
   ("device", "Device the simulation is run on (can be either cpu or gpu)", cxxopts::value<string>()->default_value("cpu"))
-  ("problem", "Initial value that is used in the simulation", cxxopts::value<string>()->default_value("ll"))
-  ("nx", "Number of grid points in space (as a whitespace separated list)", cxxopts::value<string>()->default_value("16 16 16"))
-  ("nv", "Number of grid points in velocity (as a whitespace separated list)", cxxopts::value<string>()->default_value("16 16 16"))
-  ("final_time", "Time to which the simulation is run", cxxopts::value<double>()->default_value("40.0"))
+  ("problem", "Initial value that is used in the simulation", cxxopts::value<string>()->default_value("ts"))
+  ("nx", "Number of grid points in space (as a whitespace separated list)", cxxopts::value<string>()->default_value("32 32 32"))
+  ("nv", "Number of grid points in velocity (as a whitespace separated list)", cxxopts::value<string>()->default_value("32 32 32"))
+  ("final_time", "Time to which the simulation is run", cxxopts::value<double>()->default_value("40"))
   ("deltat", "The time step used in the simulation (usually denoted by \\Delta t or tau)", cxxopts::value<double>()->default_value("0.04"))
   ("r_init", "Initial rank of the simulation", cxxopts::value<int>()->default_value("25"))
   ("r_min", "Minimum rank of the simulation (ignored by BUG)", cxxopts::value<int>()->default_value("10"))
-  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("30"))
+  ("r_max", "Maximum rank of the simulation", cxxopts::value<int>()->default_value("60"))
   ("err", "Error control", cxxopts::value<string>()->default_value("ee"))
   ("order", "Order of integrator", cxxopts::value<int>()->default_value("2"))
-  ("tol_inc", "Tolerance (increase) for error control/BUG tolerance", cxxopts::value<double>()->default_value("0.0001"))
+  ("tol_inc", "Absolute tolerance (increase) for error control/BUG tolerance", cxxopts::value<double>()->default_value("0.0001"))
+  ("tol_inc_rel", "Relative tolerance (increase) for error control", cxxopts::value<double>()->default_value("-1"))
   ("tol_dec", "Tolerance (decrease) for error control (ignored by BUG)", cxxopts::value<double>()->default_value("0.0000000001"))
+  ("tol_dec_rel", "Relative tolerance (decrease) for error control", cxxopts::value<double>()->default_value("-1"))
   ("omp_threads", "Number of OpenMP threads used in CPU parallelization (by default half the number of processes reported by the operating system are used)", cxxopts::value<int>()->default_value("-1"))
-  ("snapshots", "Number of files written to disk", cxxopts::value<int>()->default_value("0"))
+  ("snapshots", "Write final distribution function to disk", cxxopts::value<int>()->default_value("0"))
   ("h,help", "Help message")
   ;
   auto result = options.parse(argc, argv);
@@ -3207,11 +3261,13 @@ int main(int argc, char** argv){
   CPU = true;
   #else
   string dev = result["device"].as<string>();
-  if(dev == "cpu")
+  if(dev == "cpu"){
     CPU = true;
-  else if(dev == "gpu")
+    cout << "CPU SIMULATION" << endl;
+  }else if(dev == "gpu"){
     CPU = false;
-  else {
+    cout << "GPU SIMULATION" << endl;
+  }else {
     cout << "ERROR: device " << dev << " not found." << endl;
     exit(1);
   }
@@ -3237,13 +3293,22 @@ int main(int argc, char** argv){
   Index   r = result["r_init"].as<int>();
   Index   min_r = result["r_min"].as<int>();
   Index   max_r = result["r_max"].as<int>();
-  double  tol1 = result["tol_inc"].as<double>(); // tolerance to increase rank or BUG tolerance
-  double  tol2 = result["tol_dec"].as<double>(); // tolerance to decrease rank
+  double  tol_inc = result["tol_inc"].as<double>(); // absolute tolerance to increase rank or BUG tolerance
+  double  tol_inc_rel = result["tol_inc"].as<double>(); // relative tolerance to increase rank
+  if (tol_inc_rel == -1){
+    tol_inc_rel = tol_inc/10.0;
+  }
+  double  tol_dec = result["tol_dec"].as<double>(); // absolute tolerance to decrease rank
+  double  tol_dec_rel = result["tol_dec"].as<double>(); // relative tolerance to decrease rank
+  if (tol_dec_rel == -1){
+    tol_dec_rel = tol_dec/10.0;
+  }
   double  final_time = result["final_time"].as<double>();
   double  tau = result["deltat"].as<double>();
   int order = result["order"].as<int>();
   Index snapshots = result["snapshots"].as<int>();
   string ec = result["err"].as<string>();
+
 
   int nsteps_int = 1;
 
@@ -3351,9 +3416,6 @@ int main(int argc, char** argv){
   X.push_back(xx.begin());
   V.push_back(vv.begin());
 
-  #ifdef __CUDA__
-    cout << "GPU SIMULATION" << endl;
-  #endif
   #ifdef __MKL__
     cout << "MKL ENABLED" << endl;
   #endif
@@ -3364,8 +3426,10 @@ int main(int argc, char** argv){
   cout << "Deltat: " << tau << endl;
   cout << "Error control: " << ec << endl;
   cout << "Order of integrator: " << order << endl;
-  cout << "Tolerance incr: " << tol1 << endl;
-  cout << "Tolerance decr: " << tol2 << endl;
+  cout << "Tolerance incr (abs): " << tol_inc << endl;
+  cout << "Tolerance incr (rel): " << tol_inc_rel << endl;
+  cout << "Tolerance decr (abs): " << tol_dec << endl;
+  cout << "Tolerance decr (rel): " << tol_dec_rel << endl;
   cout << "Initial rank: " << gi.r << endl;
   cout << "Min rank: " << min_r << endl;
   cout << "Max rank: " << max_r << endl;
@@ -3377,17 +3441,17 @@ int main(int argc, char** argv){
     // in BUG we look for the rank in a space of size 2*r or 3*r, the maximum rank allowed
     // is gi.rmax/2 or gi.rmax/3
     if (order == 1){
-      BUG_adapt(final_time, tau, nsteps_int, gi, X, V, tol1, max_r, snapshots, blas);
+      BUG_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, max_r, snapshots, blas);
     } else if (order == 2){
-      BUG_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol1, max_r, snapshots, blas);
+      BUG_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, max_r, snapshots, blas);
     } else {
       cout << "ERROR: order " << order << " is not supported." << endl;
     }
   } else if (ec == "ee" || ec == "ef" || ec == "f"){
     if (order == 1){
-      PS_adapt(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
+      PS_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, max_r, ec, snapshots, blas);
     } else if (order == 2){
-      PS_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
+      PS_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, max_r, ec, snapshots, blas);
     } else {
       cout << "ERROR: order " << order << " is not supported." << endl;
     }
@@ -3399,19 +3463,26 @@ int main(int argc, char** argv){
 
   cout << gt::sorted_output() << endl;
 
+
 /*
   // For error check
   snapshots = 1;
-  //tau = 0.000033333333333333333;
-  //tau = 0.025;
-  //tau = 0.0016666666666666667;
+  //tau = 0.000033333333333333333; // reference
+
+  tau = 0.01;
+  //tau = 0.005;
+  //tau = 0.0033333333333333333333;
+  //tau = 0.0025;
+  //tau = 0.002;
+  //tau = 0.0016666666666666666666;
+  //tau = 0.0014285714285714285714;
   //tau = 0.00125;
-  tau = 0.001;
-  //tau = 0.00125;
-  //BUG_adapt(final_time, tau, nsteps_int, gi, X, V, tol1, max_r, snapshots, blas);
-  //BUG_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol1, max_r, snapshots, blas);
-  //PS_adapt(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
-  //PS_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol1, tol2, min_r, max_r, ec, snapshots, blas);
+  //tau = 0.0011111111111111111111;
+  //tau = 0.001;
+  //BUG_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, max_r, snapshots, blas);
+  //BUG_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, max_r, snapshots, blas);
+  //PS_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, max_r, ec, snapshots, blas);
+  PS_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, max_r, ec, snapshots, blas);
 */
 
   return 0;
