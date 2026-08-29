@@ -1340,6 +1340,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
 
           gt::start("Reject: increase rank (some resizes rxr)");
 
+/*
           // This could directly become a kernel, but s times s so we'll see
           #ifdef __OPENMP__
           #pragma omp parallel for
@@ -1366,6 +1367,26 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
                   #endif
                 }
               }
+          }
+*/
+          if(lr_sol.S.sl == stloc::host){
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+              Index idx_r = i%gi.r;
+              Index idx_c = i/gi.r;
+              if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
+                lr_sol.S(idx_r,idx_c) = 0.0;
+              } else {
+                lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+              }
+            }
+          } else{
+            #ifdef __CUDA__
+              increase_S<<<(lr_sol.S.num_elements()+n_threads-1)/n_threads,n_threads>>>(lr_sol.S.num_elements(), gi.r, lr_sol.S.data(), Sn.data());
+              cudaDeviceSynchronize();
+            #endif
           }
           Sn.resize({gi.r,gi.r});
           
@@ -1417,6 +1438,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
             lr_sol.X.swap(Xn);
             lr_sol.V.swap(Vn);
 
+/*
             #ifdef __OPENMP__
             #pragma omp parallel for
             #endif
@@ -1431,7 +1453,24 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
                   #endif
                 }
             }
-            Sn.resize({gi.r,gi.r});
+*/
+          
+          if(lr_sol.S.sl == stloc::host){
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+              Index idx_r = i%gi.r;
+              Index idx_c = i/gi.r;
+              lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+            }
+          } else {
+              #ifdef __CUDA__
+              decrease_S<<<(lr_sol.S.num_elements()+n_threads-1)/n_threads,n_threads>>>(lr_sol.S.num_elements(), gi.r, lr_sol.S.data(), Sn.data());
+              cudaDeviceSynchronize();
+              #endif
+            }
+          Sn.resize({gi.r,gi.r});
 
             for(int ii = 0; ii < 3; ii++){
               C1[ii].resize({gi.r,gi.r});
@@ -1547,6 +1586,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
 
           gt::start("Reject: increase rank (some resizes rxr)");
 
+/*
           // This could directly become a kernel, but r times r so we'll see
           #ifdef __OPENMP__
           #pragma omp parallel for
@@ -1572,6 +1612,26 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
                   #endif
                 }
               }
+          }
+*/
+          if(lr_sol.S.sl == stloc::host){
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+              Index idx_r = i%gi.r;
+              Index idx_c = i/gi.r;
+              if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
+                lr_sol.S(idx_r,idx_c) = 0.0;
+              } else {
+                lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+              }
+            }
+          } else{
+            #ifdef __CUDA__
+              increase_S<<<(lr_sol.S.num_elements()+n_threads-1)/n_threads,n_threads>>>(lr_sol.S.num_elements(), gi.r, lr_sol.S.data(), Sn.data());
+              cudaDeviceSynchronize();
+            #endif
           }
           Sn.resize({gi.r,gi.r});
 
@@ -1622,6 +1682,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
             lr_sol.X.swap(Xn);
             lr_sol.V.swap(Vn);
 
+/*
             #ifdef __OPENMP__
             #pragma omp parallel for
             #endif
@@ -1635,6 +1696,23 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
                     cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
                   #endif
                 }
+            }
+*/
+
+          if(lr_sol.S.sl == stloc::host){
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+              Index idx_r = i%gi.r;
+              Index idx_c = i/gi.r;
+              lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+            }
+          } else {
+              #ifdef __CUDA__
+              decrease_S<<<(lr_sol.S.num_elements()+n_threads-1)/n_threads,n_threads>>>(lr_sol.S.num_elements(), gi.r, lr_sol.S.data(), Sn.data());
+              cudaDeviceSynchronize();
+              #endif
             }
             Sn.resize({gi.r,gi.r});
 
@@ -1755,6 +1833,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
 
           gt::start("Reject: increase rank (some resizes rxr)");
 
+/*
           // This could directly become a kernel, but r times r so we'll see
           #ifdef __OPENMP__
           #pragma omp parallel for
@@ -1780,6 +1859,27 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
                   #endif
                 }
               }
+          }
+*/
+
+          if(lr_sol.S.sl == stloc::host){
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+              Index idx_r = i%gi.r;
+              Index idx_c = i/gi.r;
+              if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
+                lr_sol.S(idx_r,idx_c) = 0.0;
+              } else {
+                lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+              }
+            }
+          } else{
+            #ifdef __CUDA__
+              increase_S<<<(lr_sol.S.num_elements()+n_threads-1)/n_threads,n_threads>>>(lr_sol.S.num_elements(), gi.r, lr_sol.S.data(), Sn.data());
+              cudaDeviceSynchronize();
+            #endif
           }
           Sn.resize({gi.r,gi.r});
 
@@ -1830,6 +1930,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
             lr_sol.X.swap(Xn);
             lr_sol.V.swap(Vn);
 
+/*
             #ifdef __OPENMP__
             #pragma omp parallel for
             #endif
@@ -1843,6 +1944,23 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
                     cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
                   #endif
                 }
+            }
+*/
+            
+          if(lr_sol.S.sl == stloc::host){
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+              Index idx_r = i%gi.r;
+              Index idx_c = i/gi.r;
+              lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+            }
+          } else {
+              #ifdef __CUDA__
+              decrease_S<<<(lr_sol.S.num_elements()+n_threads-1)/n_threads,n_threads>>>(lr_sol.S.num_elements(), gi.r, lr_sol.S.data(), Sn.data());
+              cudaDeviceSynchronize();
+              #endif
             }
             Sn.resize({gi.r,gi.r});
 
@@ -2358,7 +2476,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
             #endif
           }
 
-
+/*
           // This could directly become a kernel, but s times s so we'll see
           #ifdef __OPENMP__
           #pragma omp parallel for
@@ -2385,6 +2503,26 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
                   #endif
                 }
               }
+          }
+*/
+          if(lr_sol.S.sl == stloc::host){
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+              Index idx_r = i%gi.r;
+              Index idx_c = i/gi.r;
+              if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
+                lr_sol.S(idx_r,idx_c) = 0.0;
+              } else {
+                lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+              }
+            }
+          } else{
+            #ifdef __CUDA__
+              increase_S<<<(lr_sol.S.num_elements()+n_threads-1)/n_threads,n_threads>>>(lr_sol.S.num_elements(), gi.r, lr_sol.S.data(), Sn.data());
+              cudaDeviceSynchronize();
+            #endif
           }
           Sn.resize({gi.r,gi.r});
           
@@ -2432,6 +2570,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
             lr_sol.X.swap(Xn);
             lr_sol.V.swap(Vn);
 
+/*
             #ifdef __OPENMP__
             #pragma omp parallel for
             #endif
@@ -2445,6 +2584,22 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
                     cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
                   #endif
                 }
+            }
+*/
+          if(lr_sol.S.sl == stloc::host){
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+              Index idx_r = i%gi.r;
+              Index idx_c = i/gi.r;
+              lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+            }
+          } else {
+              #ifdef __CUDA__
+              decrease_S<<<(lr_sol.S.num_elements()+n_threads-1)/n_threads,n_threads>>>(lr_sol.S.num_elements(), gi.r, lr_sol.S.data(), Sn.data());
+              cudaDeviceSynchronize();
+              #endif
             }
             Sn.resize({gi.r,gi.r});
 
@@ -2545,7 +2700,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
             #endif
           }
 
-
+/*
           // This could directly become a kernel, but r times r so we'll see
           #ifdef __OPENMP__
           #pragma omp parallel for
@@ -2571,6 +2726,26 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
                   #endif
                 }
               }
+          }
+*/
+          if(lr_sol.S.sl == stloc::host){
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+              Index idx_r = i%gi.r;
+              Index idx_c = i/gi.r;
+              if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
+                lr_sol.S(idx_r,idx_c) = 0.0;
+              } else {
+                lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+              }
+            }
+          } else{
+            #ifdef __CUDA__
+              increase_S<<<(lr_sol.S.num_elements()+n_threads-1)/n_threads,n_threads>>>(lr_sol.S.num_elements(), gi.r, lr_sol.S.data(), Sn.data());
+              cudaDeviceSynchronize();
+            #endif
           }
           Sn.resize({gi.r,gi.r});
 
@@ -2616,6 +2791,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
             lr_sol.X.swap(Xn);
             lr_sol.V.swap(Vn);
 
+/*
             #ifdef __OPENMP__
             #pragma omp parallel for
             #endif
@@ -2629,6 +2805,22 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
                     cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
                   #endif
                 }
+            }
+*/
+          if(lr_sol.S.sl == stloc::host){
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+              Index idx_r = i%gi.r;
+              Index idx_c = i/gi.r;
+              lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+            }
+          } else {
+              #ifdef __CUDA__
+              decrease_S<<<(lr_sol.S.num_elements()+n_threads-1)/n_threads,n_threads>>>(lr_sol.S.num_elements(), gi.r, lr_sol.S.data(), Sn.data());
+              cudaDeviceSynchronize();
+              #endif
             }
             Sn.resize({gi.r,gi.r});
 
@@ -2732,7 +2924,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
             #endif
           }
 
-
+/*
           // This could directly become a kernel, but r times r so we'll see
           #ifdef __OPENMP__
           #pragma omp parallel for
@@ -2758,6 +2950,26 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
                   #endif
                 }
               }
+          }
+*/
+          if(lr_sol.S.sl == stloc::host){
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+              Index idx_r = i%gi.r;
+              Index idx_c = i/gi.r;
+              if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
+                lr_sol.S(idx_r,idx_c) = 0.0;
+              } else {
+                lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+              }
+            }
+          } else{
+            #ifdef __CUDA__
+              increase_S<<<(lr_sol.S.num_elements()+n_threads-1)/n_threads,n_threads>>>(lr_sol.S.num_elements(), gi.r, lr_sol.S.data(), Sn.data());
+              cudaDeviceSynchronize();
+            #endif
           }
           Sn.resize({gi.r,gi.r});
 
@@ -2804,6 +3016,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
             lr_sol.X.swap(Xn);
             lr_sol.V.swap(Vn);
 
+/*
             #ifdef __OPENMP__
             #pragma omp parallel for
             #endif
@@ -2817,6 +3030,23 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
                     cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
                   #endif
                 }
+            }
+*/
+
+          if(lr_sol.S.sl == stloc::host){
+            #ifdef __OPENMP__
+            #pragma omp parallel for
+            #endif
+            for(Index i=0; i < lr_sol.S.num_elements(); i++){
+              Index idx_r = i%gi.r;
+              Index idx_c = i/gi.r;
+              lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
+            }
+          } else {
+              #ifdef __CUDA__
+              decrease_S<<<(lr_sol.S.num_elements()+n_threads-1)/n_threads,n_threads>>>(lr_sol.S.num_elements(), gi.r, lr_sol.S.data(), Sn.data());
+              cudaDeviceSynchronize();
+              #endif
             }
             Sn.resize({gi.r,gi.r});
 
