@@ -584,23 +584,23 @@ void finstage_rk4(mat& A, mat& B, mat& C, mat& D, mat& E, double tau){
 
 struct PS_K_step_adapt {
 
-  PS_K_step_adapt(stloc _sl, grid_info_reserve<3> _gi, const blas_ops* _blas)
-    : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Uhat(_sl), tmpX(_sl), tmpX2(_sl){
+  PS_K_step_adapt(stloc _sl, grid_info_reserve<3> _gi, const blas_ops* _blas, int _fact)
+    : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Uhat(_sl), tmpX(_sl), tmpX2(_sl), fact(_fact){
 
-      Uhat.reserve({gi.dxxh_mult,gi.rmax},{gi.dxxh_mult,gi.r});
+      Uhat.reserve({gi.dxxh_mult,gi.rmax/fact},{gi.dxxh_mult,gi.r});
     
       UUhat = initialize_cmat_array(sl);
       UU = initialize_mat_array(sl);
       KK = initialize_rk4_array(sl);
       for(int i = 0; i < 3; i++){
-        UUhat[i].reserve({gi.dxxh_mult,gi.rmax},{gi.dxxh_mult,gi.r});
-        UU[i].reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r});
-        KK[i].reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r});
+        UUhat[i].reserve({gi.dxxh_mult,gi.rmax/fact},{gi.dxxh_mult,gi.r});
+        UU[i].reserve({gi.dxx_mult,gi.rmax/fact},{gi.dxx_mult,gi.r});
+        KK[i].reserve({gi.dxx_mult,gi.rmax/fact},{gi.dxx_mult,gi.r});
       }
-      KK[3].reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r});
+      KK[3].reserve({gi.dxx_mult,gi.rmax/fact},{gi.dxx_mult,gi.r});
 
-      tmpX.reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r});
-      tmpX2.reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r});
+      tmpX.reserve({gi.dxx_mult,gi.rmax/fact},{gi.dxx_mult,gi.r});
+      tmpX2.reserve({gi.dxx_mult,gi.rmax/fact},{gi.dxx_mult,gi.r});
     
       #ifdef __CUDA__
       if(sl == stloc::device) {
@@ -709,6 +709,7 @@ private:
   array<mat,3> UU;
   array<mat,4> KK;
   mat tmpX, tmpX2;
+  int fact;
   std::unique_ptr<vec> d_lim_xx;
 };
 
@@ -786,23 +787,23 @@ private:
 
 struct PS_L_step_adapt {
 
-  PS_L_step_adapt(stloc _sl, grid_info_reserve<3> _gi, const blas_ops* _blas)
-    : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Vhat(_sl), tmpV(_sl), tmpV2(_sl) {
+  PS_L_step_adapt(stloc _sl, grid_info_reserve<3> _gi, const blas_ops* _blas, int _fact)
+    : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Vhat(_sl), tmpV(_sl), tmpV2(_sl), fact(_fact) {
 
-      Vhat.reserve({gi.dvvh_mult,gi.rmax},{gi.dvvh_mult,gi.r});
+      Vhat.reserve({gi.dvvh_mult,gi.rmax/fact},{gi.dvvh_mult,gi.r});
       VVhat = initialize_cmat_array(sl);
       VV = initialize_mat_array(sl);
       LL = initialize_rk4_array(sl);
 
       for(int i = 0; i < 3; i++){
-        VVhat[i].reserve({gi.dvvh_mult,gi.rmax},{gi.dvvh_mult,gi.r});
-        VV[i].reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r});
-        LL[i].reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r});
+        VVhat[i].reserve({gi.dvvh_mult,gi.rmax/fact},{gi.dvvh_mult,gi.r});
+        VV[i].reserve({gi.dvv_mult,gi.rmax/fact},{gi.dvv_mult,gi.r});
+        LL[i].reserve({gi.dvv_mult,gi.rmax/fact},{gi.dvv_mult,gi.r});
       }
-      LL[3].reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r});
+      LL[3].reserve({gi.dvv_mult,gi.rmax/fact},{gi.dvv_mult,gi.r});
 
-      tmpV.reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r});
-      tmpV2.reserve({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r});
+      tmpV.reserve({gi.dvv_mult,gi.rmax/fact},{gi.dvv_mult,gi.r});
+      tmpV2.reserve({gi.dvv_mult,gi.rmax/fact},{gi.dvv_mult,gi.r});
 
       v = create_vec_array(gi.dvv_mult,sl);
       array<vec,3> h_v = create_vec_array(gi.dvv_mult, stloc::host);
@@ -924,6 +925,7 @@ private:
   array<mat,3> VV;
   array<mat,4> LL;
   mat tmpV, tmpV2;
+  int fact;
   array<vec,3> v;
   std::unique_ptr<vec> d_lim_vv;
 };
@@ -1160,7 +1162,7 @@ void extract_rows(mat& A, Index init, Index fin, mat& B){
 
 }
 
-void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol_inc, double tol_inc_rel, double tol_dec, double tol_dec_rel, Index min_r, Index max_r, string ec, Index snapshots, const blas_ops& blas){
+void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol_inc, double tol_inc_rel, double tol_dec, double tol_dec_rel, Index min_r, string ec, Index snapshots, const blas_ops& blas){
 
   gt::start("Initialization");
   stloc sl = (CPU) ? stloc::host : stloc::device;
@@ -1169,13 +1171,13 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
   orthogonalize gs(&blas);
 
   // Initialization
-  lr2<double> lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, sl);
+  lr2<double> lr_sol(gi.r,gi.rmax,{gi.dxx_mult,gi.dvv_mult}, sl);
 
   if(sl == stloc::host) {
     initialize(lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
     gstr = "cpu";
   } else {
-    lr2<double> h_lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
+    lr2<double> h_lr_sol(gi.r,gi.rmax,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
     initialize(h_lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
     lr_sol = h_lr_sol;
     gstr = "gpu";
@@ -1193,9 +1195,9 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
   array<vec,3> Etmp = create_vec_array(gi.dxx_mult, sl);
   array<vec,3> Etmp2 = create_vec_array(gi.dxx_mult, sl);
 
-  PS_K_step_adapt K_step_rk4(sl, gi, &blas);
+  PS_K_step_adapt K_step_rk4(sl, gi, &blas, 1);
   PS_S_step_adapt S_step_rk4(sl, gi, &blas);
-  PS_L_step_adapt L_step_rk4(sl, gi, &blas);
+  PS_L_step_adapt L_step_rk4(sl, gi, &blas, 1);
 
   mat Xn({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
   mat Sn({gi.r,gi.r}, sl);
@@ -1292,7 +1294,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
       }
 
       if (svr >= tol_inc){
-        if (gi.r == max_r){
+        if (gi.r == gi.rmax){
           contf << "j" << endl;
           cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
 
@@ -1538,7 +1540,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
       double err_ef = norm_err_EF(Etmp, Etmp2, gi, blas);
 
       if (err_ef >= (tol_inc+norm_ef*tol_inc_rel)){
-        if (gi.r == max_r){
+        if (gi.r == gi.rmax){
           contf << "j" << endl;
           cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
 
@@ -1785,7 +1787,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
       double err_el_energy = abs(el_energy_new-el_energy_cut);
 
       if (err_el_energy >= (tol_inc+el_energy_new*tol_inc_rel)){
-        if (gi.r == max_r){
+        if (gi.r == gi.rmax){
           contf << "j" << endl;
           cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
 
@@ -2022,7 +2024,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
 
 }
 
-void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol, Index max_r, Index snapshots, const blas_ops& blas){
+void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol, Index snapshots, const blas_ops& blas){
 
   gt::start("Initialization");
 
@@ -2037,13 +2039,13 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
   orthogonalize gs(&blas);
 
   // Initialization
-  lr2<double> lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, sl);
+  lr2<double> lr_sol(gi.r,gi.rmax/2,{gi.dxx_mult,gi.dvv_mult}, sl);
 
   if(sl == stloc::host) {
     initialize(lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
     gstr = "cpu";
   } else {
-    lr2<double> h_lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
+    lr2<double> h_lr_sol(gi.r,gi.rmax/2,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
     initialize(h_lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
     lr_sol = h_lr_sol;
     gstr = "gpu";
@@ -2059,8 +2061,8 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
   array<vec,3> E = create_vec_array(gi.dxx_mult, sl);
   array<vec,3> Etmp = create_vec_array(gi.dxx_mult, sl);
 
-  PS_K_step_adapt K_step_rk4(sl, gi, &blas);
-  PS_L_step_adapt L_step_rk4(sl, gi, &blas);
+  PS_K_step_adapt K_step_rk4(sl, gi, &blas, 2);
+  PS_L_step_adapt L_step_rk4(sl, gi, &blas, 2);
   BUG_S_step_adapt S_step_rk4(sl, gi, &blas, 2);
 
   mat Xn({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
@@ -2309,7 +2311,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
   }
 }
 
-void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol_inc, double tol_inc_rel, double tol_dec, double tol_dec_rel, Index min_r, Index max_r, string ec, Index snapshots, const blas_ops& blas){
+void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol_inc, double tol_inc_rel, double tol_dec, double tol_dec_rel, Index min_r, string ec, Index snapshots, const blas_ops& blas){
 
   stloc sl = (CPU) ? stloc::host : stloc::device;
   string gstr;
@@ -2317,13 +2319,13 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
   orthogonalize gs(&blas);
 
   // Initialization
-  lr2<double> lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, sl);
+  lr2<double> lr_sol(gi.r,gi.rmax,{gi.dxx_mult,gi.dvv_mult}, sl);
 
   if(sl == stloc::host) {
     initialize(lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
     gstr = "cpu";
   } else {
-    lr2<double> h_lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
+    lr2<double> h_lr_sol(gi.r,gi.rmax,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
     initialize(h_lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
     lr_sol = h_lr_sol;
     gstr = "gpu";
@@ -2340,9 +2342,9 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
   array<vec,3> Etmp = create_vec_array(gi.dxx_mult, sl);
   array<vec,3> Etmp2 = create_vec_array(gi.dxx_mult, sl);
 
-  PS_K_step_adapt K_step_rk4(sl, gi, &blas);
+  PS_K_step_adapt K_step_rk4(sl, gi, &blas, 1);
   PS_S_step_adapt S_step_rk4(sl, gi, &blas);
-  PS_L_step_adapt L_step_rk4(sl, gi, &blas);
+  PS_L_step_adapt L_step_rk4(sl, gi, &blas, 1);
 
   mat Xn({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
   mat XnT({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
@@ -2436,7 +2438,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
       }
 
       if (svr >= tol_inc){
-        if (gi.r == max_r){
+        if (gi.r == gi.rmax){
           contf << "j" << endl;
           cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
 
@@ -2660,7 +2662,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
       double err_ef = norm_err_EF(Etmp, Etmp2, gi, blas);
 
       if (err_ef >= (tol_inc+norm_ef*tol_inc_rel)){
-        if (gi.r == max_r){
+        if (gi.r == gi.rmax){
           contf << "j" << endl;
           cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
 
@@ -2884,7 +2886,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
       double err_el_energy = abs(el_energy_new-el_energy_cut);
 
       if (err_el_energy >= (tol_inc+el_energy_new*tol_inc_rel)){
-        if (gi.r == max_r){
+        if (gi.r == gi.rmax){
           contf << "j" << endl;
           cout << "Should reject and increase rank but max rank reached. Proceeding keeping max rank." << endl;
 
@@ -3136,7 +3138,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
 
 }
 
-void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol, Index max_r, Index snapshots, const blas_ops& blas){
+void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol, Index snapshots, const blas_ops& blas){
 
   // MIDPOINT BUG WITH 3*r AUGMENTED BASIS
 
@@ -3151,13 +3153,13 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
   orthogonalize gs(&blas);
 
   // Initialization
-  lr2<double> lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, sl);
+  lr2<double> lr_sol(gi.r,gi.rmax/3,{gi.dxx_mult,gi.dvv_mult}, sl);
 
   if(sl == stloc::host) {
     initialize(lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
     gstr = "cpu";
   } else {
-    lr2<double> h_lr_sol(gi.r,max_r,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
+    lr2<double> h_lr_sol(gi.r,gi.rmax/3,{gi.dxx_mult,gi.dvv_mult}, stloc::host);
     initialize(h_lr_sol, X0, V0, gi.h_xx, gi.h_vv, blas);
     lr_sol = h_lr_sol;
     gstr = "gpu";
@@ -3172,18 +3174,18 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
 
   array<vec,3> E = create_vec_array(gi.dxx_mult, sl);
 
-  PS_K_step_adapt K_step_rk4(sl, gi, &blas);
-  PS_L_step_adapt L_step_rk4(sl, gi, &blas);
+  PS_K_step_adapt K_step_rk4(sl, gi, &blas, 3);
+  PS_L_step_adapt L_step_rk4(sl, gi, &blas, 3);
   BUG_S_step_adapt S_step_rk4(sl, gi, &blas, 3);
 
   BUG_S_step_adapt S_step_rk4_BUG1(sl, gi, &blas, 1);
 
   mat Xn({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
-  mat XnT({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
-  mat FnX({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
+  mat XnT({gi.dxx_mult,gi.rmax/3},{gi.dxx_mult,gi.r}, sl);
+  mat FnX({gi.dxx_mult,gi.rmax/3},{gi.dxx_mult,gi.r}, sl);
   mat Vn({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r}, sl);
-  mat VnT({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r}, sl);
-  mat FnV({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r}, sl);
+  mat VnT({gi.dvv_mult,gi.rmax/3},{gi.dvv_mult,gi.r}, sl);
+  mat FnV({gi.dvv_mult,gi.rmax/3},{gi.dvv_mult,gi.r}, sl);
 
   array<vec,3> v = create_vec_array(gi.dvv_mult,sl);
   v = L_step_rk4.get_v();
@@ -3524,12 +3526,12 @@ int main(int argc, char** argv){
   Index   min_r = result["r_min"].as<int>();
   Index   max_r = result["r_max"].as<int>();
   double  tol_inc = result["tol_inc"].as<double>(); // absolute tolerance to increase rank or BUG tolerance
-  double  tol_inc_rel = result["tol_inc"].as<double>(); // relative tolerance to increase rank
+  double  tol_inc_rel = result["tol_inc_rel"].as<double>(); // relative tolerance to increase rank
   if (tol_inc_rel == -1){
     tol_inc_rel = tol_inc/10.0;
   }
   double  tol_dec = result["tol_dec"].as<double>(); // absolute tolerance to decrease rank
-  double  tol_dec_rel = result["tol_dec"].as<double>(); // relative tolerance to decrease rank
+  double  tol_dec_rel = result["tol_dec_rel"].as<double>(); // relative tolerance to decrease rank
   if (tol_dec_rel == -1){
     tol_dec_rel = tol_dec/10.0;
   }
@@ -3671,17 +3673,17 @@ int main(int argc, char** argv){
     // in BUG we look for the rank in a space of size 2*r or 3*r, the maximum rank allowed
     // is gi.rmax/2 or gi.rmax/3
     if (order == 1){
-      BUG_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, max_r, snapshots, blas);
+      BUG_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, snapshots, blas);
     } else if (order == 2){
-      BUG_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, max_r, snapshots, blas);
+      BUG_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, snapshots, blas);
     } else {
       cout << "ERROR: order " << order << " is not supported." << endl;
     }
   } else if (ec == "ee" || ec == "ef" || ec == "f"){
     if (order == 1){
-      PS_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, max_r, ec, snapshots, blas);
+      PS_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, ec, snapshots, blas);
     } else if (order == 2){
-      PS_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, max_r, ec, snapshots, blas);
+      PS_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, ec, snapshots, blas);
     } else {
       cout << "ERROR: order " << order << " is not supported." << endl;
     }
@@ -3711,8 +3713,8 @@ int main(int argc, char** argv){
   //tau = 0.001;
   //BUG_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, max_r, snapshots, blas);
   //BUG_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, max_r, snapshots, blas);
-  //PS_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, max_r, ec, snapshots, blas);
-  PS_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, max_r, ec, snapshots, blas);
+  //PS_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, ec, snapshots, blas);
+  PS_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, ec, snapshots, blas);
 */
 
   return 0;
