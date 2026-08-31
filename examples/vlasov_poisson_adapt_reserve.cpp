@@ -943,6 +943,7 @@ struct BUG_S_step_adapt {
 
   void rk4_S_rhs(mat& U, const array<mat,3>& C1, const array<mat,3>& C2, const array<mat,3>& D1, const array<mat,3>& D2, mat& out){
 
+    // Remark that this is the opposite of the rhs
     blas->matmul(D2[0],U,tmpS);
     blas->matmul_transb(tmpS,C1[0],out);
     blas->matmul(D2[1],U,tmpS);
@@ -960,7 +961,7 @@ struct BUG_S_step_adapt {
     blas->matmul(D1[2],U,tmpS);
     blas->matmul_transb(tmpS,C2[2],tmpS2);
     out -= tmpS2;
-    out *= -1;
+    //out *= -1;
   }
 
   void rk4_S(mat& U, Index n, double tau, const array<mat,3>& C1, const array<mat,3>& C2, const array<mat,3>& D1,const array<mat,3>& D2){
@@ -979,7 +980,7 @@ struct BUG_S_step_adapt {
 
   void operator()(double tau, mat& S, const array<mat,3>& C1, const array<mat,3>& C2, const array<mat,3>& D1, const array<mat,3>& D2, const blas_ops& blas, Index nsteps_int=1) {
 
-    rk4_S(S, nsteps_int, tau/nsteps_int, C1, C2, D1, D2);
+    rk4_S(S, nsteps_int, -tau/nsteps_int, C1, C2, D1, D2);
   }
 
   void update_info(Index nr){
@@ -2131,7 +2132,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
 
 
     // HERE AUGMENTATION K
-    gt::start("K step aug + GS");
+    gt::start("X aug + QR");
     Xn.update_shape({gi.dxx_mult,2*gi.r});
     if(Xn.sl == stloc::host){
       std::copy(lr_sol.X.data(), lr_sol.X.data()+lr_sol.X.num_elements(), Xn.data()+lr_sol.X.num_elements());
@@ -2141,7 +2142,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
       #endif
     }
     gs(Xn, Stmp, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]);
-    gt::stop("K step aug + GS");
+    gt::stop("X aug + QR");
 
     // ---- L step ----
     gt::start("D coeffs");
@@ -2154,7 +2155,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
     gt::stop("L step");
 
     // HERE AUGMENTATION L
-    gt::start("L step aug + GS");
+    gt::start("V aug + QR");
     Vn.update_shape({gi.dvv_mult,2*gi.r});
     if(Vn.sl == stloc::host){
       std::copy(lr_sol.V.data(), lr_sol.V.data()+lr_sol.V.num_elements(), Vn.data()+lr_sol.V.num_elements());
@@ -2164,7 +2165,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
       #endif
     }
     gs(Vn, Stmp, gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
-    gt::stop("L step aug + GS");
+    gt::stop("V aug + QR");
 
     // ---- S step ----
     gt::start("Hat matrices (for S step)");
@@ -2178,7 +2179,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
     blas.matmul_transb(Stmp,Nhat,Shat);
     gt::stop("Hat matrices (for S step)");
 
-    gt::start("New C and D coeffs (for S step)");
+    gt::start("Resize C and D coeffs (for S step)");
     // Recompute C and D coeffs, fixed electric field
     for(int ii = 0; ii < 3; ii++){
       C1[ii].resize({2*gi.r,2*gi.r});
@@ -2188,9 +2189,13 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
     }
     compute_C.update_info(2*gi.r);
     compute_D.update_info(2*gi.r);
+    gt::stop("Resize C and D coeffs (for S step)");
+    gt::start("C coeffs aug");
     compute_C(Vn, C1, C2, blas);
+    gt::stop("C coeffs aug");
+    gt::start("D coeffs aug");
     compute_D(Xn, E, D1, D2, blas);
-    gt::stop("New C and D coeffs (for S step)");
+    gt::stop("D coeffs aug");
 
     gt::start("S step");
     S_step_rk4(tau, Shat, C1, C2, D1, D2, nsteps_int);
@@ -3112,7 +3117,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
     extract_rows(lr_sol.V, pow(gi.N_vv[0],3)/2+pow(gi.N_vv[0],2)/2, pow(gi.N_vv[0],3)/2+pow(gi.N_vv[0],2)/2+gi.N_vv[0]-1, TMPV);
     blas.matmul(TMPX, lr_sol.S, TMP1);
     blas.matmul_transb(TMP1, TMPV, SOL);
-    dump("slice_ps_so_"+gstr+".data",SOL);
+    dump("slice_ps_so_"+ec+"_"+gstr+".data",SOL);
 
     mat EX({gi.N_xx[0],1}, sl);
     mat EY({gi.N_xx[0],1}, sl);
@@ -3454,7 +3459,7 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
     extract_rows(lr_sol.V, pow(gi.N_vv[0],3)/2+pow(gi.N_vv[0],2)/2, pow(gi.N_vv[0],3)/2+pow(gi.N_vv[0],2)/2+gi.N_vv[0]-1, TMPV);
     blas.matmul(TMPX, lr_sol.S, TMP1);
     blas.matmul_transb(TMP1, TMPV, SOL);
-    dump("slice_bug_so"+gstr+".data",SOL);
+    dump("slice_bug_so_"+gstr+".data",SOL);
   }
 }
 
