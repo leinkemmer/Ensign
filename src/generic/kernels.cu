@@ -380,6 +380,54 @@ __global__ void finstage_rk4_k(int n, double* A, double* B, double* C, double* D
   }
 }
 
+__global__ void op1_rk4_LS_k(int n, double* A, double* B, double* C, double* D, double beta){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    A[idx] = B[idx];
+    C[idx] = D[idx] + beta*B[idx];
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+__global__ void op2_rk4_LS_k(int n, double* A, double* B, double* C, double alpha, double beta){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    A[idx] += (alpha*B[idx]);
+    C[idx] += (beta*A[idx]);
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+__global__ void op_rk4_LS_k(int n, double* A, double* B, double* C, double* D, double alpha, double beta){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    A[idx] += (alpha*B[idx]);
+    C[idx] = D[idx] + beta*B[idx];
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+__global__ void setmultadd_rk2_k(int n, double* A, double* B, double t){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    A[idx] = B[idx] + t*A[idx];
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+__global__ void finstage_rk2_k(int n, double* A, double* B, double tau){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < n){
+    A[idx] += (tau*B[idx]);
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
 template<class T>
 __global__ void transpose_inplace_k(int n, T* A){
 
@@ -610,6 +658,39 @@ __global__ void ptw_mult_row_cplx_fourier_3d(int N, int nx, int ny, int nz, cuDo
     C[idx] = cuCmul(A[idx],c2);
     D[idx] = cuCmul(A[idx],c3);
 
+    idx += blockDim.x * gridDim.x;
+  }
+}
+
+__global__ void fourier_direction_k(int N, int nx, int ny, int nz, cuDoubleComplex* A, cuDoubleComplex* B, double l0, double l1, double l2, double l3, double l4, double l5, double nxx, int dir){
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+  while(idx < N){
+    cuDoubleComplex c;
+    if (dir==0){
+      // x direction
+      int i = (idx % (nx*ny*nz)) % nx;
+      c = make_cuDoubleComplex(0.0, (2.0*M_PI/(l1-l0))*i*nxx);
+    } else if(dir==1){
+      // y direction
+      int j = ((idx % (nx*ny*nz)) / nx) % ny;
+      if(j==ny/2){
+        j = 0;
+      }else if(j > ny/2){
+        j -= ny;
+      }
+      c = make_cuDoubleComplex(0.0, (2.0*M_PI/(l3-l2))*j*nxx);
+    } else{
+      // z direction
+      int k = (idx % (nx*ny*nz)) / (nx*ny);
+      if(k==nz/2){
+        k = 0;
+      }else if(k > nz/2){
+        k -= nz;
+      }
+      c = make_cuDoubleComplex(0.0, (2.0*M_PI/(l5-l4))*k*nxx);
+    }
+    B[idx] = cuCmul(A[idx],c);
     idx += blockDim.x * gridDim.x;
   }
 

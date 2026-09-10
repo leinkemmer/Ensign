@@ -65,6 +65,16 @@ __global__ void setmultadd_rk4_k(int n, double* A,  double* B, double t, double*
 
 __global__ void finstage_rk4_k(int n, double* A,  double* B, double* C, double* D, double* E, double tau);
 
+__global__ void op1_rk4_LS_k(int n, double* A, double* B, double* C, double* D, double beta);
+
+__global__ void op2_rk4_LS_k(int n, double* A, double* B, double* C, double alpha, double beta);
+
+__global__ void op_rk4_LS_k(int n, double* A, double* B, double* C, double* D, double alpha, double beta);
+
+__global__ void setmultadd_rk2_k(int n, double* A,  double* B, double t);
+
+__global__ void finstage_rk2_k(int n, double* A,  double* B, double tau);
+
 template<class T>
 __global__ void transpose_inplace_k(int n, T* A);
 
@@ -88,6 +98,7 @@ __global__ void second_ord_stage_fourier_2d(int N, int nx, int ny, cuDoubleCompl
 __global__ void der_fourier_3d(int N, int nx, int ny, int nz, cuDoubleComplex* A, double* lims, double nxx, cuDoubleComplex* B, cuDoubleComplex* C, cuDoubleComplex* D);
 
 __global__ void ptw_mult_row_cplx_fourier_3d(int N, int nx, int ny, int nz, cuDoubleComplex* A, double* lims, double nxx, cuDoubleComplex* B, cuDoubleComplex* C, cuDoubleComplex* D); // Very similar, maybe can be put together
+__global__ void fourier_direction_k(int N, int nx, int ny, int nz, cuDoubleComplex* A, cuDoubleComplex* B, double l0, double l1, double l2, double l3, double l4, double l5, double nxx, int dir);
 
 __global__ void exact_sol_exp_3d_a(int N, int nx, int ny, int nz, cuDoubleComplex* A, double* dc_r, double ts, double* lims); // Very similar, maybe can be put together
 

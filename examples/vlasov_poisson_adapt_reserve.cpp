@@ -125,6 +125,10 @@ array<cmat,3> initialize_cmat_array(stloc sl) {
   return {cmat({1,1},sl), cmat({1,1},sl), cmat({1,1},sl)};
 }
 
+array<vec,3> initialize_vec_array(stloc sl) {
+  return {vec({1}, sl), vec({1}, sl), vec({1}, sl)};
+}
+
 array<vec,3> create_vec_array(Index dim, stloc sl) {
   return {vec({dim}, sl), vec({dim}, sl), vec({dim}, sl)};
 }
@@ -564,6 +568,24 @@ void setmultadd_rk4(mat& A, mat& B, double alpha, mat& C){
   }
 }
 
+void setmultadd_rk2(mat& A, mat& B, double alpha){
+  if(A.sl == stloc::host){
+    Index n = A.shape()[0];
+    #ifdef __OPENMP__
+    #pragma omp parallel for
+    #endif
+    for(Index i = 0; i < A.num_elements(); i++){
+        Index r = i%n;
+        Index c = i/n;
+        A(r,c) = B(r,c) + alpha*A(r,c);
+    }
+  } else {
+    #ifdef __CUDA__
+      setmultadd_rk2_k<<<(A.num_elements()+n_threads-1)/n_threads,n_threads>>>(A.num_elements(),A.begin(),B.begin(),alpha);
+    #endif
+  }
+}
+
 void finstage_rk4(mat& A, mat& B, mat& C, mat& D, mat& E, double tau){
   if(A.sl == stloc::host){
     Index n = A.shape()[0];
@@ -578,6 +600,116 @@ void finstage_rk4(mat& A, mat& B, mat& C, mat& D, mat& E, double tau){
   } else {
     #ifdef __CUDA__
       finstage_rk4_k<<<(A.num_elements()+n_threads-1)/n_threads,n_threads>>>(A.num_elements(),A.begin(),B.begin(),C.begin(),D.begin(),E.begin(),tau);
+    #endif
+  }
+}
+
+void op1_rk4_LS(mat& A, mat& B, mat& C, mat& D, double beta){
+  if(A.sl == stloc::host){
+    Index n = A.shape()[0];
+    #ifdef __OPENMP__
+    #pragma omp parallel for
+    #endif
+    for(Index i = 0; i < A.num_elements(); i++){
+        Index r = i%n;
+        Index c = i/n;
+        A(r,c) = B(r,c);
+        C(r,c) = D(r,c) + beta*B(r,c);
+    }
+  } else {
+    #ifdef __CUDA__
+      op1_rk4_LS_k<<<(A.num_elements()+n_threads-1)/n_threads,n_threads>>>(A.num_elements(),A.begin(),B.begin(),C.begin(),D.begin(),beta);
+    #endif
+  }
+}
+
+void op2_rk4_LS(mat& A, mat& B, mat& C, double alpha, double beta){
+  if(A.sl == stloc::host){
+    Index n = A.shape()[0];
+    #ifdef __OPENMP__
+    #pragma omp parallel for
+    #endif
+    for(Index i = 0; i < A.num_elements(); i++){
+        Index r = i%n;
+        Index c = i/n;
+        A(r,c) += (alpha*B(r,c));
+        C(r,c) += (beta*A(r,c));
+    }
+  } else {
+    #ifdef __CUDA__
+      op2_rk4_LS_k<<<(A.num_elements()+n_threads-1)/n_threads,n_threads>>>(A.num_elements(),A.begin(),B.begin(),C.begin(),alpha,beta);
+    #endif
+  }
+}
+
+
+void op_rk4_LS(mat& A, mat& B, mat& C, mat& D, double alpha, double beta){
+  if(A.sl == stloc::host){
+    Index n = A.shape()[0];
+    #ifdef __OPENMP__
+    #pragma omp parallel for
+    #endif
+    for(Index i = 0; i < A.num_elements(); i++){
+        Index r = i%n;
+        Index c = i/n;
+        A(r,c) += (alpha*B(r,c));
+        C(r,c) = D(r,c) + beta*B(r,c);
+    }
+  } else {
+    #ifdef __CUDA__
+      op_rk4_LS_k<<<(A.num_elements()+n_threads-1)/n_threads,n_threads>>>(A.num_elements(),A.begin(),B.begin(),C.begin(),D.begin(),alpha,beta);
+    #endif
+  }
+}
+
+void finstage_rk2(mat& A, mat& B, double tau){
+  if(A.sl == stloc::host){
+    Index n = A.shape()[0];
+    #ifdef __OPENMP__
+    #pragma omp parallel for
+    #endif
+    for(Index i = 0; i < A.num_elements(); i++){
+        Index r = i%n;
+        Index c = i/n;
+        A(r,c) = A(r,c) + tau*B(r,c);
+    }
+  } else {
+    #ifdef __CUDA__
+      finstage_rk2_k<<<(A.num_elements()+n_threads-1)/n_threads,n_threads>>>(A.num_elements(),A.begin(),B.begin(),tau);
+    #endif
+  }
+}
+
+void fourier_direction(Index r, mind<3>& N, mfp<6>& lim, Index NNh, Index NN, cmat& Uhat, cmat& UUhat, int dir){
+  double nc = 1.0 / double(NN);
+  if (Uhat.sl == stloc::host){
+    complex<double> lambda;
+    #ifdef __OPENMP__
+    #pragma omp parallel for collapse(2)
+    #endif
+    for(Index rr = 0; rr < r; rr++){
+      for(Index k = 0; k < N[2]; k++){
+        for(Index j = 0; j < N[1]; j++){
+          for(Index i = 0; i < (N[0]/2 + 1); i++){
+            Index idx = i+j*(N[0]/2+1) + k*((N[0]/2+1)*N[1]);
+            if (dir == 0){
+              // x direction
+              lambda = complex<double>(0.0,2.0*M_PI/(lim[1]-lim[0])*i);
+            } else if (dir == 1){
+              // y direction
+              lambda = complex<double>(0.0,2.0*M_PI/(lim[3]-lim[2])*freq(j, N[1]));
+            } else{
+              // z direction
+              lambda = complex<double>(0.0,2.0*M_PI/(lim[5]-lim[4])*freq(k, N[2]));
+            }
+            UUhat(idx,rr) = Uhat(idx,rr) * lambda * nc;
+          }
+        }
+      }
+    }
+  } else {
+    #ifdef __CUDA__
+    fourier_direction_k<<<(NNh*r+n_threads-1)/n_threads,n_threads>>>(NNh*r, N[0]/2+1, N[1], N[2],(cuDoubleComplex*)Uhat.begin(),(cuDoubleComplex*)UUhat.begin(),lim[0],lim[1],lim[2],lim[3],lim[4],lim[5],nc,dir);
     #endif
   }
 }
@@ -711,6 +843,115 @@ private:
   mat tmpX, tmpX2;
   int fact;
   std::unique_ptr<vec> d_lim_xx;
+};
+
+struct PS_K_step_adapt_LS {
+
+  PS_K_step_adapt_LS(stloc _sl, grid_info_reserve<3> _gi, const blas_ops* _blas, int _fact)
+    : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Uhat(_sl), UUhat(_sl), KK(_sl), tmpX(_sl), tmpX2(_sl), UU(_sl), ACC(_sl), fact(_fact){
+
+      Uhat.reserve({gi.dxxh_mult,gi.rmax/fact},{gi.dxxh_mult,gi.r});
+      UUhat.reserve({gi.dxxh_mult,gi.rmax/fact},{gi.dxxh_mult,gi.r});
+      KK.reserve({gi.dxx_mult,gi.rmax/fact},{gi.dxx_mult,gi.r});
+      tmpX.reserve({gi.dxx_mult,gi.rmax/fact},{gi.dxx_mult,gi.r});
+      tmpX2.reserve({gi.dxx_mult,gi.rmax/fact},{gi.dxx_mult,gi.r});
+      UU.reserve({gi.dxx_mult,gi.rmax/fact},{gi.dxx_mult,gi.r});
+      ACC.reserve({gi.dxx_mult,gi.rmax/fact},{gi.dxx_mult,gi.r});
+    }
+
+  void K_rhs(mat& U, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2, mat& out){
+
+    ptw_mult_row(U,ef[0],UU);
+    blas->matmul_transb(UU,C2[0],tmpX2);
+    ptw_mult_row(U,ef[1],UU);
+    blas->matmul_transb(UU,C2[1],out);
+    tmpX2 += out;
+    ptw_mult_row(U,ef[2],UU);
+    blas->matmul_transb(UU,C2[2],out);
+    tmpX2 += out; // this contains the sum on the rhs
+
+    for(Index kk = 0; kk < gi.r; kk ++){
+      fft->forward(U.begin()+kk*gi.dxx_mult,Uhat.begin()+kk*gi.dxxh_mult,U.sl);
+    }
+    // Along x
+    fourier_direction(gi.r,gi.N_xx,gi.lim_xx,gi.dxxh_mult,gi.dxx_mult,Uhat,UUhat,0);
+    for(Index kk = 0; kk < gi.r; kk ++){
+      fft->backward(UUhat.begin()+kk*gi.dxxh_mult,UU.begin()+kk*gi.dxx_mult,UU.sl);
+    }
+    blas->matmul_transb(UU,C1[0],out);
+    tmpX2 -= out;
+
+    // Along y
+    fourier_direction(gi.r,gi.N_xx,gi.lim_xx,gi.dxxh_mult,gi.dxx_mult,Uhat,UUhat,1);
+    for(Index kk = 0; kk < gi.r; kk ++){
+      fft->backward(UUhat.begin()+kk*gi.dxxh_mult,UU.begin()+kk*gi.dxx_mult,UU.sl);
+    }
+    blas->matmul_transb(UU,C1[1],out);
+    tmpX2 -= out;
+
+    // Along z
+    fourier_direction(gi.r,gi.N_xx,gi.lim_xx,gi.dxxh_mult,gi.dxx_mult,Uhat,UUhat,2);
+    for(Index kk = 0; kk < gi.r; kk ++){
+      fft->backward(UUhat.begin()+kk*gi.dxxh_mult,UU.begin()+kk*gi.dxx_mult,UU.sl);
+    }
+    blas->matmul_transb(UU,C1[2],out);
+    setmultadd_rk2(out, tmpX2, -1);
+
+  }
+
+  void rk2_K(mat& U, Index n, double tau, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2){
+    // Input overwritten
+    for(Index i = 0; i < n; i++){
+      K_rhs(U, ef, C1, C2, KK);
+      setmultadd_rk2(KK,U,tau/2.0);
+      K_rhs(KK, ef, C1, C2, tmpX);
+      finstage_rk2(U,tmpX,tau);
+    }
+  }
+  
+  void rk4_K(mat& U, Index n, double tau, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2){
+    // Input overwritten
+    for(Index i = 0; i < n; i++){
+      K_rhs(U, ef, C1, C2, KK);
+      op1_rk4_LS(ACC,KK,tmpX,U,tau/2.0);
+      K_rhs(tmpX, ef, C1, C2, KK);
+      op_rk4_LS(ACC,KK,tmpX,U,2,tau/2.0);
+      K_rhs(tmpX, ef, C1, C2, KK);
+      op_rk4_LS(ACC,KK,tmpX,U,2,tau);
+      K_rhs(tmpX, ef, C1, C2, KK);
+      op2_rk4_LS(ACC,KK,U,1,tau/6.0);
+    }
+  }
+
+  void operator()(double tau, mat& K, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2, Index nsteps_int=1) {
+    if(fft == nullptr)
+      fft = make_unique_ptr<fft3d<2>>(gi.N_xx, K, Uhat, true);
+    //rk2_K(K, nsteps_int, tau/nsteps_int, ef, C1, C2);
+    rk4_K(K, nsteps_int, tau/nsteps_int, ef, C1, C2);
+  }
+
+  void update_info(Index nr){
+    gi.update_rank(nr);
+    Uhat.update_shape({gi.dxxh_mult,gi.r});
+    KK.update_shape({gi.dxx_mult,gi.r});
+    UUhat.update_shape({gi.dxxh_mult,gi.r});
+    UU.update_shape({gi.dxx_mult,gi.r});
+    tmpX.update_shape({gi.dxx_mult,gi.r});
+    tmpX2.update_shape({gi.dxx_mult,gi.r});
+    ACC.update_shape({gi.dxx_mult,gi.r});
+  }
+
+
+private:
+  stloc sl;
+  grid_info_reserve<3> gi;
+  const blas_ops* blas;
+
+  std::unique_ptr<fft3d<2>> fft;
+  cmat Uhat, UUhat;
+  mat KK, tmpX, tmpX2, UU, ACC;
+  int fact;
+
 };
 
 struct PS_S_step_adapt {
@@ -928,6 +1169,130 @@ private:
   int fact;
   array<vec,3> v;
   std::unique_ptr<vec> d_lim_vv;
+};
+
+struct PS_L_step_adapt_LS {
+
+  PS_L_step_adapt_LS(stloc _sl, grid_info_reserve<3> _gi, const blas_ops* _blas, int _fact)
+    : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Vhat(_sl), VVhat(_sl), LL(_sl), tmpV(_sl), tmpV2(_sl), VV(_sl), ACC(_sl), fact(_fact){
+
+      Vhat.reserve({gi.dvvh_mult,gi.rmax/fact},{gi.dvvh_mult,gi.r});
+      VVhat.reserve({gi.dvvh_mult,gi.rmax/fact},{gi.dvvh_mult,gi.r});
+      LL.reserve({gi.dvv_mult,gi.rmax/fact},{gi.dvv_mult,gi.r});
+      tmpV.reserve({gi.dvv_mult,gi.rmax/fact},{gi.dvv_mult,gi.r});
+      tmpV2.reserve({gi.dvv_mult,gi.rmax/fact},{gi.dvv_mult,gi.r});
+      VV.reserve({gi.dvv_mult,gi.rmax/fact},{gi.dvv_mult,gi.r});
+      ACC.reserve({gi.dvv_mult,gi.rmax/fact},{gi.dvv_mult,gi.r});
+
+      v = create_vec_array(gi.dvv_mult,sl);
+      array<vec,3> h_v = create_vec_array(gi.dvv_mult, stloc::host);
+      componentwise_vec_omp(gi.N_vv, [this, &h_v](Index idx, mind<3> i) {
+        h_v[0](idx) = gi.v(0, i[0]);
+        h_v[1](idx) = gi.v(1, i[1]);
+        h_v[2](idx) = gi.v(2, i[2]);
+      });
+      v = h_v;
+  }
+
+  void L_rhs(mat& V, array<vec,3>& v, const array<mat,3>& D1, const array<mat,3>& D2, mat& out){
+    
+    ptw_mult_row(V,v[0],VV);
+    blas->matmul_transb(VV,D2[0],tmpV2);
+    ptw_mult_row(V,v[1],VV);
+    blas->matmul_transb(VV,D2[1],out);
+    tmpV2 += out;
+    ptw_mult_row(V,v[2],VV);
+    blas->matmul_transb(VV,D2[2],out);
+    tmpV2 += out;
+    
+    for(Index kk = 0; kk < gi.r; kk ++){
+      fft->forward(V.begin()+kk*gi.dvv_mult,Vhat.begin()+kk*gi.dvvh_mult,V.sl);
+    }
+    // Along x
+    fourier_direction(gi.r,gi.N_vv,gi.lim_vv,gi.dvvh_mult,gi.dvv_mult,Vhat,VVhat,0);
+    for(Index kk = 0; kk < gi.r; kk ++){
+      fft->backward(VVhat.begin()+kk*gi.dvvh_mult,VV.begin()+kk*gi.dvv_mult,VV.sl);
+    }
+    blas->matmul_transb(VV,D1[0],out);
+    out -= tmpV2;
+
+    // Along y
+    fourier_direction(gi.r,gi.N_vv,gi.lim_vv,gi.dvvh_mult,gi.dvv_mult,Vhat,VVhat,1);
+    for(Index kk = 0; kk < gi.r; kk ++){
+      fft->backward(VVhat.begin()+kk*gi.dvvh_mult,VV.begin()+kk*gi.dvv_mult,VV.sl);
+    }
+    blas->matmul_transb(VV,D1[1],tmpV2);
+    out += tmpV2;
+    
+    // Along z
+    fourier_direction(gi.r,gi.N_vv,gi.lim_vv,gi.dvvh_mult,gi.dvv_mult,Vhat,VVhat,2);
+    for(Index kk = 0; kk < gi.r; kk ++){
+      fft->backward(VVhat.begin()+kk*gi.dvvh_mult,VV.begin()+kk*gi.dvv_mult,VV.sl);
+    }
+    blas->matmul_transb(VV,D1[2],tmpV2);
+    out += tmpV2;
+
+  }
+
+  void rk2_L(mat& V, Index n, double tau, array<vec,3>& v, const array<mat,3>& D1, const array<mat,3>& D2){
+    // Input overwritten
+    for(Index i = 0; i < n; i++){
+      L_rhs(V, v, D1, D2, LL);
+      setmultadd_rk2(LL,V,tau/2.0);
+      L_rhs(LL, v, D1, D2, tmpV);
+      finstage_rk2(V,tmpV,tau);
+    }
+  }
+  
+  void rk4_L(mat& V, Index n, double tau, array<vec,3>& v, const array<mat,3>& D1, const array<mat,3>& D2){
+    // Input overwritten
+    for(Index i = 0; i < n; i++){
+      L_rhs(V, v, D1, D2, LL);
+      op1_rk4_LS(ACC,LL,tmpV,V,tau/2.0);
+      L_rhs(tmpV, v, D1, D2, LL);
+      op_rk4_LS(ACC,LL,tmpV,V,2,tau/2.0);
+      L_rhs(tmpV, v, D1, D2, LL);
+      op_rk4_LS(ACC,LL,tmpV,V,2,tau);
+      L_rhs(tmpV, v, D1, D2, LL);
+      op2_rk4_LS(ACC,LL,V,1,tau/6.0);
+    }
+  }
+
+  void operator()(double tau, mat& L, const array<mat,3>& D1, const array<mat,3>& D2, Index nsteps_int=1) {
+    if(fft == nullptr)
+      fft = make_unique_ptr<fft3d<2>>(gi.N_vv, L, Vhat, true);
+    //rk2_L(L, nsteps_int, tau/nsteps_int, v, D1, D2);
+    rk4_L(L, nsteps_int, tau/nsteps_int, v, D1, D2);
+  }
+  
+  array<vec,3> get_v(){
+    return v;
+  }
+
+  void update_info(Index nr){
+    gi.update_rank(nr);
+    Vhat.update_shape({gi.dvvh_mult,gi.r});
+    LL.update_shape({gi.dvv_mult,gi.r});
+    VVhat.update_shape({gi.dvvh_mult,gi.r});
+    VV.update_shape({gi.dvv_mult,gi.r});
+    tmpV.update_shape({gi.dvv_mult,gi.r});
+    tmpV2.update_shape({gi.dvv_mult,gi.r});
+    ACC.update_shape({gi.dvv_mult,gi.r});
+  }
+
+
+private:
+  stloc sl;
+  grid_info_reserve<3> gi;
+  const blas_ops* blas;
+
+  std::unique_ptr<fft3d<2>> fft;
+  cmat Vhat, VVhat;
+  mat LL, tmpV, tmpV2, VV, ACC;
+  int fact;
+  
+  array<vec,3> v;
+
 };
 
 struct BUG_S_step_adapt {
@@ -1193,12 +1558,24 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
   vector<int> h_rank(n_steps);
 
   array<vec,3> E = create_vec_array(gi.dxx_mult, sl);
-  array<vec,3> Etmp = create_vec_array(gi.dxx_mult, sl);
-  array<vec,3> Etmp2 = create_vec_array(gi.dxx_mult, sl);
+  array<vec,3> Etmp = initialize_vec_array(sl);
+  array<vec,3> Etmp2 = initialize_vec_array(sl);
+  if(ec == "ef"){
+    for(int k=0; k<3; k++){
+      Etmp[k].resize({gi.dxx_mult});
+      Etmp2[k].resize({gi.dxx_mult});
+    }
+  }else if (ec == "ee"){
+    for(int k=0; k<3; k++){
+      Etmp[k].resize({gi.dxx_mult});
+    }
+  }
 
-  PS_K_step_adapt K_step_rk4(sl, gi, &blas, 1);
+  //PS_K_step_adapt K_step_rk4(sl, gi, &blas, 1);
+  PS_K_step_adapt_LS K_step_rk4(sl, gi, &blas, 1);
   PS_S_step_adapt S_step_rk4(sl, gi, &blas);
-  PS_L_step_adapt L_step_rk4(sl, gi, &blas, 1);
+  //PS_L_step_adapt L_step_rk4(sl, gi, &blas, 1);
+  PS_L_step_adapt_LS L_step_rk4(sl, gi, &blas, 1);
 
   mat Xn({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
   mat Sn({gi.r,gi.r}, sl);
@@ -1216,7 +1593,10 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
   array<mat, 3> D2 = create_mat_array({gi.r,gi.r}, sl);
 
   // needed for error control
-  mat Kad({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
+  mat Kad(sl);
+  if ((ec == "ef") || (ec == "ee")){
+    Kad.reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r});
+  }
   mat UUs({gi.r,gi.r}, sl);
   mat VVs({gi.r,gi.r}, sl);
   vec sigma({gi.r}, sl);
@@ -1273,7 +1653,9 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
     gt::start("L step");
     blas.matmul_transb(lr_sol.V,Sn,Vn); // Vn is L
     L_step_rk4(tau, Vn, D1, D2, nsteps_int);
+    gt::start("gs L step");
     gs(Vn, Sn, gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
+    gt::stop("gs L step");
     transpose_inplace(Sn);
     gt::stop("L step");
     
@@ -1343,35 +1725,6 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
 
           gt::start("Reject: increase rank (some resizes rxr)");
 
-/*
-          // This could directly become a kernel, but s times s so we'll see
-          #ifdef __OPENMP__
-          #pragma omp parallel for
-          #endif
-          for(Index i=0; i < lr_sol.S.num_elements(); i++){
-              Index idx_r = i%gi.r;
-              Index idx_c = i/gi.r;
-              if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = 0.0;
-                } else {
-                  #ifdef __CUDA__
-                    double ZERO = 0.0;
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&ZERO, sizeof(double),cudaMemcpyHostToDevice);
-                  #endif
-                }
-              }
-              else {
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
-                } else {
-                  #ifdef __CUDA__
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
-                  #endif
-                }
-              }
-          }
-*/
           if(lr_sol.S.sl == stloc::host){
             #ifdef __OPENMP__
             #pragma omp parallel for
@@ -1441,23 +1794,6 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
             lr_sol.X.swap(Xn);
             lr_sol.V.swap(Vn);
 
-/*
-            #ifdef __OPENMP__
-            #pragma omp parallel for
-            #endif
-            for(Index i=0; i < lr_sol.S.num_elements(); i++){
-                Index idx_r = i%gi.r;
-                Index idx_c = i/gi.r;
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
-                }else{
-                  #ifdef __CUDA__
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
-                  #endif
-                }
-            }
-*/
-          
           if(lr_sol.S.sl == stloc::host){
             #ifdef __OPENMP__
             #pragma omp parallel for
@@ -1589,34 +1925,6 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
 
           gt::start("Reject: increase rank (some resizes rxr)");
 
-/*
-          // This could directly become a kernel, but r times r so we'll see
-          #ifdef __OPENMP__
-          #pragma omp parallel for
-          #endif
-          for(Index i=0; i < lr_sol.S.num_elements(); i++){
-              Index idx_r = i%gi.r;
-              Index idx_c = i/gi.r;
-              if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = 0.0;
-                } else {
-                  #ifdef __CUDA__
-                    double ZERO = 0.0;
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&ZERO, sizeof(double),cudaMemcpyHostToDevice);
-                  #endif
-                }
-              } else {
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
-                } else {
-                  #ifdef __CUDA__
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
-                  #endif
-                }
-              }
-          }
-*/
           if(lr_sol.S.sl == stloc::host){
             #ifdef __OPENMP__
             #pragma omp parallel for
@@ -1684,23 +1992,6 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
             Vn.update_shape({gi.dvv_mult,gi.r});
             lr_sol.X.swap(Xn);
             lr_sol.V.swap(Vn);
-
-/*
-            #ifdef __OPENMP__
-            #pragma omp parallel for
-            #endif
-            for(Index i=0; i < lr_sol.S.num_elements(); i++){
-                Index idx_r = i%gi.r;
-                Index idx_c = i/gi.r;
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
-                }else{
-                  #ifdef __CUDA__
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
-                  #endif
-                }
-            }
-*/
 
           if(lr_sol.S.sl == stloc::host){
             #ifdef __OPENMP__
@@ -1836,35 +2127,6 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
 
           gt::start("Reject: increase rank (some resizes rxr)");
 
-/*
-          // This could directly become a kernel, but r times r so we'll see
-          #ifdef __OPENMP__
-          #pragma omp parallel for
-          #endif
-          for(Index i=0; i < lr_sol.S.num_elements(); i++){
-              Index idx_r = i%gi.r;
-              Index idx_c = i/gi.r;
-              if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = 0.0;
-                } else {
-                  #ifdef __CUDA__
-                    double ZERO = 0.0;
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&ZERO, sizeof(double),cudaMemcpyHostToDevice);
-                  #endif
-                }
-              } else {
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
-                } else {
-                  #ifdef __CUDA__
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
-                  #endif
-                }
-              }
-          }
-*/
-
           if(lr_sol.S.sl == stloc::host){
             #ifdef __OPENMP__
             #pragma omp parallel for
@@ -1933,23 +2195,6 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
             lr_sol.X.swap(Xn);
             lr_sol.V.swap(Vn);
 
-/*
-            #ifdef __OPENMP__
-            #pragma omp parallel for
-            #endif
-            for(Index i=0; i < lr_sol.S.num_elements(); i++){
-                Index idx_r = i%gi.r;
-                Index idx_c = i/gi.r;
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
-                }else{
-                  #ifdef __CUDA__
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
-                  #endif
-                }
-            }
-*/
-            
           if(lr_sol.S.sl == stloc::host){
             #ifdef __OPENMP__
             #pragma omp parallel for
@@ -2060,10 +2305,11 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
   vector<int> h_rank(n_steps);
 
   array<vec,3> E = create_vec_array(gi.dxx_mult, sl);
-  array<vec,3> Etmp = create_vec_array(gi.dxx_mult, sl);
 
-  PS_K_step_adapt K_step_rk4(sl, gi, &blas, 2);
-  PS_L_step_adapt L_step_rk4(sl, gi, &blas, 2);
+  //PS_K_step_adapt K_step_rk4(sl, gi, &blas, 2);
+  //PS_L_step_adapt L_step_rk4(sl, gi, &blas, 2);
+  PS_K_step_adapt_LS K_step_rk4(sl, gi, &blas, 2);
+  PS_L_step_adapt_LS L_step_rk4(sl, gi, &blas, 2);
   BUG_S_step_adapt S_step_rk4(sl, gi, &blas, 2);
 
   mat Xn({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
@@ -2134,6 +2380,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
     // HERE AUGMENTATION K
     gt::start("X aug + QR");
     Xn.update_shape({gi.dxx_mult,2*gi.r});
+    gt::start("X aug + QR (copy)");
     if(Xn.sl == stloc::host){
       std::copy(lr_sol.X.data(), lr_sol.X.data()+lr_sol.X.num_elements(), Xn.data()+lr_sol.X.num_elements());
     } else {
@@ -2141,7 +2388,10 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
       cudaMemcpy(Xn.data()+lr_sol.X.num_elements(), lr_sol.X.data(), sizeof(double)*lr_sol.X.num_elements(),cudaMemcpyDeviceToDevice);
       #endif
     }
+    gt::stop("X aug + QR (copy)");
+    gt::start("X aug + QR (QR)");
     gs(Xn, Stmp, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]);
+    gt::stop("X aug + QR (QR)");
     gt::stop("X aug + QR");
 
     // ---- L step ----
@@ -2157,6 +2407,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
     // HERE AUGMENTATION L
     gt::start("V aug + QR");
     Vn.update_shape({gi.dvv_mult,2*gi.r});
+    gt::start("V aug + QR (copy)");
     if(Vn.sl == stloc::host){
       std::copy(lr_sol.V.data(), lr_sol.V.data()+lr_sol.V.num_elements(), Vn.data()+lr_sol.V.num_elements());
     } else {
@@ -2164,7 +2415,10 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
       cudaMemcpy(Vn.data()+lr_sol.V.num_elements(), lr_sol.V.data(), sizeof(double)*lr_sol.V.num_elements(),cudaMemcpyDeviceToDevice);
       #endif
     }
+    gt::stop("V aug + QR (copy)");
+    gt::start("V aug + QR (QR)");
     gs(Vn, Stmp, gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
+    gt::stop("V aug + QR (QR)");
     gt::stop("V aug + QR");
 
     // ---- S step ----
@@ -2344,12 +2598,24 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
   vector<int> h_rank(n_steps);
 
   array<vec,3> E = create_vec_array(gi.dxx_mult, sl);
-  array<vec,3> Etmp = create_vec_array(gi.dxx_mult, sl);
-  array<vec,3> Etmp2 = create_vec_array(gi.dxx_mult, sl);
+  array<vec,3> Etmp = initialize_vec_array(sl);
+  array<vec,3> Etmp2 = initialize_vec_array(sl);
+  if(ec == "ef"){
+    for(int k=0; k<3; k++){
+      Etmp[k].resize({gi.dxx_mult});
+      Etmp2[k].resize({gi.dxx_mult});
+    }
+  }else if (ec == "ee"){
+    for(int k=0; k<3; k++){
+      Etmp[k].resize({gi.dxx_mult});
+    }
+  }
 
-  PS_K_step_adapt K_step_rk4(sl, gi, &blas, 1);
+  //PS_K_step_adapt K_step_rk4(sl, gi, &blas, 1);
+  PS_K_step_adapt_LS K_step_rk4(sl, gi, &blas, 1);
   PS_S_step_adapt S_step_rk4(sl, gi, &blas);
-  PS_L_step_adapt L_step_rk4(sl, gi, &blas, 1);
+  //PS_L_step_adapt L_step_rk4(sl, gi, &blas, 1);
+  PS_L_step_adapt_LS L_step_rk4(sl, gi, &blas, 1);
 
   mat Xn({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
   mat XnT({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
@@ -2368,7 +2634,10 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
   array<mat, 3> D2 = create_mat_array({gi.r,gi.r}, sl);
 
   // needed for error control
-  mat Kad({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
+  mat Kad(sl);
+  if ((ec == "ef") || (ec == "ee")){
+    Kad.reserve({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r});
+  }
   mat UUs({gi.r,gi.r}, sl);
   mat VVs({gi.r,gi.r}, sl);
   vec sigma({gi.r}, sl);
@@ -2483,35 +2752,6 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
             #endif
           }
 
-/*
-          // This could directly become a kernel, but s times s so we'll see
-          #ifdef __OPENMP__
-          #pragma omp parallel for
-          #endif
-          for(Index i=0; i < lr_sol.S.num_elements(); i++){
-              Index idx_r = i%gi.r;
-              Index idx_c = i/gi.r;
-              if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = 0.0;
-                } else {
-                  #ifdef __CUDA__
-                    double ZERO = 0.0;
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&ZERO, sizeof(double),cudaMemcpyHostToDevice);
-                  #endif
-                }
-              }
-              else {
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
-                } else {
-                  #ifdef __CUDA__
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
-                  #endif
-                }
-              }
-          }
-*/
           if(lr_sol.S.sl == stloc::host){
             #ifdef __OPENMP__
             #pragma omp parallel for
@@ -2577,22 +2817,6 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
             lr_sol.X.swap(Xn);
             lr_sol.V.swap(Vn);
 
-/*
-            #ifdef __OPENMP__
-            #pragma omp parallel for
-            #endif
-            for(Index i=0; i < lr_sol.S.num_elements(); i++){
-                Index idx_r = i%gi.r;
-                Index idx_c = i/gi.r;
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
-                }else{
-                  #ifdef __CUDA__
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
-                  #endif
-                }
-            }
-*/
           if(lr_sol.S.sl == stloc::host){
             #ifdef __OPENMP__
             #pragma omp parallel for
@@ -2707,34 +2931,6 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
             #endif
           }
 
-/*
-          // This could directly become a kernel, but r times r so we'll see
-          #ifdef __OPENMP__
-          #pragma omp parallel for
-          #endif
-          for(Index i=0; i < lr_sol.S.num_elements(); i++){
-              Index idx_r = i%gi.r;
-              Index idx_c = i/gi.r;
-              if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = 0.0;
-                } else {
-                  #ifdef __CUDA__
-                    double ZERO = 0.0;
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&ZERO, sizeof(double),cudaMemcpyHostToDevice);
-                  #endif
-                }
-              } else {
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
-                } else {
-                  #ifdef __CUDA__
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
-                  #endif
-                }
-              }
-          }
-*/
           if(lr_sol.S.sl == stloc::host){
             #ifdef __OPENMP__
             #pragma omp parallel for
@@ -2798,22 +2994,6 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
             lr_sol.X.swap(Xn);
             lr_sol.V.swap(Vn);
 
-/*
-            #ifdef __OPENMP__
-            #pragma omp parallel for
-            #endif
-            for(Index i=0; i < lr_sol.S.num_elements(); i++){
-                Index idx_r = i%gi.r;
-                Index idx_c = i/gi.r;
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
-                }else{
-                  #ifdef __CUDA__
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
-                  #endif
-                }
-            }
-*/
           if(lr_sol.S.sl == stloc::host){
             #ifdef __OPENMP__
             #pragma omp parallel for
@@ -2931,34 +3111,6 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
             #endif
           }
 
-/*
-          // This could directly become a kernel, but r times r so we'll see
-          #ifdef __OPENMP__
-          #pragma omp parallel for
-          #endif
-          for(Index i=0; i < lr_sol.S.num_elements(); i++){
-              Index idx_r = i%gi.r;
-              Index idx_c = i/gi.r;
-              if((idx_r == (gi.r-1)) || (idx_c == (gi.r-1))){
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = 0.0;
-                } else {
-                  #ifdef __CUDA__
-                    double ZERO = 0.0;
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&ZERO, sizeof(double),cudaMemcpyHostToDevice);
-                  #endif
-                }
-              } else {
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
-                } else {
-                  #ifdef __CUDA__
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
-                  #endif
-                }
-              }
-          }
-*/
           if(lr_sol.S.sl == stloc::host){
             #ifdef __OPENMP__
             #pragma omp parallel for
@@ -3022,23 +3174,6 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
             Vn.update_shape({gi.dvv_mult,gi.r});
             lr_sol.X.swap(Xn);
             lr_sol.V.swap(Vn);
-
-/*
-            #ifdef __OPENMP__
-            #pragma omp parallel for
-            #endif
-            for(Index i=0; i < lr_sol.S.num_elements(); i++){
-                Index idx_r = i%gi.r;
-                Index idx_c = i/gi.r;
-                if(lr_sol.S.sl == stloc::host){
-                  lr_sol.S(idx_r,idx_c) = Sn(idx_r,idx_c);
-                }else{
-                  #ifdef __CUDA__
-                    cudaMemcpy(&lr_sol.S(idx_r,idx_c),&Sn(idx_r,idx_c), sizeof(double),cudaMemcpyDeviceToDevice);
-                  #endif
-                }
-            }
-*/
 
           if(lr_sol.S.sl == stloc::host){
             #ifdef __OPENMP__
@@ -3179,8 +3314,10 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
 
   array<vec,3> E = create_vec_array(gi.dxx_mult, sl);
 
-  PS_K_step_adapt K_step_rk4(sl, gi, &blas, 3);
-  PS_L_step_adapt L_step_rk4(sl, gi, &blas, 3);
+  //PS_K_step_adapt K_step_rk4(sl, gi, &blas, 3);
+  //PS_L_step_adapt L_step_rk4(sl, gi, &blas, 3);
+  PS_K_step_adapt_LS K_step_rk4(sl, gi, &blas, 3);
+  PS_L_step_adapt_LS L_step_rk4(sl, gi, &blas, 3);
   BUG_S_step_adapt S_step_rk4(sl, gi, &blas, 3);
 
   BUG_S_step_adapt S_step_rk4_BUG1(sl, gi, &blas, 1);
@@ -3279,7 +3416,8 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
     compute_D(Xn, E, D1, D2, blas);
 
     // For X
-    K_step_rk4.rk4_K_rhs(XnT,E,C1,C2,FnX);
+    //K_step_rk4.rk4_K_rhs(XnT,E,C1,C2,FnX);
+    K_step_rk4.K_rhs(XnT,E,C1,C2,FnX);
     FnX *= tau;
 
     Xn.update_shape({gi.dxx_mult,3*gi.r});
@@ -3296,7 +3434,8 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
 
     // For V
     blas.matmul_transb(Vn,Sn,VnT); 
-    L_step_rk4.rk4_L_rhs(VnT,v,D1,D2,FnV);
+    //L_step_rk4.rk4_L_rhs(VnT,v,D1,D2,FnV);
+    L_step_rk4.L_rhs(VnT,v,D1,D2,FnV);
     FnV *= tau;
 
     Vn.update_shape({gi.dvv_mult,3*gi.r});
@@ -3699,6 +3838,7 @@ int main(int argc, char** argv){
   gt::stop("Total WC time");
 
   cout << gt::sorted_output() << endl;
+
 
 
 /*
