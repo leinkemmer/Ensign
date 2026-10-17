@@ -1,8 +1,16 @@
-# Readme
+# Ensign
 
-The **Ensign** software framework facilitates the efficient implementation of dynamical low-rank algorithms both on multi-core CPU and GPUs. It provides many primitives to make the implementation of such schemes easier and can work easily with both methods based on the projector splitting and the unconventional integrator. For more details on the dynamical low-rank method and in particular the problems implemented in the examples folder see
+The **Ensign** C++ software framework facilitates the efficient implementation of low-rank algorithms for high-dimensional partial differential equations (and some other problems). It provides many primitives to make the implementation of both dynamical low-rank methods (e.g. based on the projector splitting or BUG integrator) and interpolatory low-rank methods (e.g. adaptive cross approximation) as easy as possible. Ensign supports both multi-core CPU and GPUs. It is agnostic to the specific space and time discretization used.
 
-[F. Cassini, L. Einkemmer. Efficient 6D Vlasov simulation using the dynamical low-rank framework Ensign.](https://arxiv.org/abs/2110.13481)
+For more details see the documentation  
+**Documentation: <https://leinkemmer.github.io/Ensign/>** (installation, tutorial, examples, API reference)  
+and the paper  
+[F. Cassini, L. Einkemmer. Efficient 6D Vlasov simulation using the dynamical low-rank framework Ensign. Computer Physics Communications 280, 108489, 2022.](https://arxiv.org/abs/2110.13481)
+
+
+## Getting started
+
+A step-by-step [tutorial](https://leinkemmer.github.io/Ensign/tutorial/) explains the minimal example `examples/minimal_dlr_vlasov.cpp`, a complete 1+1D Vlasov--Poisson solver in about 200 lines. The other programs in `examples/` cover 3+3D simulations, running simulations on GPUs, and efficient implementation of rank-adaptive integrators.
 
 
 ## Build instructions
@@ -32,7 +40,7 @@ If you prefer to use Intel MKL as the BLAS and LAPACK backend set
     cmake -DMKL_ENABLED=ON -DCUDA_ENABLED=ON ..
     make
 
-### MacOS
+### MacOS build instructions
 
 #### OpenBLAS
 If OpenBLAS is used as a BLAS backend, a Fortran compiler has to be installed. Since Apple Clang, the native compiler collection of MacOS, does not ship a Fortran compiler, one has to install a Fortran compiler manually. To obtain `gfortran-14`, the Fortran compiler of GCC, install `gcc-14` via brew (see also next section).
@@ -43,7 +51,8 @@ If CMake does not find the Fortran compiler automatically, you have to set the `
 
 Additionally, you might also have to set the CMake cache entry `CMAKE_Fortran_COMPILER` to the full path of the Fortran compiler.
 
-#### OpenMP
+#### OpenMPy
+
 Moreover, Apple Clang does not officially support OpenMP. Therefore, you have to use instead a different compiler collection, for example GCC. Install `gcc-14` again via brew:
 
     brew install gcc@14

@@ -2,3 +2,5 @@
 /plots/*.txt
 .DS_STORE
 .vscode
+/docs/doxygen/
+/site/
