@@ -9,6 +9,12 @@ namespace Ensign {
 
 
 
+/* Dense d-dimensional array stored contiguously in column-major order (i.e. the leftmost index is contiguous in memory).
+*
+* The memory resides either on the host (CPU) or the device (GPU),
+* depending on stloc. Memory for a larger shape (emax) can be reserved
+* and the current shape (e) changed without reallocation.
+*/
 template<class T, size_t d>
 struct multi_array {
   array<Index,d> e;
