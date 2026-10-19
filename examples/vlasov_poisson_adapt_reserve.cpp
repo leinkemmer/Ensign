@@ -452,7 +452,7 @@ struct electric_field {
           efhatx[2](idx) = efhat(idx) * lambdaz / (pow(lambdax,2) + pow(lambday,2) + pow(lambdaz,2)) * ncxx ;
         });
 
-        // TODO: this can be simplified.
+        // This can be simplified.
         #ifdef __OPENMP__
         #pragma omp parallel for
         #endif
@@ -747,7 +747,7 @@ struct PS_K_step_adapt {
   void rk4_K_rhs(mat& U, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2, mat& out){
 
     // Perform needed derivatives in Fourier space
-    // TODO: if needed we could work on a single column
+    // If needed we could work on a single column
     for(Index kk = 0; kk < gi.r; kk ++){
       fft->forward(U.begin()+kk*gi.dxx_mult,Uhat.begin()+kk*gi.dxxh_mult,U.sl);
     }
@@ -1067,7 +1067,7 @@ struct PS_L_step_adapt {
   void rk4_L_rhs(mat& V, array<vec,3>& v, const array<mat,3>& D1, const array<mat,3>& D2, mat& out){
 
     // Perform needed derivatives in Fourier space
-    // TODO: if needed we could work on a single column
+    // If needed we could work on a single column
     for(Index kk = 0; kk < gi.r; kk ++){
       fft->forward(V.begin()+kk*gi.dvv_mult,Vhat.begin()+kk*gi.dvvh_mult,V.sl);
     }
@@ -1571,11 +1571,11 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
     }
   }
 
-  //PS_K_step_adapt K_step_rk4(sl, gi, &blas, 1);
-  PS_K_step_adapt_LS K_step_rk4(sl, gi, &blas, 1);
+  PS_K_step_adapt K_step_rk4(sl, gi, &blas, 1);
+  //PS_K_step_adapt_LS K_step_rk4(sl, gi, &blas, 1);
   PS_S_step_adapt S_step_rk4(sl, gi, &blas);
-  //PS_L_step_adapt L_step_rk4(sl, gi, &blas, 1);
-  PS_L_step_adapt_LS L_step_rk4(sl, gi, &blas, 1);
+  PS_L_step_adapt L_step_rk4(sl, gi, &blas, 1);
+  //PS_L_step_adapt_LS L_step_rk4(sl, gi, &blas, 1);
 
   mat Xn({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
   mat Sn({gi.r,gi.r}, sl);
@@ -1863,7 +1863,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
       }
 
       gt::start("CUT el field (pmr, matmul, efield, ee)");
-      //TODO: can be optimized, but it's r times r
+      //Can be optimized, but it's r times r
       transpose_inplace(VVs);
       ptw_mult_row(VVs,sigma,tmps);
       blas.matmul(UUs,tmps,VVs);
@@ -2065,7 +2065,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
       }
 
       gt::start("CUT el en (pmr, matmul, efield, ee)");
-      //TODO: can be optimized, but it's r times r
+      //Can be optimized, but it's r times r
       transpose_inplace(VVs);
       ptw_mult_row(VVs,sigma,tmps);
       blas.matmul(UUs,tmps,VVs);
@@ -2306,10 +2306,10 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
 
   array<vec,3> E = create_vec_array(gi.dxx_mult, sl);
 
-  //PS_K_step_adapt K_step_rk4(sl, gi, &blas, 2);
-  //PS_L_step_adapt L_step_rk4(sl, gi, &blas, 2);
-  PS_K_step_adapt_LS K_step_rk4(sl, gi, &blas, 2);
-  PS_L_step_adapt_LS L_step_rk4(sl, gi, &blas, 2);
+  PS_K_step_adapt K_step_rk4(sl, gi, &blas, 2);
+  PS_L_step_adapt L_step_rk4(sl, gi, &blas, 2);
+  //PS_K_step_adapt_LS K_step_rk4(sl, gi, &blas, 2);
+  //PS_L_step_adapt_LS L_step_rk4(sl, gi, &blas, 2);
   BUG_S_step_adapt S_step_rk4(sl, gi, &blas, 2);
 
   mat Xn({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
@@ -2348,6 +2348,8 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
   for(Index kk=0; kk<n_steps; kk++){
 
     cout << "Step " << kk+1 << " of " << n_steps << endl;
+
+    gt::start("Time integration");
 
     h_rank[kk] = (int)gi.r;
 
@@ -2454,6 +2456,10 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
     gt::start("S step");
     S_step_rk4(tau, Shat, C1, C2, D1, D2, nsteps_int);
     gt::stop("S step");
+    
+    gt::stop("Time integration");
+    
+    gt::start("Rank choice");
 
     // Determine new rank
     gt::start("SVD decomposition");
@@ -2550,6 +2556,8 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
     sigma_h.resize({2*gi.r});
     #endif
     gt::stop("Truncate and updates");
+    
+    gt::stop("Rank choice");
 
     t += tau;
 
@@ -2611,11 +2619,11 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
     }
   }
 
-  //PS_K_step_adapt K_step_rk4(sl, gi, &blas, 1);
-  PS_K_step_adapt_LS K_step_rk4(sl, gi, &blas, 1);
+  PS_K_step_adapt K_step_rk4(sl, gi, &blas, 1);
+  //PS_K_step_adapt_LS K_step_rk4(sl, gi, &blas, 1);
   PS_S_step_adapt S_step_rk4(sl, gi, &blas);
-  //PS_L_step_adapt L_step_rk4(sl, gi, &blas, 1);
-  PS_L_step_adapt_LS L_step_rk4(sl, gi, &blas, 1);
+  PS_L_step_adapt L_step_rk4(sl, gi, &blas, 1);
+  //PS_L_step_adapt_LS L_step_rk4(sl, gi, &blas, 1);
 
   mat Xn({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
   mat XnT({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
@@ -2879,7 +2887,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
         #endif
       }
 
-      //TODO: can be optimized, but it's r times r
+      //Can be optimized, but it's r times r
       transpose_inplace(VVs);
       ptw_mult_row(VVs,sigma,tmps);
       blas.matmul(UUs,tmps,VVs);
@@ -3058,7 +3066,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
         #endif
       }
 
-      //TODO: can be optimized, but it's r times r
+      //Can be optimized, but it's r times r
       transpose_inplace(VVs);
       ptw_mult_row(VVs,sigma,tmps);
       blas.matmul(UUs,tmps,VVs);
@@ -3237,12 +3245,14 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
 
 
   if (snapshots == 1){
-    //multi_array<double,2> K({gi.dxx_mult,gi.r},sl);
-    //multi_array<double,2> SOL({gi.dxx_mult,gi.dvv_mult},sl);
-    //blas.matmul(lr_sol.X, lr_sol.S, K);
-    //blas.matmul_transb(K, lr_sol.V, SOL);
-    //dump("solution_ps_so_"+ec+"_"+gstr+".data",SOL);
+    multi_array<double,2> K({gi.dxx_mult,gi.r},sl);
+    multi_array<double,2> SOL({gi.dxx_mult,gi.dvv_mult},sl);
+    blas.matmul(lr_sol.X, lr_sol.S, K);
+    blas.matmul_transb(K, lr_sol.V, SOL);
+    dump("solution_ps_so_"+ec+"_"+gstr+".data",SOL);
 
+    /*
+    // To produce plots for paper
     mat TMPX({gi.N_xx[0],gi.r}, sl);
     mat TMPV({gi.N_vv[0],gi.r}, sl);
     mat TMP1({gi.N_xx[0],gi.r}, sl);
@@ -3272,7 +3282,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
     dump("EX_"+ec+"_"+gstr+".data",EX);
     dump("EY_"+ec+"_"+gstr+".data",EY);
     dump("EZ_"+ec+"_"+gstr+".data",EZ);
-
+    */
 
   }
 
@@ -3314,10 +3324,10 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
 
   array<vec,3> E = create_vec_array(gi.dxx_mult, sl);
 
-  //PS_K_step_adapt K_step_rk4(sl, gi, &blas, 3);
-  //PS_L_step_adapt L_step_rk4(sl, gi, &blas, 3);
-  PS_K_step_adapt_LS K_step_rk4(sl, gi, &blas, 3);
-  PS_L_step_adapt_LS L_step_rk4(sl, gi, &blas, 3);
+  PS_K_step_adapt K_step_rk4(sl, gi, &blas, 3);
+  PS_L_step_adapt L_step_rk4(sl, gi, &blas, 3);
+  //PS_K_step_adapt_LS K_step_rk4(sl, gi, &blas, 3);
+  //PS_L_step_adapt_LS L_step_rk4(sl, gi, &blas, 3);
   BUG_S_step_adapt S_step_rk4(sl, gi, &blas, 3);
 
   BUG_S_step_adapt S_step_rk4_BUG1(sl, gi, &blas, 1);
@@ -3416,8 +3426,8 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
     compute_D(Xn, E, D1, D2, blas);
 
     // For X
-    //K_step_rk4.rk4_K_rhs(XnT,E,C1,C2,FnX);
-    K_step_rk4.K_rhs(XnT,E,C1,C2,FnX);
+    K_step_rk4.rk4_K_rhs(XnT,E,C1,C2,FnX);
+    //K_step_rk4.K_rhs(XnT,E,C1,C2,FnX);
     FnX *= tau;
 
     Xn.update_shape({gi.dxx_mult,3*gi.r});
@@ -3434,8 +3444,8 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
 
     // For V
     blas.matmul_transb(Vn,Sn,VnT); 
-    //L_step_rk4.rk4_L_rhs(VnT,v,D1,D2,FnV);
-    L_step_rk4.L_rhs(VnT,v,D1,D2,FnV);
+    L_step_rk4.rk4_L_rhs(VnT,v,D1,D2,FnV);
+    //L_step_rk4.L_rhs(VnT,v,D1,D2,FnV);
     FnV *= tau;
 
     Vn.update_shape({gi.dvv_mult,3*gi.r});
@@ -3583,12 +3593,14 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
   }
   
   if (snapshots == 1){
-    //multi_array<double,2> K({gi.dxx_mult,gi.r},sl);
-    //multi_array<double,2> SOL({gi.dxx_mult,gi.dvv_mult},sl);
-    //blas.matmul(lr_sol.X, lr_sol.S, K);
-    //blas.matmul_transb(K, lr_sol.V, SOL);
-    //dump("solution_bug_so_"+gstr+".data",SOL);
+    multi_array<double,2> K({gi.dxx_mult,gi.r},sl);
+    multi_array<double,2> SOL({gi.dxx_mult,gi.dvv_mult},sl);
+    blas.matmul(lr_sol.X, lr_sol.S, K);
+    blas.matmul_transb(K, lr_sol.V, SOL);
+    dump("solution_bug_so_"+gstr+".data",SOL);
     
+    /*
+    // To produce plots for paper
     mat TMPX({gi.N_xx[0],gi.r}, sl);
     mat TMPV({gi.N_vv[0],gi.r}, sl);
     mat TMP1({gi.N_xx[0],gi.r}, sl);
@@ -3599,6 +3611,7 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
     blas.matmul(TMPX, lr_sol.S, TMP1);
     blas.matmul_transb(TMP1, TMPV, SOL);
     dump("slice_bug_so_"+gstr+".data",SOL);
+    */
   }
 }
 
