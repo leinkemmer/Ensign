@@ -46,3 +46,6 @@ nav:
   - Examples: examples.md
   - API reference: api.md
   - References: references.md
+
+extra:
+  generator: false
