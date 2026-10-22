@@ -51,7 +51,7 @@ If CMake does not find the Fortran compiler automatically, you have to set the `
 
 Additionally, you might also have to set the CMake cache entry `CMAKE_Fortran_COMPILER` to the full path of the Fortran compiler.
 
-#### OpenMPy
+#### OpenMP
 
 Moreover, Apple Clang does not officially support OpenMP. Therefore, you have to use instead a different compiler collection, for example GCC. Install `gcc-14` again via brew:
 
