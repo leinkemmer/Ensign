@@ -714,7 +714,15 @@ void fourier_direction(Index r, mind<3>& N, mfp<6>& lim, Index NNh, Index NN, cm
   }
 }
 
-struct PS_K_step_adapt {
+struct Switch_K_LS {
+  virtual void operator()(double tau, mat& K, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2, Index nsteps_int) = 0;
+  virtual void rk4_K_rhs(mat& U, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2, mat& out) = 0;
+  virtual void update_info(Index nr) = 0;
+  virtual ~Switch_K_LS() = default;
+};
+
+
+struct PS_K_step_adapt : Switch_K_LS {
 
   PS_K_step_adapt(stloc _sl, grid_info_reserve<3> _gi, const blas_ops* _blas, int _fact)
     : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Uhat(_sl), tmpX(_sl), tmpX2(_sl), fact(_fact){
@@ -744,7 +752,7 @@ struct PS_K_step_adapt {
     }
 
 
-  void rk4_K_rhs(mat& U, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2, mat& out){
+  void rk4_K_rhs(mat& U, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2, mat& out) override {
 
     // Perform needed derivatives in Fourier space
     // If needed we could work on a single column
@@ -807,14 +815,14 @@ struct PS_K_step_adapt {
     }
   }
 
-  void operator()(double tau, mat& K, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2, Index nsteps_int=1) {
+  void operator()(double tau, mat& K, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2, Index nsteps_int=1) override {
 
     if(fft == nullptr)
       fft = make_unique_ptr<fft3d<2>>(gi.N_xx, K, Uhat, true);
     rk4_K(K, nsteps_int, tau/nsteps_int, ef, C1, C2);
   }
       
-  void update_info(Index nr){
+  void update_info(Index nr) override {
     gi.update_rank(nr);
     Uhat.update_shape({gi.dxxh_mult,gi.r});
     for(int i=0; i<3; i++){
@@ -845,7 +853,7 @@ private:
   std::unique_ptr<vec> d_lim_xx;
 };
 
-struct PS_K_step_adapt_LS {
+struct PS_K_step_adapt_LS : Switch_K_LS{
 
   PS_K_step_adapt_LS(stloc _sl, grid_info_reserve<3> _gi, const blas_ops* _blas, int _fact)
     : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Uhat(_sl), UUhat(_sl), KK(_sl), tmpX(_sl), tmpX2(_sl), UU(_sl), ACC(_sl), fact(_fact){
@@ -859,7 +867,7 @@ struct PS_K_step_adapt_LS {
       ACC.reserve({gi.dxx_mult,gi.rmax/fact},{gi.dxx_mult,gi.r});
     }
 
-  void K_rhs(mat& U, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2, mat& out){
+  void rk4_K_rhs(mat& U, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2, mat& out) override {
 
     ptw_mult_row(U,ef[0],UU);
     blas->matmul_transb(UU,C2[0],tmpX2);
@@ -902,9 +910,9 @@ struct PS_K_step_adapt_LS {
   void rk2_K(mat& U, Index n, double tau, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2){
     // Input overwritten
     for(Index i = 0; i < n; i++){
-      K_rhs(U, ef, C1, C2, KK);
+      rk4_K_rhs(U, ef, C1, C2, KK);
       setmultadd_rk2(KK,U,tau/2.0);
-      K_rhs(KK, ef, C1, C2, tmpX);
+      rk4_K_rhs(KK, ef, C1, C2, tmpX);
       finstage_rk2(U,tmpX,tau);
     }
   }
@@ -912,25 +920,25 @@ struct PS_K_step_adapt_LS {
   void rk4_K(mat& U, Index n, double tau, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2){
     // Input overwritten
     for(Index i = 0; i < n; i++){
-      K_rhs(U, ef, C1, C2, KK);
+      rk4_K_rhs(U, ef, C1, C2, KK);
       op1_rk4_LS(ACC,KK,tmpX,U,tau/2.0);
-      K_rhs(tmpX, ef, C1, C2, KK);
+      rk4_K_rhs(tmpX, ef, C1, C2, KK);
       op_rk4_LS(ACC,KK,tmpX,U,2,tau/2.0);
-      K_rhs(tmpX, ef, C1, C2, KK);
+      rk4_K_rhs(tmpX, ef, C1, C2, KK);
       op_rk4_LS(ACC,KK,tmpX,U,2,tau);
-      K_rhs(tmpX, ef, C1, C2, KK);
+      rk4_K_rhs(tmpX, ef, C1, C2, KK);
       op2_rk4_LS(ACC,KK,U,1,tau/6.0);
     }
   }
 
-  void operator()(double tau, mat& K, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2, Index nsteps_int=1) {
+  void operator()(double tau, mat& K, array<vec,3>& ef, const array<mat,3>& C1, const array<mat,3>& C2, Index nsteps_int=1) override {
     if(fft == nullptr)
       fft = make_unique_ptr<fft3d<2>>(gi.N_xx, K, Uhat, true);
     //rk2_K(K, nsteps_int, tau/nsteps_int, ef, C1, C2);
     rk4_K(K, nsteps_int, tau/nsteps_int, ef, C1, C2);
   }
 
-  void update_info(Index nr){
+  void update_info(Index nr) override {
     gi.update_rank(nr);
     Uhat.update_shape({gi.dxxh_mult,gi.r});
     KK.update_shape({gi.dxx_mult,gi.r});
@@ -1026,7 +1034,15 @@ private:
 
 };
 
-struct PS_L_step_adapt {
+struct Switch_L_LS {
+  virtual void operator()(double tau, mat& L, const array<mat,3>& D1, const array<mat,3>& D2, Index nsteps_int) = 0;
+  virtual void rk4_L_rhs(mat& V, array<vec,3>& v, const array<mat,3>& D1, const array<mat,3>& D2, mat& out) = 0;
+  virtual void update_info(Index nr) = 0;
+  virtual array<vec,3> get_v() = 0;
+  virtual ~Switch_L_LS() = default;
+};
+
+struct PS_L_step_adapt : Switch_L_LS {
 
   PS_L_step_adapt(stloc _sl, grid_info_reserve<3> _gi, const blas_ops* _blas, int _fact)
     : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Vhat(_sl), tmpV(_sl), tmpV2(_sl), fact(_fact) {
@@ -1064,7 +1080,7 @@ struct PS_L_step_adapt {
     }
 
 
-  void rk4_L_rhs(mat& V, array<vec,3>& v, const array<mat,3>& D1, const array<mat,3>& D2, mat& out){
+  void rk4_L_rhs(mat& V, array<vec,3>& v, const array<mat,3>& D1, const array<mat,3>& D2, mat& out) override {
 
     // Perform needed derivatives in Fourier space
     // If needed we could work on a single column
@@ -1128,18 +1144,18 @@ struct PS_L_step_adapt {
     }
   }
 
-  void operator()(double tau, mat& L, const array<mat,3>& D1, const array<mat,3>& D2, Index nsteps_int=1) {
+  void operator()(double tau, mat& L, const array<mat,3>& D1, const array<mat,3>& D2, Index nsteps_int=1) override {
 
     if(fft == nullptr)
       fft = make_unique_ptr<fft3d<2>>(gi.N_vv, L, Vhat, true);
     rk4_L(L, nsteps_int, tau/nsteps_int, v, D1, D2);
   }
 
-  array<vec,3> get_v(){
+  array<vec,3> get_v() override {
     return v;
   }
   
-  void update_info(Index nr){
+  void update_info(Index nr) override {
     gi.update_rank(nr);
     Vhat.update_shape({gi.dvvh_mult,gi.r});
     for(int i=0; i<3; i++){
@@ -1171,7 +1187,7 @@ private:
   std::unique_ptr<vec> d_lim_vv;
 };
 
-struct PS_L_step_adapt_LS {
+struct PS_L_step_adapt_LS : Switch_L_LS {
 
   PS_L_step_adapt_LS(stloc _sl, grid_info_reserve<3> _gi, const blas_ops* _blas, int _fact)
     : sl(_sl), gi(_gi), blas(_blas), fft(nullptr), Vhat(_sl), VVhat(_sl), LL(_sl), tmpV(_sl), tmpV2(_sl), VV(_sl), ACC(_sl), fact(_fact){
@@ -1194,7 +1210,7 @@ struct PS_L_step_adapt_LS {
       v = h_v;
   }
 
-  void L_rhs(mat& V, array<vec,3>& v, const array<mat,3>& D1, const array<mat,3>& D2, mat& out){
+  void rk4_L_rhs(mat& V, array<vec,3>& v, const array<mat,3>& D1, const array<mat,3>& D2, mat& out) override {
     
     ptw_mult_row(V,v[0],VV);
     blas->matmul_transb(VV,D2[0],tmpV2);
@@ -1237,9 +1253,9 @@ struct PS_L_step_adapt_LS {
   void rk2_L(mat& V, Index n, double tau, array<vec,3>& v, const array<mat,3>& D1, const array<mat,3>& D2){
     // Input overwritten
     for(Index i = 0; i < n; i++){
-      L_rhs(V, v, D1, D2, LL);
+      rk4_L_rhs(V, v, D1, D2, LL);
       setmultadd_rk2(LL,V,tau/2.0);
-      L_rhs(LL, v, D1, D2, tmpV);
+      rk4_L_rhs(LL, v, D1, D2, tmpV);
       finstage_rk2(V,tmpV,tau);
     }
   }
@@ -1247,29 +1263,29 @@ struct PS_L_step_adapt_LS {
   void rk4_L(mat& V, Index n, double tau, array<vec,3>& v, const array<mat,3>& D1, const array<mat,3>& D2){
     // Input overwritten
     for(Index i = 0; i < n; i++){
-      L_rhs(V, v, D1, D2, LL);
+      rk4_L_rhs(V, v, D1, D2, LL);
       op1_rk4_LS(ACC,LL,tmpV,V,tau/2.0);
-      L_rhs(tmpV, v, D1, D2, LL);
+      rk4_L_rhs(tmpV, v, D1, D2, LL);
       op_rk4_LS(ACC,LL,tmpV,V,2,tau/2.0);
-      L_rhs(tmpV, v, D1, D2, LL);
+      rk4_L_rhs(tmpV, v, D1, D2, LL);
       op_rk4_LS(ACC,LL,tmpV,V,2,tau);
-      L_rhs(tmpV, v, D1, D2, LL);
+      rk4_L_rhs(tmpV, v, D1, D2, LL);
       op2_rk4_LS(ACC,LL,V,1,tau/6.0);
     }
   }
 
-  void operator()(double tau, mat& L, const array<mat,3>& D1, const array<mat,3>& D2, Index nsteps_int=1) {
+  void operator()(double tau, mat& L, const array<mat,3>& D1, const array<mat,3>& D2, Index nsteps_int=1) override {
     if(fft == nullptr)
       fft = make_unique_ptr<fft3d<2>>(gi.N_vv, L, Vhat, true);
     //rk2_L(L, nsteps_int, tau/nsteps_int, v, D1, D2);
     rk4_L(L, nsteps_int, tau/nsteps_int, v, D1, D2);
   }
   
-  array<vec,3> get_v(){
+  array<vec,3> get_v() override {
     return v;
   }
 
-  void update_info(Index nr){
+  void update_info(Index nr) override {
     gi.update_rank(nr);
     Vhat.update_shape({gi.dvvh_mult,gi.r});
     LL.update_shape({gi.dvv_mult,gi.r});
@@ -1528,7 +1544,7 @@ void extract_rows(mat& A, Index init, Index fin, mat& B){
 
 }
 
-void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol_inc, double tol_inc_rel, double tol_dec, double tol_dec_rel, Index min_r, string ec, Index snapshots, const blas_ops& blas){
+void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol_inc, double tol_inc_rel, double tol_dec, double tol_dec_rel, Index min_r, string ec, bool ls, Index snapshots, const blas_ops& blas){
 
   gt::start("Initialization");
   stloc sl = (CPU) ? stloc::host : stloc::device;
@@ -1571,11 +1587,16 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
     }
   }
 
-  PS_K_step_adapt K_step_rk4(sl, gi, &blas, 1);
-  //PS_K_step_adapt_LS K_step_rk4(sl, gi, &blas, 1);
   PS_S_step_adapt S_step_rk4(sl, gi, &blas);
-  PS_L_step_adapt L_step_rk4(sl, gi, &blas, 1);
-  //PS_L_step_adapt_LS L_step_rk4(sl, gi, &blas, 1);
+  Switch_K_LS* K_step_rk4;
+  Switch_L_LS* L_step_rk4;
+  if (ls){
+    K_step_rk4 = new PS_K_step_adapt_LS(sl, gi, &blas, 1);
+    L_step_rk4 = new PS_L_step_adapt_LS(sl, gi, &blas, 1);
+  }else{
+    K_step_rk4 = new PS_K_step_adapt(sl, gi, &blas, 1);
+    L_step_rk4 = new PS_L_step_adapt(sl, gi, &blas, 1);
+  }
 
   mat Xn({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
   mat Sn({gi.r,gi.r}, sl);
@@ -1635,7 +1656,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
     compute_C(lr_sol.V, C1, C2, blas);
     gt::stop("C coeffs");
     gt::start("K step");
-    K_step_rk4(tau, Xn, E, C1, C2, nsteps_int);
+    (*K_step_rk4)(tau, Xn, E, C1, C2, nsteps_int);
     gt::start("gs K step");
     gs(Xn, Sn, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]); // Xn the new X
     gt::stop("gs K step");
@@ -1652,7 +1673,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
     // ---- L step ----
     gt::start("L step");
     blas.matmul_transb(lr_sol.V,Sn,Vn); // Vn is L
-    L_step_rk4(tau, Vn, D1, D2, nsteps_int);
+    (*L_step_rk4)(tau, Vn, D1, D2, nsteps_int);
     gt::start("gs L step");
     gs(Vn, Sn, gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
     gt::stop("gs L step");
@@ -1703,9 +1724,9 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
 
           gi.update_rank(gi.r+1);
           lr_sol.update_info(gi.r);
-          K_step_rk4.update_info(gi.r);
+          K_step_rk4->update_info(gi.r);
           S_step_rk4.update_info(gi.r);
-          L_step_rk4.update_info(gi.r);
+          L_step_rk4->update_info(gi.r);
 
           Xn.update_shape({gi.dxx_mult,gi.r});
           Vn.update_shape({gi.dvv_mult,gi.r});
@@ -1785,9 +1806,9 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
             // Do all the updates
             gi.update_rank(gi.r-1);
             lr_sol.update_info(gi.r);
-            K_step_rk4.update_info(gi.r);
+            K_step_rk4->update_info(gi.r);
             S_step_rk4.update_info(gi.r);
-            L_step_rk4.update_info(gi.r);
+            L_step_rk4->update_info(gi.r);
 
             Xn.update_shape({gi.dxx_mult,gi.r});
             Vn.update_shape({gi.dvv_mult,gi.r});
@@ -1903,9 +1924,9 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
 
           gi.update_rank(gi.r+1);
           lr_sol.update_info(gi.r);
-          K_step_rk4.update_info(gi.r);
+          K_step_rk4->update_info(gi.r);
           S_step_rk4.update_info(gi.r);
-          L_step_rk4.update_info(gi.r);
+          L_step_rk4->update_info(gi.r);
 
           Xn.update_shape({gi.dxx_mult,gi.r});
           Vn.update_shape({gi.dvv_mult,gi.r});
@@ -1984,9 +2005,9 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
             // Do all the updates
             gi.update_rank(gi.r-1);
             lr_sol.update_info(gi.r);
-            K_step_rk4.update_info(gi.r);
+            K_step_rk4->update_info(gi.r);
             S_step_rk4.update_info(gi.r);
-            L_step_rk4.update_info(gi.r);
+            L_step_rk4->update_info(gi.r);
 
             Xn.update_shape({gi.dxx_mult,gi.r});
             Vn.update_shape({gi.dvv_mult,gi.r});
@@ -2105,9 +2126,9 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
 
           gi.update_rank(gi.r+1);
           lr_sol.update_info(gi.r);
-          K_step_rk4.update_info(gi.r);
+          K_step_rk4->update_info(gi.r);
           S_step_rk4.update_info(gi.r);
-          L_step_rk4.update_info(gi.r);
+          L_step_rk4->update_info(gi.r);
 
           Xn.update_shape({gi.dxx_mult,gi.r});
           Vn.update_shape({gi.dvv_mult,gi.r});
@@ -2186,9 +2207,9 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
             // Do all the updates
             gi.update_rank(gi.r-1);
             lr_sol.update_info(gi.r);
-            K_step_rk4.update_info(gi.r);
+            K_step_rk4->update_info(gi.r);
             S_step_rk4.update_info(gi.r);
-            L_step_rk4.update_info(gi.r);
+            L_step_rk4->update_info(gi.r);
 
             Xn.update_shape({gi.dxx_mult,gi.r});
             Vn.update_shape({gi.dvv_mult,gi.r});
@@ -2261,6 +2282,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
   }
 
   if (snapshots == 1){
+    // Plots for paper
     multi_array<double,2> K({gi.dxx_mult,gi.r},sl);
     multi_array<double,2> SOL({gi.dxx_mult,gi.dvv_mult},sl);
     blas.matmul(lr_sol.X, lr_sol.S, K);
@@ -2270,7 +2292,7 @@ void PS_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3
 
 }
 
-void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol, Index snapshots, const blas_ops& blas){
+void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol, bool ls, Index snapshots, const blas_ops& blas){
 
   gt::start("Initialization");
 
@@ -2306,11 +2328,16 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
 
   array<vec,3> E = create_vec_array(gi.dxx_mult, sl);
 
-  PS_K_step_adapt K_step_rk4(sl, gi, &blas, 2);
-  PS_L_step_adapt L_step_rk4(sl, gi, &blas, 2);
-  //PS_K_step_adapt_LS K_step_rk4(sl, gi, &blas, 2);
-  //PS_L_step_adapt_LS L_step_rk4(sl, gi, &blas, 2);
   BUG_S_step_adapt S_step_rk4(sl, gi, &blas, 2);
+  Switch_K_LS* K_step_rk4;
+  Switch_L_LS* L_step_rk4;
+  if (ls){
+    K_step_rk4 = new PS_K_step_adapt_LS(sl, gi, &blas, 2);
+    L_step_rk4 = new PS_L_step_adapt_LS(sl, gi, &blas, 2);
+  }else{
+    K_step_rk4 = new PS_K_step_adapt(sl, gi, &blas, 2);
+    L_step_rk4 = new PS_L_step_adapt(sl, gi, &blas, 2);
+  }
 
   mat Xn({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
   mat Vn({gi.dvv_mult,gi.rmax},{gi.dvv_mult,gi.r}, sl);
@@ -2375,7 +2402,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
     gt::stop("C coeffs");
 
     gt::start("K step");
-    K_step_rk4(tau, Xn, E, C1, C2, nsteps_int);
+    (*K_step_rk4)(tau, Xn, E, C1, C2, nsteps_int);
     gt::stop("K step");
 
 
@@ -2403,7 +2430,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
 
     gt::start("L step");
     blas.matmul_transb(lr_sol.V,lr_sol.S,Vn); // Vn is L
-    L_step_rk4(tau, Vn, D1, D2, nsteps_int);
+    (*L_step_rk4)(tau, Vn, D1, D2, nsteps_int);
     gt::stop("L step");
 
     // HERE AUGMENTATION L
@@ -2529,9 +2556,9 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
     blas.matmul(Xn,UUs,lr_sol.X);
     blas.matmul(Vn,VVs,lr_sol.V);
 
-    K_step_rk4.update_info(gi.r);
+    K_step_rk4->update_info(gi.r);
     S_step_rk4.update_info(gi.r);
-    L_step_rk4.update_info(gi.r);
+    L_step_rk4->update_info(gi.r);
     Xn.update_shape({gi.dxx_mult,gi.r});
     Vn.update_shape({gi.dvv_mult,gi.r});
 
@@ -2570,6 +2597,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
   }
   
   if (snapshots == 1){
+    // Plots for paper
     multi_array<double,2> K({gi.dxx_mult,gi.r},sl);
     multi_array<double,2> SOL({gi.dxx_mult,gi.dvv_mult},sl);
     blas.matmul(lr_sol.X, lr_sol.S, K);
@@ -2578,7 +2606,7 @@ void BUG_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<
   }
 }
 
-void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol_inc, double tol_inc_rel, double tol_dec, double tol_dec_rel, Index min_r, string ec, Index snapshots, const blas_ops& blas){
+void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol_inc, double tol_inc_rel, double tol_dec, double tol_dec_rel, Index min_r, string ec, bool ls, Index snapshots, const blas_ops& blas){
 
   stloc sl = (CPU) ? stloc::host : stloc::device;
   string gstr;
@@ -2619,11 +2647,16 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
     }
   }
 
-  PS_K_step_adapt K_step_rk4(sl, gi, &blas, 1);
-  //PS_K_step_adapt_LS K_step_rk4(sl, gi, &blas, 1);
   PS_S_step_adapt S_step_rk4(sl, gi, &blas);
-  PS_L_step_adapt L_step_rk4(sl, gi, &blas, 1);
-  //PS_L_step_adapt_LS L_step_rk4(sl, gi, &blas, 1);
+  Switch_K_LS* K_step_rk4;
+  Switch_L_LS* L_step_rk4;
+  if (ls){
+    K_step_rk4 = new PS_K_step_adapt_LS(sl, gi, &blas, 1);
+    L_step_rk4 = new PS_L_step_adapt_LS(sl, gi, &blas, 1);
+  }else{
+    K_step_rk4 = new PS_K_step_adapt(sl, gi, &blas, 1);
+    L_step_rk4 = new PS_L_step_adapt(sl, gi, &blas, 1);
+  }
 
   mat Xn({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
   mat XnT({gi.dxx_mult,gi.rmax},{gi.dxx_mult,gi.r}, sl);
@@ -2671,7 +2704,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
     double el_energy = electric_energy(E, gi, blas);
     cout << el_energy << endl;
     // ---- K step ----
-    K_step_rk4(tau/2.0, Xn, E, C1, C2, nsteps_int);
+    (*K_step_rk4)(tau/2.0, Xn, E, C1, C2, nsteps_int);
     gs(Xn, Sn, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]); // Xn the new X
     // Compute D coefficients
     compute_D(Xn, E, D1, D2, blas);
@@ -2680,13 +2713,13 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
     // Compute L
     blas.matmul_transb(lr_sol.V,Sn,Vn); // Vn is L
     // ---- L step ----
-    L_step_rk4(tau/2.0, Vn, D1, D2, nsteps_int);
+    (*L_step_rk4)(tau/2.0, Vn, D1, D2, nsteps_int);
     // Electric field at tau/2
     efield(Xn, Vn, E, blas);
     
     // Restart integration using Strang splitting
     // ---- Half step K step ----
-    K_step_rk4(tau/2.0, XnT, E, C1, C2, nsteps_int);
+    (*K_step_rk4)(tau/2.0, XnT, E, C1, C2, nsteps_int);
     gs(XnT, Sn, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]); // Xn the new X
     // Compute D coefficients
     compute_D(XnT, E, D1, D2, blas);
@@ -2695,7 +2728,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
     // Compute L
     blas.matmul_transb(lr_sol.V,Sn,Vn); // Vn is L
     // ---- Full step L step ----
-    L_step_rk4(tau, Vn, D1, D2, nsteps_int);
+    (*L_step_rk4)(tau, Vn, D1, D2, nsteps_int);
     gs(Vn, Sn, gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
     transpose_inplace(Sn);
     // Compute C coefficients
@@ -2705,7 +2738,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
     // Compute K
     blas.matmul(XnT,Sn,Xn); // Xn is K
     // ---- Half step K step ----
-    K_step_rk4(tau/2.0, Xn, E, C1, C2, nsteps_int);
+    (*K_step_rk4)(tau/2.0, Xn, E, C1, C2, nsteps_int);
     gs(Xn, Sn, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]); // Xn the new X
 
     if (ec == "f"){
@@ -2742,9 +2775,9 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
 
           gi.update_rank(gi.r+1);
           lr_sol.update_info(gi.r);
-          K_step_rk4.update_info(gi.r);
+          K_step_rk4->update_info(gi.r);
           S_step_rk4.update_info(gi.r);
-          L_step_rk4.update_info(gi.r);
+          L_step_rk4->update_info(gi.r);
 
           Xn.update_shape({gi.dxx_mult,gi.r});
           XnT.update_shape({gi.dxx_mult,gi.r});
@@ -2815,9 +2848,9 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
             // Do all the updates
             gi.update_rank(gi.r-1);
             lr_sol.update_info(gi.r);
-            K_step_rk4.update_info(gi.r);
+            K_step_rk4->update_info(gi.r);
             S_step_rk4.update_info(gi.r);
-            L_step_rk4.update_info(gi.r);
+            L_step_rk4->update_info(gi.r);
 
             Xn.update_shape({gi.dxx_mult,gi.r});
             XnT.update_shape({gi.dxx_mult,gi.r});
@@ -2921,9 +2954,9 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
 
           gi.update_rank(gi.r+1);
           lr_sol.update_info(gi.r);
-          K_step_rk4.update_info(gi.r);
+          K_step_rk4->update_info(gi.r);
           S_step_rk4.update_info(gi.r);
-          L_step_rk4.update_info(gi.r);
+          L_step_rk4->update_info(gi.r);
 
           Xn.update_shape({gi.dxx_mult,gi.r});
           XnT.update_shape({gi.dxx_mult,gi.r});
@@ -2992,9 +3025,9 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
             // Do all the updates
             gi.update_rank(gi.r-1);
             lr_sol.update_info(gi.r);
-            K_step_rk4.update_info(gi.r);
+            K_step_rk4->update_info(gi.r);
             S_step_rk4.update_info(gi.r);
-            L_step_rk4.update_info(gi.r);
+            L_step_rk4->update_info(gi.r);
 
             Xn.update_shape({gi.dxx_mult,gi.r});
             XnT.update_shape({gi.dxx_mult,gi.r});
@@ -3101,9 +3134,9 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
 
           gi.update_rank(gi.r+1);
           lr_sol.update_info(gi.r);
-          K_step_rk4.update_info(gi.r);
+          K_step_rk4->update_info(gi.r);
           S_step_rk4.update_info(gi.r);
-          L_step_rk4.update_info(gi.r);
+          L_step_rk4->update_info(gi.r);
 
           Xn.update_shape({gi.dxx_mult,gi.r});
           XnT.update_shape({gi.dxx_mult,gi.r});
@@ -3173,9 +3206,9 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
             // Do all the updates
             gi.update_rank(gi.r-1);
             lr_sol.update_info(gi.r);
-            K_step_rk4.update_info(gi.r);
+            K_step_rk4->update_info(gi.r);
             S_step_rk4.update_info(gi.r);
-            L_step_rk4.update_info(gi.r);
+            L_step_rk4->update_info(gi.r);
 
             Xn.update_shape({gi.dxx_mult,gi.r});
             XnT.update_shape({gi.dxx_mult,gi.r});
@@ -3245,6 +3278,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
 
 
   if (snapshots == 1){
+    // Plots for paper
     multi_array<double,2> K({gi.dxx_mult,gi.r},sl);
     multi_array<double,2> SOL({gi.dxx_mult,gi.dvv_mult},sl);
     blas.matmul(lr_sol.X, lr_sol.S, K);
@@ -3252,7 +3286,6 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
     dump("solution_ps_so_"+ec+"_"+gstr+".data",SOL);
 
     /*
-    // To produce plots for paper
     mat TMPX({gi.N_xx[0],gi.r}, sl);
     mat TMPV({gi.N_vv[0],gi.r}, sl);
     mat TMP1({gi.N_xx[0],gi.r}, sl);
@@ -3288,7 +3321,7 @@ void PS_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserv
 
 }
 
-void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol, Index snapshots, const blas_ops& blas){
+void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reserve<3>& gi, vector<const double*> X0, vector<const double*> V0, double tol, bool ls, Index snapshots, const blas_ops& blas){
 
   // MIDPOINT BUG WITH 3*r AUGMENTED BASIS
 
@@ -3324,11 +3357,16 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
 
   array<vec,3> E = create_vec_array(gi.dxx_mult, sl);
 
-  PS_K_step_adapt K_step_rk4(sl, gi, &blas, 3);
-  PS_L_step_adapt L_step_rk4(sl, gi, &blas, 3);
-  //PS_K_step_adapt_LS K_step_rk4(sl, gi, &blas, 3);
-  //PS_L_step_adapt_LS L_step_rk4(sl, gi, &blas, 3);
   BUG_S_step_adapt S_step_rk4(sl, gi, &blas, 3);
+  Switch_K_LS* K_step_rk4;
+  Switch_L_LS* L_step_rk4;
+  if (ls){
+    K_step_rk4 = new PS_K_step_adapt_LS(sl, gi, &blas, 3);
+    L_step_rk4 = new PS_L_step_adapt_LS(sl, gi, &blas, 3);
+  }else{
+    K_step_rk4 = new PS_K_step_adapt(sl, gi, &blas, 3);
+    L_step_rk4 = new PS_L_step_adapt(sl, gi, &blas, 3);
+  }
 
   BUG_S_step_adapt S_step_rk4_BUG1(sl, gi, &blas, 1);
 
@@ -3340,7 +3378,7 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
   mat FnV({gi.dvv_mult,gi.rmax/3},{gi.dvv_mult,gi.r}, sl);
 
   array<vec,3> v = create_vec_array(gi.dvv_mult,sl);
-  v = L_step_rk4.get_v();
+  v = L_step_rk4->get_v();
 
   ////
   mat Sn({gi.r,gi.r}, sl);
@@ -3393,14 +3431,14 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
 
     // K step
     compute_C(lr_sol.V, C1, C2, blas);
-    K_step_rk4(tau/2.0, Xn, E, C1, C2, nsteps_int);
+    (*K_step_rk4)(tau/2.0, Xn, E, C1, C2, nsteps_int);
     gs(Xn, M, gi.h_xx[0]*gi.h_xx[1]*gi.h_xx[2]);
 
     // L step
     compute_D(lr_sol.X, E, D1, D2, blas);
 
     blas.matmul_transb(lr_sol.V,lr_sol.S,Vn); // Vn is L
-    L_step_rk4(tau/2.0, Vn, D1, D2, nsteps_int);
+    (*L_step_rk4)(tau/2.0, Vn, D1, D2, nsteps_int);
     gs(Vn, N, gi.h_vv[0]*gi.h_vv[1]*gi.h_vv[2]);
  
     // S step
@@ -3426,8 +3464,7 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
     compute_D(Xn, E, D1, D2, blas);
 
     // For X
-    K_step_rk4.rk4_K_rhs(XnT,E,C1,C2,FnX);
-    //K_step_rk4.K_rhs(XnT,E,C1,C2,FnX);
+    K_step_rk4->rk4_K_rhs(XnT,E,C1,C2,FnX);
     FnX *= tau;
 
     Xn.update_shape({gi.dxx_mult,3*gi.r});
@@ -3444,8 +3481,7 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
 
     // For V
     blas.matmul_transb(Vn,Sn,VnT); 
-    L_step_rk4.rk4_L_rhs(VnT,v,D1,D2,FnV);
-    //L_step_rk4.L_rhs(VnT,v,D1,D2,FnV);
+    L_step_rk4->rk4_L_rhs(VnT,v,D1,D2,FnV);
     FnV *= tau;
 
     Vn.update_shape({gi.dvv_mult,3*gi.r});
@@ -3546,9 +3582,9 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
     blas.matmul(Xn,UUs,lr_sol.X);
     blas.matmul(Vn,VVs,lr_sol.V);
 
-    K_step_rk4.update_info(gi.r);
+    K_step_rk4->update_info(gi.r);
     S_step_rk4.update_info(gi.r);
-    L_step_rk4.update_info(gi.r);
+    L_step_rk4->update_info(gi.r);
     
     S_step_rk4_BUG1.update_info(gi.r);
     
@@ -3593,6 +3629,7 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
   }
   
   if (snapshots == 1){
+    // Plots for paper
     multi_array<double,2> K({gi.dxx_mult,gi.r},sl);
     multi_array<double,2> SOL({gi.dxx_mult,gi.dvv_mult},sl);
     blas.matmul(lr_sol.X, lr_sol.S, K);
@@ -3600,7 +3637,6 @@ void BUG_so_adapt(double final_time, double tau, int nsteps_int, grid_info_reser
     dump("solution_bug_so_"+gstr+".data",SOL);
     
     /*
-    // To produce plots for paper
     mat TMPX({gi.N_xx[0],gi.r}, sl);
     mat TMPV({gi.N_vv[0],gi.r}, sl);
     mat TMP1({gi.N_xx[0],gi.r}, sl);
@@ -3635,6 +3671,7 @@ int main(int argc, char** argv){
   ("tol_inc_rel", "Relative tolerance (increase) for error control", cxxopts::value<double>()->default_value("-1"))
   ("tol_dec", "Tolerance (decrease) for error control (ignored by BUG)", cxxopts::value<double>()->default_value("0.0000000001"))
   ("tol_dec_rel", "Relative tolerance (decrease) for error control", cxxopts::value<double>()->default_value("-1"))
+  ("ls", "Low storage", cxxopts::value<bool>()->default_value("false"))
   ("omp_threads", "Number of OpenMP threads used in CPU parallelization (by default half the number of processes reported by the operating system are used)", cxxopts::value<int>()->default_value("-1"))
   ("snapshots", "Write final distribution function to disk", cxxopts::value<int>()->default_value("0"))
   ("h,help", "Help message")
@@ -3692,12 +3729,12 @@ int main(int argc, char** argv){
   if (tol_dec_rel == -1){
     tol_dec_rel = tol_dec/10.0;
   }
+  bool  ls = result["ls"].as<bool>(); // low storage
   double  final_time = result["final_time"].as<double>();
   double  tau = result["deltat"].as<double>();
   int order = result["order"].as<int>();
   Index snapshots = result["snapshots"].as<int>();
   string ec = result["err"].as<string>();
-
 
   int nsteps_int = 1;
 
@@ -3819,10 +3856,10 @@ int main(int argc, char** argv){
   cout << "Tolerance incr (rel): " << tol_inc_rel << endl;
   cout << "Tolerance decr (abs): " << tol_dec << endl;
   cout << "Tolerance decr (rel): " << tol_dec_rel << endl;
+  cout << "Low storage: " << ls << endl;
   cout << "Initial rank: " << gi.r << endl;
   cout << "Min rank: " << min_r << endl;
   cout << "Max rank: " << max_r << endl;
-
 
   gt::start("Total WC time");
   if (ec == "bug"){
@@ -3830,17 +3867,17 @@ int main(int argc, char** argv){
     // in BUG we look for the rank in a space of size 2*r or 3*r, the maximum rank allowed
     // is gi.rmax/2 or gi.rmax/3
     if (order == 1){
-      BUG_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, snapshots, blas);
+      BUG_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, ls, snapshots, blas);
     } else if (order == 2){
-      BUG_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, snapshots, blas);
+      BUG_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, ls, snapshots, blas);
     } else {
       cout << "ERROR: order " << order << " is not supported." << endl;
     }
   } else if (ec == "ee" || ec == "ef" || ec == "f"){
     if (order == 1){
-      PS_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, ec, snapshots, blas);
+      PS_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, ec, ls, snapshots, blas);
     } else if (order == 2){
-      PS_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, ec, snapshots, blas);
+      PS_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, ec, ls, snapshots, blas);
     } else {
       cout << "ERROR: order " << order << " is not supported." << endl;
     }
@@ -3851,29 +3888,6 @@ int main(int argc, char** argv){
   gt::stop("Total WC time");
 
   cout << gt::sorted_output() << endl;
-
-
-
-/*
-  // For error check
-  snapshots = 1;
-  //tau = 0.000033333333333333333; // reference
-
-  tau = 0.01;
-  //tau = 0.005;
-  //tau = 0.0033333333333333333333;
-  //tau = 0.0025;
-  //tau = 0.002;
-  //tau = 0.0016666666666666666666;
-  //tau = 0.0014285714285714285714;
-  //tau = 0.00125;
-  //tau = 0.0011111111111111111111;
-  //tau = 0.001;
-  //BUG_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, max_r, snapshots, blas);
-  //BUG_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, max_r, snapshots, blas);
-  //PS_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, ec, snapshots, blas);
-  PS_so_adapt(final_time, tau, nsteps_int, gi, X, V, tol_inc, tol_inc_rel, tol_dec, tol_dec_rel, min_r, ec, snapshots, blas);
-*/
 
   return 0;
 }
