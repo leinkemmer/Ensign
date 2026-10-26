@@ -7,6 +7,9 @@ High-dimensional problems, such as the six-dimensional Vlasov equation of plasma
 
 Ensign has also been used to solve very high-dimensional chemical reaction networks in the [atropy software](https://atropy.gitlab.io/) using binary tree tensor networks.
 
+Ensign is developed by [Lukas Einkemmer](https://www.einkemmer.net/) [Fabio Cassini](https://sites.google.com/view/fabiocassini/), [Julian Mangott](https://scholar.google.com/citations?user=UvfaGaIAAAAJ), and Stefan Brunner.
+
+
 ## Features
 
 - Low-rank data structures (`lr2`) for matrix factorization and binary tree-tensor networks (`node`)
