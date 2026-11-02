@@ -6,14 +6,14 @@
 
 namespace Ensign {
 
-/* Computes a low-rank coefficient that approximates \int a_i(x) b_j(x) \,dx.
+/* Computes a low-rank coefficient that approximates \f$\int a_i(x) b_j(x) \,dx\f$.
  *
  * This functions assumes that w is a constant weight.
 */
 template<class T>
 void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, T w, multi_array<T,2>& out, const Ensign::Matrix::blas_ops& blas);
 
-/* Computes a low-rank coefficient that approximates \int a_i(x) b_j(x) \,dx.
+/* Computes a low-rank coefficient that approximates \f$\int a_i(x) b_j(x) \,dx\f$.
  *
  * If a and b are of size (n,r) then w must be of size n.
  * The weight w can be used as a pure weight (in a quadrature sense) but also
@@ -22,14 +22,14 @@ void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, T w, multi_arra
 template<class T>
 void coeff(const multi_array<T,2>& a, const multi_array<T,2>& b, const multi_array<T,1>& w, multi_array<T,2>& out, const Ensign::Matrix::blas_ops& blas);
 
-/* Computes an approximation to the integral \int a_i(x) \,dx.
+/* Computes an approximation to the integral \f$\int a_i(x) \,dx\f$.
 *
 * This function assumes that w is a constant weight.
 */
 template<class T>
 void integrate(const multi_array<T,2>& a, T w, multi_array<T,1>& out, const Ensign::Matrix::blas_ops& blas);
 
-/* Computes an approximation to the integral \int a_i(x) \,dx.
+/* Computes an approximation to the integral \f$\int a_i(x) \,dx\f$.
 *
 *  If a is of size (n,r) then w must be a contiguous memory region of size n.
 *  The weight w can be used as a pure weight (in a quadrature sense) but also
@@ -39,7 +39,7 @@ template<class T>
 void integrate(const multi_array<T,2>& a, const multi_array<T,1>& w, multi_array<T,1>& out, const Ensign::Matrix::blas_ops& blas);
 
 
-/* Computes a low-rank coefficient that approximates \int a_i(x) b_j(x) b_k(x) \,dx.
+/* Computes a low-rank coefficient that approximates \f$\int a_i(x) b_j(x) b_k(x) \,dx\f$.
  *
  * This function assumes that w is a constant weight.
 */

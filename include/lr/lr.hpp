@@ -113,7 +113,7 @@ double lr_inner_product(const lr2<T>& A, const lr2<T>&B, T w, const Ensign::Matr
 *
 *  This assumes that X and V are orthogonalized. Thus, no inner product needs
 *  to be passed to this function. The function simply computes
-*  \sum_{ij} S_{ij}^2
+*  \f$\sum_{ij} S_{ij}^2\f$
 */
 template<class T>
 double lr_norm_sq(const lr2<T>& A, const Ensign::Matrix::blas_ops& blas);
@@ -121,7 +121,7 @@ double lr_norm_sq(const lr2<T>& A, const Ensign::Matrix::blas_ops& blas);
 
 
 
-/* Initializes (an already allocated) lr2 to \sum_i X_i V_i.
+/* Initializes (an already allocated) lr2 to \f$\sum_i X_i V_i\f$.
 *
 * The rank r is taken from the initialized lr. If X.size() and V.size() are smaller
 * than r, the remaining basis functions are initialized in a random manner (subject
