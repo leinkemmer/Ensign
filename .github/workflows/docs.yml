@@ -28,7 +28,13 @@ jobs:
           sudo apt-get install -y doxygen
           pip install -r docs/requirements.txt
       - name: Build API reference
-        run: doxygen Doxyfile
+        run: |
+          doxygen --version
+          doxygen Doxyfile
+          # Doxygen >= 1.14 renamed modules.html to topics.html; keep the old URL working.
+          if [ ! -f docs/doxygen/modules.html ] && [ -f docs/doxygen/topics.html ]; then
+            cp docs/doxygen/topics.html docs/doxygen/modules.html
+          fi
       - name: Build site
         run: zensical build --strict
       - uses: actions/upload-pages-artifact@v3
