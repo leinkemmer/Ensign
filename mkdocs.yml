@@ -6,7 +6,7 @@ repo_name: leinkemmer/Ensign
 docs_dir: docs
 
 theme:
-  name: material
+  variant: classic
   features:
     - navigation.sections
     - navigation.top

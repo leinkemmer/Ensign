@@ -30,7 +30,7 @@ jobs:
       - name: Build API reference
         run: doxygen Doxyfile
       - name: Build site
-        run: mkdocs build --strict
+        run: zensical build --strict
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

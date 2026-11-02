@@ -12,7 +12,7 @@ if ! command -v doxygen >/dev/null; then
   exit 1
 fi
 
-if [ ! -x "$VENV/bin/mkdocs" ]; then
+if [ ! -x "$VENV/bin/zensical" ]; then
   echo "Creating Python environment in $VENV"
   python3 -m venv "$VENV"
   "$VENV/bin/pip" install -q -r docs/requirements.txt
@@ -21,8 +21,8 @@ fi
 doxygen Doxyfile
 
 if [ "$1" = "build" ]; then
-  "$VENV/bin/mkdocs" build --strict
+  "$VENV/bin/zensical" build --strict
   echo "Site written to $ROOT/site (open site/index.html)"
 else
-  "$VENV/bin/mkdocs" serve
+  "$VENV/bin/zensical" serve
 fi
