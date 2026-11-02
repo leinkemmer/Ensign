@@ -1,9 +1,10 @@
 PROJECT_NAME           = "Ensign"
 PROJECT_BRIEF          = "Low-rank framework for multi-core CPUs and GPUs"
 OUTPUT_DIRECTORY       = docs/doxygen
-INPUT                  = include
+INPUT                  = include docs/doxygen-mainpage.md
 FILE_PATTERNS          = *.hpp
 RECURSIVE              = YES
+USE_MDFILE_AS_MAINPAGE = docs/doxygen-mainpage.md
 INPUT_FILTER           = "sh scripts/doxygen_filter.sh"
 FILTER_PATTERNS        =
 EXTRACT_ALL            = YES
