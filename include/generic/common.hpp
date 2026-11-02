@@ -92,6 +92,7 @@ const int n_threads_omp = 32;
 #endif
 
 
+/** Core namespace for Ensign's numerical algorithms and data structures. */
 namespace Ensign {
 
 // make_unique implementation for compiler that do not support it yet

@@ -13,6 +13,7 @@
 
 namespace Ensign {
 
+/** Conversion and iteration helpers for multidimensional indices. */
 namespace IndexFunction {
 template <class InputIt, class InputItInt>
 Index vec_index_to_comb_index(InputIt first, InputIt last, InputItInt first_int)

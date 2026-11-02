@@ -32,6 +32,8 @@ namespace Ensign {
 
 // General classes for the hierarchical DLR approximation
 // TODO: introduce a template parameter `N` for arbitrary many outgoing legs
+
+/** Base class for a node in a tree tensor network */
 template <class T> struct node {
     const std::string id;
 
@@ -60,6 +62,7 @@ template <class T> struct node {
     Index RankIn() const { return S.shape()[0]; }
 };
 
+/** Represents an internal tree node with a coefficient tensor. */
 template <class T> struct internal_node : virtual node<T> {
     Ensign::multi_array<T, 3> Q;
     Ensign::multi_array<T, 3> G;
@@ -89,6 +92,7 @@ template <class T> struct internal_node : virtual node<T> {
                                             const Ensign::Matrix::blas_ops& blas);
 };
 
+/** Represents a leaf tree node with a basis matrix. */
 template <class T> struct external_node : virtual node<T> {
     Ensign::multi_array<T, 2> X;
 

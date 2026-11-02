@@ -9,8 +9,8 @@
 
 namespace Ensign {
 
-/* Additions from kinetic-cme
-*/
+
+/** Tensor matricization, tensorization, and orthogonalization operations. */
 namespace Tensor {
 
 template <size_t m, size_t d, class T>

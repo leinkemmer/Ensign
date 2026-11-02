@@ -2,7 +2,7 @@
 
 The API reference is generated from the source code with Doxygen and is available here:
 
-**[Classes and structs](doxygen/annotated.html)** · **[Functions and members](doxygen/functions.html)** · **[Files](doxygen/files.html)**
+**[Modules](doxygen/modules.html)** · **[Files](doxygen/files.html)** · **[Classes](doxygen/annotated.html)** · **[Functions](doxygen/functions.html)**
 
 ## Overview of the headers
 
@@ -15,4 +15,3 @@ The API reference is generated from the source code with Doxygen and is availabl
 | `lr/lr.hpp` | `lr2`: low-rank factorization \(X S V^T\), `initialize`, `orthogonalize`, addition, truncation, inner products |
 | `lr/coefficients.hpp` | `coeff`, `integrate`: computation of the low-rank coefficients (integrals of products of basis functions) |
 | `lr/interpolatory.hpp` | Interpolatory (adaptive cross approximation type) low-rank integrators |
-

@@ -36,6 +36,7 @@ struct timer {
     unsigned count();
 };
 
+/** Named and aggregated timers for profiling code sections. */
 namespace gt {
 
     bool is_master();

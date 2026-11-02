@@ -14,6 +14,7 @@
 
 namespace Ensign {
 
+/** Writes simulation variables and dimension metadata to a NetCDF file. */
 struct nc_writer {
 
     nc_writer(string filename, vector<long> extensions, vector<string> d_names); 

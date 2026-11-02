@@ -13,6 +13,7 @@
 
 namespace Ensign {
 
+/** Dense matrix operations. */
 namespace Matrix {
 
 /* Set matrix to zero
@@ -42,6 +43,7 @@ template<class T>
 void transpose_inplace(multi_array<T,2>& a);
 
 
+/** Provides matrix and vector operations with optional GPU execution. */
 struct blas_ops {
 
   blas_ops(bool gpu = false);
@@ -71,7 +73,7 @@ struct blas_ops {
   void matmul_transab(const multi_array<T,2>& a, const multi_array<T,2>& b, multi_array<T,2>& c) const;
 
   /* Matrix vector multiplication (c = a b)
-  */
+*/
   template<class T>
   void matvec(const multi_array<T,2>& a, const multi_array<T,1>& b, multi_array<T,1>& c) const;
 
