@@ -2,7 +2,7 @@
 
 The API reference is generated from the source code with Doxygen and is available here:
 
-**[Modules](doxygen/modules.html)** · **[Files](doxygen/files.html)** · **[Classes](doxygen/annotated.html)** · **[Functions](doxygen/functions.html)**
+**[Modules](doxygen/topics.html)** · **[Files](doxygen/files.html)** · **[Classes](doxygen/annotated.html)** · **[Functions](doxygen/functions.html)**
 
 ## Overview of the code
 
