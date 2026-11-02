@@ -1,3 +1,8 @@
+/**
+ * \file interpolatory.hpp
+ * \brief Provides interpolation-based construction of a low-rank representations.
+ * \ingroup interpolatory_low_rank
+ */
 #pragma once
 
 #include <generic/common.hpp>

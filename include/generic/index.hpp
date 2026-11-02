@@ -1,3 +1,8 @@
+/**
+ * \file index.hpp
+ * \brief Converts between vector indices and combined linear indices.
+ * \ingroup dynamical_low_rank_tensor
+ */
 #pragma once
 
 #include <iterator>

@@ -1,3 +1,8 @@
+/**
+ * \file storage.hpp
+ * \brief Provides contiguous multidimensional arrays for CPU and GPU storage.
+ * \ingroup common_utilities
+ */
 #pragma once
 
 #include <generic/common.hpp>

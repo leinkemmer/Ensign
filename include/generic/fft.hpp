@@ -1,3 +1,8 @@
+/**
+ * \file fft.hpp
+ * \brief Applies batched FFTs over selected dimensions, commonly one per rank index.
+ * \ingroup fast_fourier_transform
+ */
 #pragma once
 
 #include <generic/common.hpp>

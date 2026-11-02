@@ -1,3 +1,8 @@
+/**
+ * \file lr.hpp
+ * \brief Provides two-factor (i.e.\ matrix) low-rank types and their operations.
+ * \ingroup dynamical_low_rank_matrix
+ */
 #pragma once
 
 #include <generic/common.hpp>

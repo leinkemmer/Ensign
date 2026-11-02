@@ -1,3 +1,8 @@
+/**
+ * \file coefficients.hpp
+ * \brief Computes weighted coefficients and integrals of low-rank factors (the c and d factors in the notation of https://doi.org/10.1137/18M116383X).
+ * \ingroup dynamical_low_rank_matrix
+ */
 #pragma once
 
 #include <generic/common.hpp>

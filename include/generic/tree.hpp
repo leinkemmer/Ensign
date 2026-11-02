@@ -1,3 +1,8 @@
+/**
+ * \file tree.hpp
+ * \brief Provides node types for binary tree tensor networks.
+ * \ingroup dynamical_low_rank_tensor
+ */
 #pragma once
 
 #include <iostream>

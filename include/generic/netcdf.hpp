@@ -1,3 +1,8 @@
+/**
+ * \file netcdf.hpp
+ * \brief Provides a NetCDF writer for simulation output.
+ * \ingroup common_utilities
+ */
 #pragma once
 
 #include <generic/common.hpp>

@@ -1,3 +1,8 @@
+/**
+ * \file matrix.hpp
+ * \brief Declares dense matrix and vector operations, including BLAS wrappers.
+ * \ingroup linear_algebra
+ */
 #pragma once
 
 #include <generic/common.hpp>

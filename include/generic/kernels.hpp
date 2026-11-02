@@ -1,3 +1,8 @@
+/**
+ * \file kernels.hpp
+ * \brief Declares CUDA kernels for elementwise operations and numerical updates.
+ * \ingroup common_utilities
+ */
 #include <generic/common.hpp>
 
 #ifdef __CUDA__

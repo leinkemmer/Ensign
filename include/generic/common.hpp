@@ -1,3 +1,38 @@
+/**
+ * \defgroup common_utilities Common utilities
+ * Common utility functions
+ */
+
+/**
+ * \defgroup linear_algebra Linear algebra
+ * Dense matrix and vector operations used throughout the library.
+ */
+
+/**
+ * \defgroup dynamical_low_rank_matrix Dynamical low-rank (matrix)
+ * Two-factor (i.e.\ matrix) low-rank decompositions and their corresponding operations.
+ */
+
+/**
+ * \defgroup dynamical_low_rank_tensor Dynamical low-rank (tensor)
+ * Tensor low-rank representations and supporting tree and index operations.
+ */
+
+/**
+ * \defgroup interpolatory_low_rank Interpolatory low-rank
+ * Interpolation-based construction of low-rank representations.
+ */
+
+/**
+ * \defgroup fast_fourier_transform Fast Fourier transform
+ * Batched Fourier transforms, commonly applying one transform per rank index.
+ */
+
+/**
+ * \file common.hpp
+ * \brief Provides shared types, platform headers, and basic definitions.
+ * \ingroup common_utilities
+ */
 #pragma once
 
 #include <iostream>

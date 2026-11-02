@@ -1,3 +1,8 @@
+/**
+ * \file timer.hpp
+ * \brief Provides elapsed-time measurement and named timers.
+ * \ingroup common_utilities
+ */
 #pragma once
 
 #include <string>

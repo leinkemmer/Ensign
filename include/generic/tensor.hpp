@@ -1,3 +1,8 @@
+/**
+ * \file tensor.hpp
+ * \brief Provides tensor matricization, tensorization, and orthogonalization.
+ * \ingroup dynamical_low_rank_tensor
+ */
 #pragma once
 
 #include <lr/lr.hpp>

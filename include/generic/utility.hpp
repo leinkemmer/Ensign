@@ -1,3 +1,8 @@
+/**
+ * \file utility.hpp
+ * \brief Provides numerical helpers and utilities for arrays and indices.
+ * \ingroup common_utilities
+ */
 #pragma once
 
 #include <generic/common.hpp>
